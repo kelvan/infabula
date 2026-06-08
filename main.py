@@ -1,18 +1,22 @@
+import json
+import os
+import sqlite3
+from datetime import datetime
+
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-import sqlite3
-import json
-from datetime import datetime
 
 app = FastAPI()
-DB_PATH = "infabula.db"
+DB_PATH = os.getenv("DB_PATH", "infabula.db")
+
 
 def get_db():
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     return conn
+
 
 def init_db():
     conn = get_db()
@@ -31,11 +35,13 @@ def init_db():
     conn.commit()
     conn.close()
 
+
 init_db()
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates", auto_reload=True)
 templates.env.cache = None
+
 
 def get_client_ip(request: Request) -> str:
     forwarded = request.headers.get("X-Forwarded-For")
@@ -43,14 +49,17 @@ def get_client_ip(request: Request) -> str:
         return forwarded.split(",")[0].strip()
     return request.client.host if request.client else "unknown"
 
+
 def row_to_dict(r):
     d = dict(r)
     d["meta"] = json.loads(d["meta"] or "{}")
     return d
 
+
 @app.get("/", response_class=HTMLResponse)
 async def index(request: Request):
     return templates.TemplateResponse("index.html", {"request": request})
+
 
 @app.post("/api/entries")
 async def create_entry(request: Request):
@@ -66,7 +75,7 @@ async def create_entry(request: Request):
             body.get("note", ""),
             json.dumps(body.get("meta", {})),
             ip,
-        )
+        ),
     )
     conn.commit()
     new_id = cur.lastrowid
@@ -74,13 +83,16 @@ async def create_entry(request: Request):
     conn.close()
     return row_to_dict(row)
 
+
 # Patch ts_end onto an existing entry (used for "Aufgewacht" on sleep)
 @app.patch("/api/entries/{entry_id}")
 async def patch_entry(entry_id: int, request: Request):
     body = await request.json()
     conn = get_db()
     if "ts_end" in body:
-        conn.execute("UPDATE entries SET ts_end=? WHERE id=?", (body["ts_end"], entry_id))
+        conn.execute(
+            "UPDATE entries SET ts_end=? WHERE id=?", (body["ts_end"], entry_id)
+        )
     if "note" in body:
         conn.execute("UPDATE entries SET note=? WHERE id=?", (body["note"], entry_id))
     conn.commit()
@@ -88,13 +100,14 @@ async def patch_entry(entry_id: int, request: Request):
     conn.close()
     return row_to_dict(row)
 
+
 @app.get("/api/entries")
 async def get_entries(date: str = None, limit: int = 300):
     conn = get_db()
     if date:
         rows = conn.execute(
             "SELECT * FROM entries WHERE date(ts_start)=? ORDER BY ts_start DESC",
-            (date,)
+            (date,),
         ).fetchall()
     else:
         rows = conn.execute(
@@ -102,6 +115,7 @@ async def get_entries(date: str = None, limit: int = 300):
         ).fetchall()
     conn.close()
     return [row_to_dict(r) for r in rows]
+
 
 @app.get("/api/entries/dates")
 async def get_dates():
@@ -112,6 +126,7 @@ async def get_dates():
     ).fetchall()
     conn.close()
     return [r["d"] for r in rows]
+
 
 @app.get("/api/sleep/open")
 async def get_open_sleep():
@@ -125,6 +140,7 @@ async def get_open_sleep():
         return row_to_dict(row)
     return None
 
+
 @app.delete("/api/entries/{entry_id}")
 async def delete_entry(entry_id: int):
     conn = get_db()
@@ -132,6 +148,7 @@ async def delete_entry(entry_id: int):
     conn.commit()
     conn.close()
     return {"ok": True}
+
 
 @app.get("/api/stats")
 async def get_stats():
@@ -154,7 +171,9 @@ async def get_stats():
         start = datetime.fromisoformat(e["ts_start"])
         end = datetime.fromisoformat(e["ts_end"])
         dur = (end - start).total_seconds() / 60
-        sleep_durations.append({"start": e["ts_start"], "end": e["ts_end"], "minutes": round(dur)})
+        sleep_durations.append(
+            {"start": e["ts_start"], "end": e["ts_end"], "minutes": round(dur)}
+        )
 
     intervals = {}
     for typ in ["diaper", "bottle", "nursing"]:
@@ -163,13 +182,13 @@ async def get_stats():
             diffs = []
             for i in range(len(typed) - 1):
                 a = datetime.fromisoformat(typed[i]["ts_start"])
-                b = datetime.fromisoformat(typed[i+1]["ts_start"])
+                b = datetime.fromisoformat(typed[i + 1]["ts_start"])
                 diff_min = abs((a - b).total_seconds() / 60)
                 diffs.append(round(diff_min))
             if diffs:
                 intervals[typ] = {
                     "last": diffs[0],
-                    "avg": round(sum(diffs[:5]) / len(diffs[:5]))
+                    "avg": round(sum(diffs[:5]) / len(diffs[:5])),
                 }
 
     return {
