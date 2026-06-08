@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>infabula 🍼</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+
+<header>
+  <img class="logo-svg" src="/static/logo.svg" alt="infabula">
+</header>
+
+<div class="day-nav">
+  <button id="btn-prev" onclick="changeDay(-1)">←</button>
+  <div class="day-label" id="day-label"></div>
+  <button id="btn-next" onclick="changeDay(1)">→</button>
+  <input type="date" id="date-picker" onchange="jumpToDate(this.value)">
+</div>
+
+<div class="tab-bar">
+  <button class="tab-btn active" onclick="switchTab('log', this)">📋 Verlauf</button>
+  <button class="tab-btn" onclick="switchTab('stats', this)">📊 Auswertung</button>
+</div>
+
+<div class="main">
+  <div class="tab-page active" id="tab-log">
+    <div id="sleep-banner-wrap"></div>
+    <div id="ip-legend" class="ip-legend"></div>
+    <div class="day-entries" id="entry-list"></div>
+  </div>
+
+  <div class="tab-page" id="tab-stats">
+    <div class="stats-wrap" id="stats-content"></div>
+  </div>
+</div>
+
+<button class="fab" onclick="openModal()" title="Neuer Eintrag">＋</button>
+
+<div class="modal-overlay" id="modal-overlay" onclick="overlayClick(event)">
+  <div class="modal">
+    <div class="modal-header">
+      <h2 id="modal-title">Neuer Eintrag</h2>
+      <button class="close-btn" onclick="closeModal()">✕</button>
+    </div>
+
+    <div class="type-grid" id="type-grid">
+      <div class="type-tile" onclick="selectType('diaper')"><div class="t-icon">🧷</div><div class="t-label">Windel</div></div>
+      <div class="type-tile" onclick="selectType('nursing')"><div class="t-icon">🤱</div><div class="t-label">Stillen</div></div>
+      <div class="type-tile" onclick="selectType('bottle')"><div class="t-icon">🍼</div><div class="t-label">Fläschchen</div></div>
+      <div class="type-tile" onclick="selectType('sleep_start')"><div class="t-icon">😴</div><div class="t-label">Eingeschlafen</div></div>
+      <div class="type-tile" onclick="selectType('weight')"><div class="t-icon">⚖️</div><div class="t-label">Gewicht</div></div>
+      <div class="type-tile" onclick="selectType('note')"><div class="t-icon">📝</div><div class="t-label">Notiz</div></div>
+    </div>
+
+    <div class="form-fields" id="form-fields"></div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="/static/app.js"></script>
+</body>
+</html>
