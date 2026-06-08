@@ -1,11 +1,104 @@
-const TYPES = {
-  diaper:      { label: 'Windel', icon: '🧷' },
-  nursing:     { label: 'Stillen', icon: '🤱' },
-  bottle:      { label: 'Fläschchen', icon: '🍼' },
-  sleep:       { label: 'Schlaf', icon: '😴' },
-  weight:      { label: 'Gewicht', icon: '⚖️' },
-  note:        { label: 'Notiz', icon: '📝' },
+// ── i18n ──
+const I18N = {
+  de: {
+    types: { diaper:'Windel', nursing:'Stillen', bottle:'Fläschchen', sleep:'Schlaf', weight:'Gewicht', note:'Notiz' },
+    tab_log:'📋 Verlauf', tab_stats:'📊 Auswertung',
+    modal_new:'Neuer Eintrag',
+    tile_diaper:'Windel', tile_nursing:'Stillen', tile_bottle:'Fläschchen',
+    tile_sleep_start:'Eingeschlafen', tile_weight:'Gewicht', tile_note:'Notiz', tile_wakeup:'Aufgewacht',
+    fab_title:'Neuer Eintrag',
+    lbl_time:'Zeitpunkt', lbl_note:'Notiz', lbl_type:'Art', lbl_amount:'Menge (ml)',
+    lbl_content:'Inhalt', lbl_side:'Seite', lbl_start:'Beginn', lbl_end:'Ende', lbl_weight_g:'Gewicht (g)',
+    opt_wet:'Nass', opt_dirty:'Schmutzig', opt_both:'Beides',
+    opt_left:'Links', opt_right:'Rechts', opt_both_sides:'Beide',
+    opt_pumped:'Abgepumpte Milch', opt_formula:'Formulamilch',
+    btn_save_sleep:'Eingeschlafen speichern', btn_save:'Speichern',
+    banner_since:'Schläft seit', banner_so_far:'Schlaf bisher', banner_wakeup:'☀️ Aufgewacht',
+    still_sleeping:'noch schläft',
+    no_entries:'Keine Einträge für diesen Tag',
+    section_last:'Letztes Ereignis', section_intervals:'Abstände',
+    section_sleep:'Schlafdauer (letzte 10)',
+    stat_interval:'Abstand', stat_avg:'Ø letzte 5',
+    no_data:'Keine Daten', not_enough_data:'Zu wenig Daten', no_sleep_data:'Noch keine Schlafdaten',
+    today:'Heute', yesterday:'Gestern',
+    just_now:'gerade eben',
+    ago_min: n=>`vor ${n} min`, ago_hour: n=>`vor ${n} h`, ago_day: n=>`vor ${n} d`,
+    confirm_delete:'Eintrag löschen?',
+    toast_no_time:'Bitte Zeitpunkt angeben', toast_deleted:'Gelöscht',
+    toast_error:'Fehler beim Speichern', toast_saved:'✓ Gespeichert',
+    toast_wakeup: dur=>`☀️ Aufgewacht – ${dur} Schlaf`,
+    lang_switch:'EN',
+  },
+  en: {
+    types: { diaper:'Diaper', nursing:'Nursing', bottle:'Bottle', sleep:'Sleep', weight:'Weight', note:'Note' },
+    tab_log:'📋 Log', tab_stats:'📊 Stats',
+    modal_new:'New Entry',
+    tile_diaper:'Diaper', tile_nursing:'Nursing', tile_bottle:'Bottle',
+    tile_sleep_start:'Fell asleep', tile_weight:'Weight', tile_note:'Note', tile_wakeup:'Woke up',
+    fab_title:'New Entry',
+    lbl_time:'Time', lbl_note:'Note', lbl_type:'Type', lbl_amount:'Amount (ml)',
+    lbl_content:'Content', lbl_side:'Side', lbl_start:'Start', lbl_end:'End', lbl_weight_g:'Weight (g)',
+    opt_wet:'Wet', opt_dirty:'Dirty', opt_both:'Both',
+    opt_left:'Left', opt_right:'Right', opt_both_sides:'Both',
+    opt_pumped:'Pumped milk', opt_formula:'Formula',
+    btn_save_sleep:'Save fell asleep', btn_save:'Save',
+    banner_since:'Sleeping since', banner_so_far:'sleep so far', banner_wakeup:'☀️ Woke up',
+    still_sleeping:'still sleeping',
+    no_entries:'No entries for this day',
+    section_last:'Last event', section_intervals:'Intervals',
+    section_sleep:'Sleep duration (last 10)',
+    stat_interval:'Interval', stat_avg:'avg last 5',
+    no_data:'No data', not_enough_data:'Not enough data', no_sleep_data:'No sleep data yet',
+    today:'Today', yesterday:'Yesterday',
+    just_now:'just now',
+    ago_min: n=>`${n} min ago`, ago_hour: n=>`${n} h ago`, ago_day: n=>`${n} d ago`,
+    confirm_delete:'Delete entry?',
+    toast_no_time:'Please enter a time', toast_deleted:'Deleted',
+    toast_error:'Error saving', toast_saved:'✓ Saved',
+    toast_wakeup: dur=>`☀️ Woke up – ${dur} sleep`,
+    lang_switch:'DE',
+  },
 };
+
+// stored meta values → translated display (both old German keys and neutral keys)
+const META_VALS = {
+  nass:{de:'Nass',en:'Wet'}, schmutzig:{de:'Schmutzig',en:'Dirty'}, beides:{de:'Beides',en:'Both'},
+  wet:{de:'Nass',en:'Wet'}, dirty:{de:'Schmutzig',en:'Dirty'}, both:{de:'Beides',en:'Both'},
+  links:{de:'Links',en:'Left'}, rechts:{de:'Rechts',en:'Right'}, beide:{de:'Beide',en:'Both'},
+  left:{de:'Links',en:'Left'}, right:{de:'Rechts',en:'Right'},
+  abgepumpt:{de:'Abgepumpt',en:'Pumped'}, formula:{de:'Formula',en:'Formula'},
+};
+
+const TYPE_ICONS = { diaper:'🧷', nursing:'🤱', bottle:'🍼', sleep:'😴', weight:'⚖️', note:'📝' };
+
+let lang = localStorage.getItem('lang') || (navigator.language.startsWith('de') ? 'de' : 'en');
+
+function t(key, arg) {
+  const val = I18N[lang][key];
+  return typeof val === 'function' ? val(arg) : (val ?? key);
+}
+function tMeta(val) { return (META_VALS[val] && META_VALS[val][lang]) || val; }
+function getType(key) { return { label: (I18N[lang].types[key] || key), icon: TYPE_ICONS[key] || '❓' }; }
+
+function switchLang() {
+  lang = lang === 'de' ? 'en' : 'de';
+  localStorage.setItem('lang', lang);
+  initUI();
+  loadLog();
+  if (document.getElementById('tab-stats').classList.contains('active')) loadStats();
+}
+
+function initUI() {
+  document.getElementById('html-root').lang = lang;
+  document.getElementById('lang-btn').textContent = t('lang_switch');
+  document.getElementById('tab-btn-log').textContent = t('tab_log');
+  document.getElementById('tab-btn-stats').textContent = t('tab_stats');
+  document.getElementById('fab').title = t('fab_title');
+  ['diaper','nursing','bottle','sleep_start','weight','note'].forEach(k => {
+    const el = document.getElementById('tile-'+k);
+    if (el) el.querySelector('.t-label').textContent = t('tile_'+k);
+  });
+}
 
 const IP_COLORS = [
   '#c8602a','#3a7d6b','#5b4fa8','#b04040','#2e6fa8',
@@ -32,8 +125,8 @@ function fmtDate(s) {
   const [y,m,d] = s.split('-');
   const today = todayStr();
   const yesterday = (() => { const dt = new Date(); dt.setDate(dt.getDate()-1); return `${dt.getFullYear()}-${pad(dt.getMonth()+1)}-${pad(dt.getDate())}`; })();
-  if (s === today) return 'Heute';
-  if (s === yesterday) return 'Gestern';
+  if (s === today) return t('today');
+  if (s === yesterday) return t('yesterday');
   return `${d}.${m}.${y}`;
 }
 function fmtTime(iso) {
@@ -49,10 +142,10 @@ function fmtDur(min) {
 function durMin(a, b) { return Math.abs((new Date(b)-new Date(a))/60000); }
 function fmtAgo(iso) {
   const diff = (Date.now()-new Date(iso))/60000;
-  if (diff < 1) return 'gerade eben';
-  if (diff < 60) return `vor ${Math.round(diff)} min`;
-  if (diff < 1440) return `vor ${Math.round(diff/60)} h`;
-  return `vor ${Math.round(diff/1440)} d`;
+  if (diff < 1) return t('just_now');
+  if (diff < 60) return t('ago_min', Math.round(diff));
+  if (diff < 1440) return t('ago_hour', Math.round(diff/60));
+  return t('ago_day', Math.round(diff/1440));
 }
 function getIpColor(ip) {
   if (!ipColorMap[ip]) { ipColorMap[ip] = IP_COLORS[colorIndex % IP_COLORS.length]; colorIndex++; }
@@ -109,10 +202,10 @@ function renderSleepBanner() {
     <div class="sleep-banner">
       <div class="sl-icon">😴</div>
       <div class="sl-info">
-        <div class="sl-label">Schläft seit ${since}</div>
-        <div class="sl-since">${fmtDur(dur)} Schlaf bisher</div>
+        <div class="sl-label">${t('banner_since')} ${since}</div>
+        <div class="sl-since">${fmtDur(dur)} ${t('banner_so_far')}</div>
       </div>
-      <button class="wake-btn" onclick="wakeUp()">☀️ Aufgewacht</button>
+      <button class="wake-btn" onclick="wakeUp()">${t('banner_wakeup')}</button>
     </div>
   `;
   setTimeout(renderSleepBanner, 60000);
@@ -126,7 +219,7 @@ async function wakeUp() {
     body: JSON.stringify({ ts_end: now })
   });
   const dur = Math.round(durMin(openSleepEntry.ts_start, now));
-  toast(`☀️ Aufgewacht – ${fmtDur(dur)} Schlaf`);
+  toast(t('toast_wakeup', fmtDur(dur)));
   openSleepEntry = null;
   document.getElementById('sleep-banner-wrap').innerHTML = '';
   loadLog();
@@ -153,13 +246,13 @@ async function loadLog() {
 
   const list = document.getElementById('entry-list');
   if (!entries.length) {
-    list.innerHTML = '<div class="empty">Keine Einträge für diesen Tag</div>';
+    list.innerHTML = `<div class="empty">${t('no_entries')}</div>`;
     return;
   }
 
   list.innerHTML = entries.map(e => {
     const color = getIpColor(e.ip);
-    const t = TYPES[e.type] || { label: e.type, icon: '❓' };
+    const tp = getType(e.type);
     const m = e.meta || {};
     let timeStr = fmtTime(e.ts_start);
     let metaStr = '';
@@ -170,37 +263,37 @@ async function loadLog() {
         timeStr = `${fmtTime(e.ts_start)} – ${fmtTime(e.ts_end)}`;
         metaStr = fmtDur(dur);
       } else {
-        timeStr = `${fmtTime(e.ts_start)} – noch schläft`;
+        timeStr = `${fmtTime(e.ts_start)} – ${t('still_sleeping')}`;
       }
     }
-    if (e.type === 'diaper' && m.diaper_type) metaStr = m.diaper_type;
+    if (e.type === 'diaper' && m.diaper_type) metaStr = tMeta(m.diaper_type);
     if (e.type === 'nursing') {
       if (e.ts_end) timeStr = `${fmtTime(e.ts_start)} – ${fmtTime(e.ts_end)}`;
-      if (m.side) metaStr = m.side;
+      if (m.side) metaStr = tMeta(m.side);
     }
     if (e.type === 'bottle' && m.amount) metaStr = `${m.amount} ml`;
     if (e.type === 'weight' && m.weight) metaStr = `${m.weight} g`;
 
     return `
       <div class="entry-item" style="border-left-color:${color}">
-        <div class="entry-icon">${t.icon}</div>
+        <div class="entry-icon">${tp.icon}</div>
         <div class="entry-body">
-          <div class="entry-type">${t.label}</div>
+          <div class="entry-type">${tp.label}</div>
           <div class="entry-time">${timeStr}</div>
           ${metaStr ? `<div class="entry-meta">${esc(metaStr)}</div>` : ''}
           ${e.note ? `<div class="entry-note">${esc(e.note)}</div>` : ''}
         </div>
         <span class="ip-badge" style="background:${color}" title="${e.ip}">${shortIp(e.ip)}</span>
-        <button class="del-btn" onclick="deleteEntry(${e.id})" title="Löschen">✕</button>
+        <button class="del-btn" onclick="deleteEntry(${e.id})" title="${t('confirm_delete')}">✕</button>
       </div>
     `;
   }).join('');
 }
 
 async function deleteEntry(id) {
-  if (!confirm('Eintrag löschen?')) return;
+  if (!confirm(t('confirm_delete'))) return;
   await fetch('/api/entries/'+id, { method: 'DELETE' });
-  toast('Gelöscht');
+  toast(t('toast_deleted'));
   loadLog();
 }
 
@@ -215,37 +308,33 @@ async function loadStats() {
   lastTypes.forEach(key => {
     const e = data.last[key];
     if (!e) return;
-    const t = TYPES[key] || { label: key, icon: '❓' };
+    const tp = getType(key);
     let valStr = fmtAgo(e.ts_start);
     let sub = fmtTime(e.ts_start);
     if (key === 'sleep' && e.ts_end) sub += ` (${fmtDur(Math.round(durMin(e.ts_start, e.ts_end)))})`;
     if (key === 'weight' && e.meta?.weight) { valStr = e.meta.weight + ' g'; sub = fmtAgo(e.ts_start); }
     lastCards += `
       <div class="stat-card">
-        <div class="s-label">${t.icon} ${t.label}</div>
+        <div class="s-label">${tp.icon} ${tp.label}</div>
         <div class="s-val" style="font-size:1rem;padding-top:2px">${valStr}</div>
         <div class="s-sub">${sub}</div>
       </div>`;
   });
 
-  const intTypes = [
-    {key:'diaper', icon:'🧷', label:'Windel'},
-    {key:'nursing', icon:'🤱', label:'Stillen'},
-    {key:'bottle', icon:'🍼', label:'Fläschchen'},
-  ];
   let ivCards = '';
-  intTypes.forEach(({key,icon,label}) => {
+  ['diaper','nursing','bottle'].forEach(key => {
     const iv = data.intervals[key];
     if (!iv) return;
+    const tp = getType(key);
     ivCards += `
       <div class="stat-card">
-        <div class="s-label">${icon} ${label} · Abstand</div>
+        <div class="s-label">${tp.icon} ${tp.label} · ${t('stat_interval')}</div>
         <div class="s-val">${fmtDur(iv.last)}</div>
-        <div class="s-sub">Ø letzte 5: ${fmtDur(iv.avg)}</div>
+        <div class="s-sub">${t('stat_avg')}: ${fmtDur(iv.avg)}</div>
       </div>`;
   });
 
-  let sleepBars = '<div class="empty">Noch keine Schlafdaten</div>';
+  let sleepBars = `<div class="empty">${t('no_sleep_data')}</div>`;
   if (data.sleep_durations.length) {
     const max = Math.max(...data.sleep_durations.map(s => s.minutes));
     sleepBars = data.sleep_durations.map(s => `
@@ -257,11 +346,11 @@ async function loadStats() {
   }
 
   el.innerHTML = `
-    <div class="section-title">Letztes Ereignis</div>
-    <div class="stats-grid">${lastCards||'<div class="empty">Keine Daten</div>'}</div>
-    <div class="section-title">Abstände</div>
-    <div class="stats-grid">${ivCards||'<div class="empty">Zu wenig Daten</div>'}</div>
-    <div class="section-title">Schlafdauer (letzte 10)</div>
+    <div class="section-title">${t('section_last')}</div>
+    <div class="stats-grid">${lastCards||`<div class="empty">${t('no_data')}</div>`}</div>
+    <div class="section-title">${t('section_intervals')}</div>
+    <div class="stats-grid">${ivCards||`<div class="empty">${t('not_enough_data')}</div>`}</div>
+    <div class="section-title">${t('section_sleep')}</div>
     ${sleepBars}
   `;
 }
@@ -269,10 +358,10 @@ async function loadStats() {
 // ── Modal ──
 function openModal() {
   selectedType = null;
-  document.querySelectorAll('.type-tile').forEach(t => t.classList.remove('selected'));
+  document.querySelectorAll('.type-tile').forEach(tp => tp.classList.remove('selected'));
   document.getElementById('form-fields').innerHTML = '';
   document.getElementById('form-fields').classList.remove('visible');
-  document.getElementById('modal-title').textContent = 'Neuer Eintrag';
+  document.getElementById('modal-title').textContent = t('modal_new');
 
   const grid = document.getElementById('type-grid');
   const existing = grid.querySelector('[data-type=sleep_end]');
@@ -280,11 +369,13 @@ function openModal() {
     const tile = document.createElement('div');
     tile.className = 'type-tile';
     tile.dataset.type = 'sleep_end';
-    tile.innerHTML = '<div class="t-icon">☀️</div><div class="t-label">Aufgewacht</div>';
+    tile.innerHTML = `<div class="t-icon">☀️</div><div class="t-label">${t('tile_wakeup')}</div>`;
     tile.onclick = () => wakeUpFromModal();
     grid.appendChild(tile);
   } else if (!openSleepEntry && existing) {
     existing.remove();
+  } else if (openSleepEntry && existing) {
+    existing.querySelector('.t-label').textContent = t('tile_wakeup');
   }
 
   document.getElementById('modal-overlay').classList.add('open');
@@ -303,9 +394,9 @@ function wakeUpFromModal() {
 
 function selectType(type) {
   selectedType = type;
-  document.querySelectorAll('.type-tile').forEach(t => t.classList.remove('selected'));
-  const found = [...document.querySelectorAll('.type-tile')].find(t =>
-    t.onclick?.toString().includes(`'${type}'`) || t.dataset.type === type
+  document.querySelectorAll('.type-tile').forEach(tp => tp.classList.remove('selected'));
+  const found = [...document.querySelectorAll('.type-tile')].find(tp =>
+    tp.onclick?.toString().includes(`'${type}'`) || tp.dataset.type === type
   );
   if (found) found.classList.add('selected');
 
@@ -314,85 +405,85 @@ function selectType(type) {
   fields.classList.add('visible');
 
   if (type === 'sleep_start') {
-    document.getElementById('modal-title').textContent = '😴 Eingeschlafen';
+    document.getElementById('modal-title').textContent = `😴 ${t('tile_sleep_start')}`;
     fields.innerHTML = `
-      <div class="field"><label>Zeitpunkt</label><input type="datetime-local" id="f-start" value="${now}"></div>
-      <div class="field"><label>Notiz</label><textarea id="f-note" rows="2"></textarea></div>
-      <button class="btn" onclick="submitEntry()">Eingeschlafen speichern</button>
+      <div class="field"><label>${t('lbl_time')}</label><input type="datetime-local" id="f-start" value="${now}"></div>
+      <div class="field"><label>${t('lbl_note')}</label><textarea id="f-note" rows="2"></textarea></div>
+      <button class="btn" onclick="submitEntry()">${t('btn_save_sleep')}</button>
     `;
   } else if (type === 'diaper') {
-    document.getElementById('modal-title').textContent = '🧷 Windel';
+    document.getElementById('modal-title').textContent = `🧷 ${t('tile_diaper')}`;
     fields.innerHTML = `
       <div class="fields-row">
-        <div class="field"><label>Zeitpunkt</label><input type="datetime-local" id="f-start" value="${now}"></div>
-        <div class="field"><label>Art</label>
+        <div class="field"><label>${t('lbl_time')}</label><input type="datetime-local" id="f-start" value="${now}"></div>
+        <div class="field"><label>${t('lbl_type')}</label>
           <select id="f-diaper-type">
-            <option value="nass">Nass</option>
-            <option value="schmutzig">Schmutzig</option>
-            <option value="beides">Beides</option>
+            <option value="nass">${t('opt_wet')}</option>
+            <option value="schmutzig">${t('opt_dirty')}</option>
+            <option value="beides">${t('opt_both')}</option>
           </select>
         </div>
       </div>
-      <div class="field"><label>Notiz</label><textarea id="f-note" rows="2"></textarea></div>
-      <button class="btn" onclick="submitEntry()">Speichern</button>
+      <div class="field"><label>${t('lbl_note')}</label><textarea id="f-note" rows="2"></textarea></div>
+      <button class="btn" onclick="submitEntry()">${t('btn_save')}</button>
     `;
   } else if (type === 'nursing') {
-    document.getElementById('modal-title').textContent = '🤱 Stillen';
+    document.getElementById('modal-title').textContent = `🤱 ${t('tile_nursing')}`;
     fields.innerHTML = `
       <div class="fields-row">
-        <div class="field"><label>Beginn</label><input type="datetime-local" id="f-start" value="${now}"></div>
-        <div class="field"><label>Ende</label><input type="datetime-local" id="f-end"></div>
+        <div class="field"><label>${t('lbl_start')}</label><input type="datetime-local" id="f-start" value="${now}"></div>
+        <div class="field"><label>${t('lbl_end')}</label><input type="datetime-local" id="f-end"></div>
       </div>
-      <div class="field"><label>Seite</label>
+      <div class="field"><label>${t('lbl_side')}</label>
         <select id="f-side">
           <option value="">—</option>
-          <option value="links">Links</option>
-          <option value="rechts">Rechts</option>
-          <option value="beide">Beide</option>
+          <option value="links">${t('opt_left')}</option>
+          <option value="rechts">${t('opt_right')}</option>
+          <option value="beide">${t('opt_both_sides')}</option>
         </select>
       </div>
-      <div class="field"><label>Notiz</label><textarea id="f-note" rows="2"></textarea></div>
-      <button class="btn" onclick="submitEntry()">Speichern</button>
+      <div class="field"><label>${t('lbl_note')}</label><textarea id="f-note" rows="2"></textarea></div>
+      <button class="btn" onclick="submitEntry()">${t('btn_save')}</button>
     `;
   } else if (type === 'bottle') {
-    document.getElementById('modal-title').textContent = '🍼 Fläschchen';
+    document.getElementById('modal-title').textContent = `🍼 ${t('tile_bottle')}`;
     fields.innerHTML = `
       <div class="fields-row">
-        <div class="field"><label>Zeitpunkt</label><input type="datetime-local" id="f-start" value="${now}"></div>
-        <div class="field"><label>Menge (ml)</label><input type="number" id="f-amount" min="0" step="5" placeholder="120"></div>
+        <div class="field"><label>${t('lbl_time')}</label><input type="datetime-local" id="f-start" value="${now}"></div>
+        <div class="field"><label>${t('lbl_amount')}</label><input type="number" id="f-amount" min="0" step="5" placeholder="120"></div>
       </div>
-      <div class="field"><label>Inhalt</label>
+      <div class="field"><label>${t('lbl_content')}</label>
         <select id="f-content">
-          <option value="abgepumpt">Abgepumpte Milch</option>
-          <option value="formula">Formulamilch</option>
+          <option value="abgepumpt">${t('opt_pumped')}</option>
+          <option value="formula">${t('opt_formula')}</option>
         </select>
       </div>
-      <div class="field"><label>Notiz</label><textarea id="f-note" rows="2"></textarea></div>
-      <button class="btn" onclick="submitEntry()">Speichern</button>
+      <div class="field"><label>${t('lbl_note')}</label><textarea id="f-note" rows="2"></textarea></div>
+      <button class="btn" onclick="submitEntry()">${t('btn_save')}</button>
     `;
   } else if (type === 'weight') {
-    document.getElementById('modal-title').textContent = '⚖️ Gewicht';
+    document.getElementById('modal-title').textContent = `⚖️ ${t('tile_weight')}`;
     fields.innerHTML = `
       <div class="fields-row">
-        <div class="field"><label>Zeitpunkt</label><input type="datetime-local" id="f-start" value="${now}"></div>
-        <div class="field"><label>Gewicht (g)</label><input type="number" id="f-weight" min="0" step="10" placeholder="3450"></div>
+        <div class="field"><label>${t('lbl_time')}</label><input type="datetime-local" id="f-start" value="${now}"></div>
+        <div class="field"><label>${t('lbl_weight_g')}</label><input type="number" id="f-weight" min="0" step="10" placeholder="3450"></div>
       </div>
-      <div class="field"><label>Notiz</label><textarea id="f-note" rows="2"></textarea></div>
-      <button class="btn" onclick="submitEntry()">Speichern</button>
+      <div class="field"><label>${t('lbl_note')}</label><textarea id="f-note" rows="2"></textarea></div>
+      <button class="btn" onclick="submitEntry()">${t('btn_save')}</button>
     `;
   } else {
-    document.getElementById('modal-title').textContent = '📝 Notiz';
+    document.getElementById('modal-title').textContent = `📝 ${t('tile_note')}`;
     fields.innerHTML = `
-      <div class="field"><label>Zeitpunkt</label><input type="datetime-local" id="f-start" value="${now}"></div>
-      <div class="field"><label>Notiz</label><textarea id="f-note" rows="3"></textarea></div>
-      <button class="btn" onclick="submitEntry()">Speichern</button>
+      <div class="field"><label>${t('lbl_time')}</label><input type="datetime-local" id="f-start" value="${now}"></div>
+      <div class="field"><label>${t('lbl_note')}</label><textarea id="f-note" rows="3"></textarea></div>
+      <button class="btn" onclick="submitEntry()">${t('btn_save')}</button>
     `;
   }
 }
 
 async function submitEntry() {
   const start = document.getElementById('f-start')?.value;
-  if (!start) { toast('Bitte Zeitpunkt angeben'); return; }
+  if (!start) { toast(t('toast_no_time')); return; }
   const meta = {};
   if (selectedType === 'diaper') meta.diaper_type = document.getElementById('f-diaper-type')?.value;
   if (selectedType === 'nursing') meta.side = document.getElementById('f-side')?.value;
@@ -424,23 +515,24 @@ async function submitEntry() {
       openSleepEntry = saved;
     }
     closeModal();
-    toast('✓ Gespeichert');
+    toast(t('toast_saved'));
     const entryDate = start.slice(0,10);
     if (entryDate !== currentDate) { currentDate = entryDate; updateDayNav(); }
     loadLog();
   } else {
-    toast('Fehler beim Speichern');
+    toast(t('toast_error'));
   }
 }
 
 // ── Toast ──
 function toast(msg) {
-  const t = document.getElementById('toast');
-  t.textContent = msg;
-  t.classList.add('show');
-  setTimeout(() => t.classList.remove('show'), 2200);
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), 2200);
 }
 
 // ── Init ──
+initUI();
 updateDayNav();
 loadLog();

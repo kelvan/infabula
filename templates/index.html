@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="de">
+<html lang="de" id="html-root">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -10,6 +10,7 @@
 
 <header>
   <img class="logo-svg" src="/static/logo.svg" alt="infabula">
+  <button class="lang-btn" id="lang-btn" onclick="switchLang()">EN</button>
 </header>
 
 <div class="day-nav">
@@ -20,8 +21,8 @@
 </div>
 
 <div class="tab-bar">
-  <button class="tab-btn active" onclick="switchTab('log', this)">📋 Verlauf</button>
-  <button class="tab-btn" onclick="switchTab('stats', this)">📊 Auswertung</button>
+  <button class="tab-btn active" id="tab-btn-log" onclick="switchTab('log', this)">📋 Verlauf</button>
+  <button class="tab-btn" id="tab-btn-stats" onclick="switchTab('stats', this)">📊 Auswertung</button>
 </div>
 
 <div class="main">
@@ -36,7 +37,7 @@
   </div>
 </div>
 
-<button class="fab" onclick="openModal()" title="Neuer Eintrag">＋</button>
+<button class="fab" id="fab" onclick="openModal()" title="Neuer Eintrag">＋</button>
 
 <div class="modal-overlay" id="modal-overlay" onclick="overlayClick(event)">
   <div class="modal">
@@ -46,12 +47,12 @@
     </div>
 
     <div class="type-grid" id="type-grid">
-      <div class="type-tile" onclick="selectType('diaper')"><div class="t-icon">🧷</div><div class="t-label">Windel</div></div>
-      <div class="type-tile" onclick="selectType('nursing')"><div class="t-icon">🤱</div><div class="t-label">Stillen</div></div>
-      <div class="type-tile" onclick="selectType('bottle')"><div class="t-icon">🍼</div><div class="t-label">Fläschchen</div></div>
-      <div class="type-tile" onclick="selectType('sleep_start')"><div class="t-icon">😴</div><div class="t-label">Eingeschlafen</div></div>
-      <div class="type-tile" onclick="selectType('weight')"><div class="t-icon">⚖️</div><div class="t-label">Gewicht</div></div>
-      <div class="type-tile" onclick="selectType('note')"><div class="t-icon">📝</div><div class="t-label">Notiz</div></div>
+      <div class="type-tile" id="tile-diaper" onclick="selectType('diaper')"><div class="t-icon">🧷</div><div class="t-label">Windel</div></div>
+      <div class="type-tile" id="tile-nursing" onclick="selectType('nursing')"><div class="t-icon">🤱</div><div class="t-label">Stillen</div></div>
+      <div class="type-tile" id="tile-bottle" onclick="selectType('bottle')"><div class="t-icon">🍼</div><div class="t-label">Fläschchen</div></div>
+      <div class="type-tile" id="tile-sleep_start" onclick="selectType('sleep_start')"><div class="t-icon">😴</div><div class="t-label">Eingeschlafen</div></div>
+      <div class="type-tile" id="tile-weight" onclick="selectType('weight')"><div class="t-icon">⚖️</div><div class="t-label">Gewicht</div></div>
+      <div class="type-tile" id="tile-note" onclick="selectType('note')"><div class="t-icon">📝</div><div class="t-label">Notiz</div></div>
     </div>
 
     <div class="form-fields" id="form-fields"></div>

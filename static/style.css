@@ -29,6 +29,21 @@ header {
   box-shadow: 0 2px 12px rgba(58,46,34,0.07);
 }
 header .logo-svg { height: 38px; width: auto; }
+.lang-btn {
+  margin-left: auto;
+  background: var(--surface2);
+  border: 1.5px solid var(--border);
+  border-radius: 6px;
+  padding: 4px 10px;
+  font-family: ui-monospace, 'Cascadia Code', 'Source Code Pro', monospace;
+  font-size: 0.72rem;
+  cursor: pointer;
+  color: var(--ink2);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  transition: all 0.15s;
+}
+.lang-btn:hover { background: var(--border); color: var(--ink); }
 
 /* ── Day nav ── */
 .day-nav {
