@@ -1,7 +1,7 @@
 [project]
 name = "infabula"
 version = "0.1.0"
-description = "Einfaches Babytagebuch als lokale Webanwendung"
+description = "Simple baby journal as a local web application"
 requires-python = ">=3.12"
 dependencies = [
     "fastapi",

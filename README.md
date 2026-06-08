@@ -1,6 +1,6 @@
 # infabula 🍼
 
-Einfaches Babytagebuch als lokale Webanwendung.
+Simple baby journal as a local web application.
 
 ## Setup
 
@@ -9,34 +9,32 @@ uv sync
 uv run uvicorn main:app --host 0.0.0.0 --port 8080
 ```
 
-Dann im Browser: http://localhost:8080  
-Von anderen Geräten im LAN: http://<server-ip>:8080
+Open in browser: http://localhost:8080
+From other devices on LAN: http://<server-ip>:8080
 
-## Funktionen
+## Features
 
-- **Windel** – Zeitpunkt + Art (nass/schmutzig/beides)
-- **Stillen** – Beginn/Ende + Seite
-- **Fläschchen** – Zeitpunkt + Menge (ml) + Inhalt
-- **Schlaf** – Einschlafen/Aufwachen → automatische Dauer
-- **Gewicht** – Zeitpunkt + Gramm
-- **Notiz** – Freitext
+- **Diaper** – time + type (wet/dirty/both)
+- **Nursing** – start/end + side
+- **Bottle** – time + amount (ml) + content
+- **Sleep** – fell asleep/woke up → automatic duration
+- **Weight** – time + grams
+- **Note** – free text
 
-## Auswertung
+## Stats
 
-- Letztes Ereignis pro Typ + "vor X Minuten"
-- Abstände zwischen Windeln / Stillen / Fläschchen (letzter + Durchschnitt)
-- Schlafdauer-Balkendiagramm (letzte 10 Schläfe)
-- IP-Farben: jedes Gerät im Netz bekommt automatisch eine eigene Farbe
+- Last event per type + "X minutes ago"
+- Intervals between diapers / nursing / bottles (last + average)
+- Sleep duration bar chart (last 10 sleeps)
+- IP colors: each device on the network gets its own color automatically
 
-## Daten
+## Data
 
-SQLite-Datenbank `infabula.db` im gleichen Verzeichnis – kein Cloud, alles lokal.
+SQLite database, path configurable via env var `DB_PATH` (default: `infabula.db` in the current directory).
 
 ## Podman/Docker (optional)
 
 ```bash
 podman build -t infabula .
-podman run -p 8080:8080 -v ./data:/app/data infabula
+podman run -p 8080:8080 -v ./data:/app/data -e DB_PATH=/app/data/infabula.db infabula
 ```
-
-Dann DB-Pfad in main.py auf `/app/data/infabula.db` ändern.
