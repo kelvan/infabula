@@ -158,8 +158,9 @@ header .logo-svg { height: 38px; width: auto; }
   gap: 12px;
   margin-bottom: 8px;
   transition: border-color 0.15s;
+  cursor: pointer;
 }
-.entry-item:hover { border-color: var(--border); }
+.entry-item:hover { border-color: var(--ink2); }
 .entry-icon { font-size: 1.4rem; flex-shrink: 0; width: 28px; text-align: center; }
 .entry-body { flex: 1; min-width: 0; }
 .entry-type {

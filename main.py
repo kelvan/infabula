@@ -115,17 +115,25 @@ async def create_entry(request: Request):
     return row_to_dict(row)
 
 
-# Patch ts_end onto an existing entry (used for "Aufgewacht" on sleep)
 @app.patch("/api/entries/{entry_id}")
 async def patch_entry(entry_id: int, request: Request):
     body = await request.json()
     conn = get_db()
+    if "ts_start" in body:
+        conn.execute(
+            "UPDATE entries SET ts_start=? WHERE id=?", (body["ts_start"], entry_id)
+        )
     if "ts_end" in body:
         conn.execute(
             "UPDATE entries SET ts_end=? WHERE id=?", (body["ts_end"], entry_id)
         )
     if "note" in body:
         conn.execute("UPDATE entries SET note=? WHERE id=?", (body["note"], entry_id))
+    if "meta" in body:
+        conn.execute(
+            "UPDATE entries SET meta=? WHERE id=?",
+            (json.dumps(body["meta"]), entry_id),
+        )
     conn.commit()
     row = conn.execute("SELECT * FROM entries WHERE id=?", (entry_id,)).fetchone()
     conn.close()

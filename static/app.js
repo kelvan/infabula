@@ -110,6 +110,8 @@ let colorIndex = 0;
 let currentDate = todayStr();
 let openSleepEntry = null;
 let selectedType = null;
+let currentEntries = [];
+let editEntryId = null;
 
 // ── Date helpers ──
 function todayStr() {
@@ -235,6 +237,7 @@ async function loadLog() {
 
   const res = await fetch(`/api/entries?date=${currentDate}`);
   const entries = await res.json();
+  currentEntries = entries;
 
   const todayIps = [...new Set(entries.map(e => e.ip))];
   const legend = document.getElementById('ip-legend');
@@ -275,7 +278,7 @@ async function loadLog() {
     if (e.type === 'weight' && m.weight) metaStr = `${m.weight} g`;
 
     return `
-      <div class="entry-item" style="border-left-color:${color}">
+      <div class="entry-item" style="border-left-color:${color}" onclick="openEditModal(${e.id})">
         <div class="entry-icon">${tp.icon}</div>
         <div class="entry-body">
           <div class="entry-type">${tp.label}</div>
@@ -284,7 +287,7 @@ async function loadLog() {
           ${e.note ? `<div class="entry-note">${esc(e.note)}</div>` : ''}
         </div>
         <span class="ip-badge" style="background:${color}" title="${e.ip}">${shortIp(e.ip)}</span>
-        <button class="del-btn" onclick="deleteEntry(${e.id})" title="${t('confirm_delete')}">✕</button>
+        <button class="del-btn" onclick="event.stopPropagation(); deleteEntry(${e.id})" title="${t('confirm_delete')}">✕</button>
       </div>
     `;
   }).join('');
@@ -357,6 +360,7 @@ async function loadStats() {
 
 // ── Modal ──
 function openModal() {
+  editEntryId = null;
   selectedType = null;
   document.querySelectorAll('.type-tile').forEach(tp => tp.classList.remove('selected'));
   document.getElementById('form-fields').innerHTML = '';
@@ -364,6 +368,7 @@ function openModal() {
   document.getElementById('modal-title').textContent = t('modal_new');
 
   const grid = document.getElementById('type-grid');
+  grid.style.display = '';
   document.getElementById('tile-sleep_start').style.display = openSleepEntry ? 'none' : '';
   const existing = grid.querySelector('[data-type=sleep_end]');
   if (openSleepEntry && !existing) {
@@ -518,6 +523,144 @@ async function submitEntry() {
     closeModal();
     toast(t('toast_saved'));
     const entryDate = start.slice(0,10);
+    if (entryDate !== currentDate) { currentDate = entryDate; updateDayNav(); }
+    loadLog();
+  } else {
+    toast(t('toast_error'));
+  }
+}
+
+// ── Edit existing entry ──
+function openEditModal(id) {
+  const entry = currentEntries.find(e => e.id === id);
+  if (!entry) return;
+  editEntryId = id;
+  selectedType = null;
+  document.querySelectorAll('.type-tile').forEach(tp => tp.classList.remove('selected'));
+  document.getElementById('type-grid').style.display = 'none';
+  const tp = getType(entry.type);
+  document.getElementById('modal-title').textContent = `${tp.icon} ${tp.label}`;
+  const fields = document.getElementById('form-fields');
+  fields.classList.add('visible');
+  fields.innerHTML = editFieldsHtml(entry);
+  document.getElementById('modal-overlay').classList.add('open');
+}
+
+function editFieldsHtml(entry) {
+  const m = entry.meta || {};
+  const start = entry.ts_start ? entry.ts_start.slice(0, 16) : '';
+  const end = entry.ts_end ? entry.ts_end.slice(0, 16) : '';
+  const note = esc(entry.note || '');
+
+  if (entry.type === 'diaper') {
+    return `
+      <div class="fields-row">
+        <div class="field"><label>${t('lbl_time')}</label><input type="datetime-local" id="f-start" value="${start}"></div>
+        <div class="field"><label>${t('lbl_type')}</label>
+          <select id="f-diaper-type">
+            <option value="nass" ${m.diaper_type === 'nass' ? 'selected' : ''}>${t('opt_wet')}</option>
+            <option value="schmutzig" ${m.diaper_type === 'schmutzig' ? 'selected' : ''}>${t('opt_dirty')}</option>
+            <option value="beides" ${m.diaper_type === 'beides' ? 'selected' : ''}>${t('opt_both')}</option>
+          </select>
+        </div>
+      </div>
+      <div class="field"><label>${t('lbl_note')}</label><textarea id="f-note" rows="2">${note}</textarea></div>
+      <button class="btn" onclick="submitEditEntry()">${t('btn_save')}</button>
+    `;
+  }
+  if (entry.type === 'nursing') {
+    return `
+      <div class="fields-row">
+        <div class="field"><label>${t('lbl_start')}</label><input type="datetime-local" id="f-start" value="${start}"></div>
+        <div class="field"><label>${t('lbl_end')}</label><input type="datetime-local" id="f-end" value="${end}"></div>
+      </div>
+      <div class="field"><label>${t('lbl_side')}</label>
+        <select id="f-side">
+          <option value="">—</option>
+          <option value="links" ${m.side === 'links' ? 'selected' : ''}>${t('opt_left')}</option>
+          <option value="rechts" ${m.side === 'rechts' ? 'selected' : ''}>${t('opt_right')}</option>
+          <option value="beide" ${m.side === 'beide' ? 'selected' : ''}>${t('opt_both_sides')}</option>
+        </select>
+      </div>
+      <div class="field"><label>${t('lbl_note')}</label><textarea id="f-note" rows="2">${note}</textarea></div>
+      <button class="btn" onclick="submitEditEntry()">${t('btn_save')}</button>
+    `;
+  }
+  if (entry.type === 'bottle') {
+    return `
+      <div class="fields-row">
+        <div class="field"><label>${t('lbl_time')}</label><input type="datetime-local" id="f-start" value="${start}"></div>
+        <div class="field"><label>${t('lbl_amount')}</label><input type="number" id="f-amount" min="0" step="5" value="${m.amount || ''}"></div>
+      </div>
+      <div class="field"><label>${t('lbl_content')}</label>
+        <select id="f-content">
+          <option value="abgepumpt" ${m.content === 'abgepumpt' ? 'selected' : ''}>${t('opt_pumped')}</option>
+          <option value="formula" ${m.content === 'formula' ? 'selected' : ''}>${t('opt_formula')}</option>
+        </select>
+      </div>
+      <div class="field"><label>${t('lbl_note')}</label><textarea id="f-note" rows="2">${note}</textarea></div>
+      <button class="btn" onclick="submitEditEntry()">${t('btn_save')}</button>
+    `;
+  }
+  if (entry.type === 'sleep') {
+    return `
+      <div class="fields-row">
+        <div class="field"><label>${t('lbl_start')}</label><input type="datetime-local" id="f-start" value="${start}"></div>
+        <div class="field"><label>${t('lbl_end')}</label><input type="datetime-local" id="f-end" value="${end}"></div>
+      </div>
+      <div class="field"><label>${t('lbl_note')}</label><textarea id="f-note" rows="2">${note}</textarea></div>
+      <button class="btn" onclick="submitEditEntry()">${t('btn_save')}</button>
+    `;
+  }
+  if (entry.type === 'weight') {
+    return `
+      <div class="fields-row">
+        <div class="field"><label>${t('lbl_time')}</label><input type="datetime-local" id="f-start" value="${start}"></div>
+        <div class="field"><label>${t('lbl_weight_g')}</label><input type="number" id="f-weight" min="0" step="10" value="${m.weight || ''}"></div>
+      </div>
+      <div class="field"><label>${t('lbl_note')}</label><textarea id="f-note" rows="2">${note}</textarea></div>
+      <button class="btn" onclick="submitEditEntry()">${t('btn_save')}</button>
+    `;
+  }
+  return `
+    <div class="field"><label>${t('lbl_time')}</label><input type="datetime-local" id="f-start" value="${start}"></div>
+    <div class="field"><label>${t('lbl_note')}</label><textarea id="f-note" rows="3">${note}</textarea></div>
+    <button class="btn" onclick="submitEditEntry()">${t('btn_save')}</button>
+  `;
+}
+
+async function submitEditEntry() {
+  const start = document.getElementById('f-start')?.value;
+  if (!start) { toast(t('toast_no_time')); return; }
+  const entry = currentEntries.find(e => e.id === editEntryId);
+  if (!entry) return;
+
+  const meta = {};
+  if (entry.type === 'diaper') meta.diaper_type = document.getElementById('f-diaper-type')?.value;
+  if (entry.type === 'nursing') meta.side = document.getElementById('f-side')?.value;
+  if (entry.type === 'bottle') {
+    meta.amount = document.getElementById('f-amount')?.value;
+    meta.content = document.getElementById('f-content')?.value;
+  }
+  if (entry.type === 'weight') meta.weight = document.getElementById('f-weight')?.value;
+
+  const body = {
+    ts_start: start,
+    ts_end: document.getElementById('f-end')?.value || null,
+    note: document.getElementById('f-note')?.value || '',
+    meta,
+  };
+
+  const res = await fetch(`/api/entries/${editEntryId}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+
+  if (res.ok) {
+    closeModal();
+    toast(t('toast_saved'));
+    const entryDate = start.slice(0, 10);
     if (entryDate !== currentDate) { currentDate = entryDate; updateDayNav(); }
     loadLog();
   } else {
