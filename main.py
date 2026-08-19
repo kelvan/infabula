@@ -192,6 +192,19 @@ async def get_open_sleep():
     return None
 
 
+@app.get("/api/walk/open")
+async def get_open_walk():
+    """Return the most recent walk entry without ts_end, if any."""
+    conn = get_db()
+    row = conn.execute(
+        "SELECT * FROM entries WHERE type='walk' AND ts_end IS NULL ORDER BY ts_start DESC LIMIT 1"
+    ).fetchone()
+    conn.close()
+    if row:
+        return row_to_dict(row)
+    return None
+
+
 @app.delete("/api/entries/{entry_id}")
 async def delete_entry(entry_id: int):
     conn = get_db()
