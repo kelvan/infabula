@@ -68,7 +68,23 @@ def init_db():
     conn.close()
 
 
+def backup_db():
+    db_dir = os.path.dirname(os.path.abspath(DB_PATH))
+    backup_dir = os.path.join(db_dir, "backups")
+    os.makedirs(backup_dir, exist_ok=True)
+    name, ext = os.path.splitext(os.path.basename(DB_PATH))
+    timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    backup_path = os.path.join(backup_dir, f"{name}-{timestamp}{ext}")
+    src = get_db()
+    dst = sqlite3.connect(backup_path)
+    with dst:
+        src.backup(dst)
+    dst.close()
+    src.close()
+
+
 init_db()
+backup_db()
 
 class CachedStaticFiles(StaticFiles):
     def file_response(self, *args, **kwargs):
