@@ -364,6 +364,7 @@ function openModal() {
   document.getElementById('modal-title').textContent = t('modal_new');
 
   const grid = document.getElementById('type-grid');
+  document.getElementById('tile-sleep_start').style.display = openSleepEntry ? 'none' : '';
   const existing = grid.querySelector('[data-type=sleep_end]');
   if (openSleepEntry && !existing) {
     const tile = document.createElement('div');
