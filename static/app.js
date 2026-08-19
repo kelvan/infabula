@@ -179,6 +179,11 @@ function jumpToDate(val) {
   updateDayNav();
   loadLog();
 }
+function openDatePicker() {
+  const el = document.getElementById('date-picker');
+  if (el.showPicker) el.showPicker();
+  else el.focus();
+}
 
 // ── Tab switching ──
 function switchTab(name, btn) {

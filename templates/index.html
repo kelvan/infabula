@@ -15,9 +15,9 @@
 
 <div class="day-nav">
   <button id="btn-prev" onclick="changeDay(-1)">←</button>
-  <div class="day-label" id="day-label"></div>
+  <div class="day-label" id="day-label" onclick="openDatePicker()"></div>
   <button id="btn-next" onclick="changeDay(1)">→</button>
-  <input type="date" id="date-picker" onchange="jumpToDate(this.value)">
+  <input type="date" id="date-picker" class="date-picker-hidden" onchange="jumpToDate(this.value)">
 </div>
 
 <div class="tab-bar">

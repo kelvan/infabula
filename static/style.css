@@ -47,6 +47,7 @@ header .logo-svg { height: 38px; width: auto; }
 
 /* ── Day nav ── */
 .day-nav {
+  position: relative;
   background: var(--surface2);
   border-bottom: 1.5px solid var(--border);
   padding: 10px 20px;
@@ -74,16 +75,18 @@ header .logo-svg { height: 38px; width: auto; }
   font-size: 0.85rem;
   color: var(--ink);
   letter-spacing: 0.04em;
-}
-.day-nav input[type=date] {
-  background: var(--bg);
-  border: 1.5px solid var(--border);
-  border-radius: 8px;
-  padding: 5px 8px;
-  font-family: ui-monospace, 'Cascadia Code', 'Source Code Pro', monospace;
-  font-size: 0.78rem;
-  color: var(--ink);
   cursor: pointer;
+}
+.date-picker-hidden {
+  position: absolute;
+  left: 50%;
+  top: 100%;
+  width: 0;
+  height: 0;
+  padding: 0;
+  border: 0;
+  opacity: 0;
+  pointer-events: none;
 }
 
 /* ── Tab bar ── */
