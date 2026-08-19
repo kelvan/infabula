@@ -1,15 +1,45 @@
+import asyncio
 import json
 import os
 import sqlite3
 from datetime import datetime
 
 from fastapi import FastAPI, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 app = FastAPI()
 DB_PATH = os.getenv("DB_PATH", "infabula.db")
+
+# ── SSE pub-sub ──
+subscribers: set[asyncio.Queue] = set()
+
+
+async def broadcast_event(event_type: str):
+    for q in list(subscribers):
+        q.put_nowait(event_type)
+
+
+@app.get("/api/events")
+async def sse_events():
+    queue: asyncio.Queue = asyncio.Queue()
+    subscribers.add(queue)
+
+    async def event_stream():
+        try:
+            while True:
+                try:
+                    event_type = await asyncio.wait_for(queue.get(), timeout=15)
+                    yield f'data: {{"type": "{event_type}"}}\n\n'
+                except asyncio.TimeoutError:
+                    yield ": keepalive\n\n"
+        except asyncio.CancelledError:
+            pass
+        finally:
+            subscribers.discard(queue)
+
+    return StreamingResponse(event_stream(), media_type="text/event-stream")
 
 
 def get_db():
@@ -81,6 +111,7 @@ async def create_entry(request: Request):
     new_id = cur.lastrowid
     row = conn.execute("SELECT * FROM entries WHERE id=?", (new_id,)).fetchone()
     conn.close()
+    await broadcast_event("entries_changed")
     return row_to_dict(row)
 
 
@@ -98,6 +129,7 @@ async def patch_entry(entry_id: int, request: Request):
     conn.commit()
     row = conn.execute("SELECT * FROM entries WHERE id=?", (entry_id,)).fetchone()
     conn.close()
+    await broadcast_event("entries_changed")
     return row_to_dict(row)
 
 
@@ -147,6 +179,7 @@ async def delete_entry(entry_id: int):
     conn.execute("DELETE FROM entries WHERE id = ?", (entry_id,))
     conn.commit()
     conn.close()
+    await broadcast_event("entries_changed")
     return {"ok": True}
 
 

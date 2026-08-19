@@ -532,7 +532,18 @@ function toast(msg) {
   setTimeout(() => el.classList.remove('show'), 2200);
 }
 
+// ── Live sync (SSE) ──
+function initEvents() {
+  const es = new EventSource('/api/events');
+  es.onmessage = () => {
+    loadLog();
+    if (document.getElementById('tab-stats').classList.contains('active')) loadStats();
+  };
+  es.onerror = () => {};
+}
+
 // ── Init ──
 initUI();
 updateDayNav();
 loadLog();
+initEvents();
