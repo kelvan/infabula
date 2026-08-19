@@ -2,6 +2,7 @@ import asyncio
 import json
 import os
 import sqlite3
+import time
 from datetime import datetime
 
 from fastapi import FastAPI, Request
@@ -11,6 +12,7 @@ from fastapi.templating import Jinja2Templates
 
 app = FastAPI()
 DB_PATH = os.getenv("DB_PATH", "infabula.db")
+ASSET_VERSION = str(int(time.time()))
 
 # ── SSE pub-sub ──
 subscribers: set[asyncio.Queue] = set()
@@ -88,7 +90,9 @@ def row_to_dict(r):
 
 @app.get("/", response_class=HTMLResponse)
 async def index(request: Request):
-    return templates.TemplateResponse("index.html", {"request": request})
+    return templates.TemplateResponse(
+        "index.html", {"request": request, "v": ASSET_VERSION}
+    )
 
 
 @app.post("/api/entries")
