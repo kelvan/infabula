@@ -343,6 +343,7 @@ header .logo-svg { height: 38px; width: auto; }
 /* IP legend */
 .ip-legend { display: flex; flex-wrap: wrap; gap: 8px; padding: 10px 20px 0; }
 .ip-legend-item { display: flex; align-items: center; gap: 5px; font-family: ui-monospace, 'Cascadia Code', 'Source Code Pro', monospace; font-size: 0.68rem; color: var(--ink2); }
+.diaper-count { padding: 10px 20px 0; font-family: ui-monospace, 'Cascadia Code', 'Source Code Pro', monospace; font-size: 0.72rem; color: var(--ink2); }
 .ip-dot { width: 9px; height: 9px; border-radius: 50%; }
 
 /* Toast */

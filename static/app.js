@@ -32,6 +32,7 @@ const I18N = {
     toast_error:'Fehler beim Speichern', toast_saved:'✓ Gespeichert',
     toast_wakeup: dur=>`☀️ Aufgewacht – ${dur} Schlaf`,
     toast_walk_end: dur=>`🏠 Zurück – ${dur} Spaziergang`,
+    diaper_count: n=>`🧷 Windeln: ${n}`,
     lang_switch:'EN',
   },
   en: {
@@ -66,6 +67,7 @@ const I18N = {
     toast_error:'Error saving', toast_saved:'✓ Saved',
     toast_wakeup: dur=>`☀️ Woke up – ${dur} sleep`,
     toast_walk_end: dur=>`🏠 Back – ${dur} walk`,
+    diaper_count: n=>`🧷 Diapers: ${n}`,
     lang_switch:'DE',
   },
 };
@@ -330,6 +332,9 @@ async function loadLog() {
       <div class="ip-dot" style="background:${getIpColor(ip)}"></div>${ip}
     </div>
   `).join('');
+
+  const diaperCount = entries.filter(e => e.type === 'diaper').length;
+  document.getElementById('diaper-count').textContent = diaperCount ? t('diaper_count', diaperCount) : '';
 
   const list = document.getElementById('entry-list');
   if (!entries.length) {
