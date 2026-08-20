@@ -2,7 +2,7 @@
 const I18N = {
   de: {
     types: { diaper:'Windel', nursing:'Stillen', bottle:'Fläschchen', sleep:'Schlaf', weight:'Gewicht', note:'Notiz', walk:'Spaziergang', clothing:'Kleidung' },
-    tab_log:'📋 Verlauf', tab_stats:'📊 Auswertung',
+    tab_log:'📋 Verlauf', tab_stats:'📊 Auswertung', tab_settings:'⚙️ Einstellungen',
     modal_new:'Neuer Eintrag',
     tile_diaper:'Windel', tile_nursing:'Stillen', tile_bottle:'Fläschchen',
     tile_sleep_start:'Eingeschlafen', tile_weight:'Gewicht', tile_note:'Notiz', tile_wakeup:'Aufgewacht',
@@ -24,6 +24,7 @@ const I18N = {
     stat_awake_since:'Wach seit', stat_back_since:'Zurück seit',
     stat_asleep_since:'Schläft seit', stat_walking_since:'Läuft seit',
     no_data:'Keine Daten', not_enough_data:'Zu wenig Daten', no_sleep_data:'Noch keine Schlafdaten',
+    settings_ip_names_title:'Geräte', settings_name_placeholder:'Name eingeben', settings_no_ips:'Noch keine Geräte bekannt',
     today:'Heute', yesterday:'Gestern',
     just_now:'gerade eben',
     ago_min: n=>`vor ${n} min`, ago_hour: n=>`vor ${n} h`, ago_day: n=>`vor ${n} d`,
@@ -38,7 +39,7 @@ const I18N = {
   },
   en: {
     types: { diaper:'Diaper', nursing:'Nursing', bottle:'Bottle', sleep:'Sleep', weight:'Weight', note:'Note', walk:'Walk', clothing:'Clothing' },
-    tab_log:'📋 Log', tab_stats:'📊 Stats',
+    tab_log:'📋 Log', tab_stats:'📊 Stats', tab_settings:'⚙️ Settings',
     modal_new:'New Entry',
     tile_diaper:'Diaper', tile_nursing:'Nursing', tile_bottle:'Bottle',
     tile_sleep_start:'Fell asleep', tile_weight:'Weight', tile_note:'Note', tile_wakeup:'Woke up',
@@ -60,6 +61,7 @@ const I18N = {
     stat_awake_since:'Awake since', stat_back_since:'Back since',
     stat_asleep_since:'Asleep since', stat_walking_since:'Walking since',
     no_data:'No data', not_enough_data:'Not enough data', no_sleep_data:'No sleep data yet',
+    settings_ip_names_title:'Devices', settings_name_placeholder:'Enter name', settings_no_ips:'No devices seen yet',
     today:'Today', yesterday:'Yesterday',
     just_now:'just now',
     ago_min: n=>`${n} min ago`, ago_hour: n=>`${n} h ago`, ago_day: n=>`${n} d ago`,
@@ -100,6 +102,7 @@ function switchLang() {
   initUI();
   loadLog();
   if (document.getElementById('tab-stats').classList.contains('active')) loadStats();
+  if (document.getElementById('tab-settings').classList.contains('active')) loadSettings();
 }
 
 function initUI() {
@@ -107,6 +110,7 @@ function initUI() {
   document.getElementById('lang-btn').textContent = t('lang_switch');
   document.getElementById('tab-btn-log').textContent = t('tab_log');
   document.getElementById('tab-btn-stats').textContent = t('tab_stats');
+  document.getElementById('tab-btn-settings').textContent = t('tab_settings');
   document.getElementById('fab').title = t('fab_title');
   ['diaper','nursing','bottle','sleep_start','weight','note','walk','clothing'].forEach(k => {
     const el = document.getElementById('tile-'+k);
@@ -121,6 +125,7 @@ const IP_COLORS = [
 
 let ipColorMap = {};
 let colorIndex = 0;
+let ipNameMap = {};
 let currentDate = todayStr();
 let openSleepEntry = null;
 let openWalkEntry = null;
@@ -189,11 +194,12 @@ function fmtAgo(iso) {
   if (diff < 1440) return t('ago_hour', Math.round(diff/60));
   return t('ago_day', Math.round(diff/1440));
 }
+function displayKey(ip) { return ipNameMap[ip] || ip; }
 function getIpColor(ip) {
   if (!ipColorMap[ip]) { ipColorMap[ip] = IP_COLORS[colorIndex % IP_COLORS.length]; colorIndex++; }
   return ipColorMap[ip];
 }
-function esc(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function esc(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
 
 // ── Day navigation ──
 function updateDayNav() {
@@ -231,6 +237,7 @@ function switchTab(name, btn) {
   document.getElementById('tab-'+name).classList.add('active');
   btn.classList.add('active');
   if (name === 'stats') loadStats();
+  if (name === 'settings') loadSettings();
 }
 
 // ── Sleep banner ──
@@ -313,20 +320,22 @@ async function endWalk() {
 async function loadLog() {
   await checkOpenSleep();
   await checkOpenWalk();
+  const namesRes = await fetch('/api/ip-names');
+  ipNameMap = await namesRes.json();
   const allRes = await fetch('/api/entries?limit=500');
   const allEntries = await allRes.json();
   ipColorMap = {}; colorIndex = 0;
-  allEntries.forEach(e => getIpColor(e.ip));
+  allEntries.forEach(e => getIpColor(displayKey(e.ip)));
 
   const res = await fetch(`/api/entries?date=${currentDate}`);
   const entries = await res.json();
   currentEntries = entries;
 
-  const todayIps = [...new Set(entries.map(e => e.ip))];
+  const todayKeys = [...new Set(entries.map(e => displayKey(e.ip)))];
   const legend = document.getElementById('ip-legend');
-  legend.innerHTML = todayIps.map(ip => `
+  legend.innerHTML = todayKeys.map(key => `
     <div class="ip-legend-item">
-      <div class="ip-dot" style="background:${getIpColor(ip)}"></div>${ip}
+      <div class="ip-dot" style="background:${getIpColor(key)}"></div>${esc(key)}
     </div>
   `).join('');
 
@@ -344,7 +353,7 @@ async function loadLog() {
   }
 
   list.innerHTML = entries.map(e => {
-    const color = getIpColor(e.ip);
+    const color = getIpColor(displayKey(e.ip));
     const tp = getType(e.type);
     const m = e.meta || {};
     let timeStr = fmtTime(e.ts_start);
@@ -385,7 +394,7 @@ async function loadLog() {
           ${metaStr ? `<div class="entry-meta">${esc(metaStr)}</div>` : ''}
           ${e.note ? `<div class="entry-note">${esc(e.note)}</div>` : ''}
         </div>
-        <span class="ip-badge" style="background:${color}" title="${e.ip}"></span>
+        <span class="ip-badge" style="background:${color}" title="${esc(e.ip)}"></span>
         <button class="del-btn" onclick="event.stopPropagation(); deleteEntry(${e.id})" title="${t('confirm_delete')}">✕</button>
       </div>
     `;
@@ -470,6 +479,40 @@ async function loadStats() {
     <div class="section-title">${t('section_sleep')}</div>
     ${sleepBars}
   `;
+}
+
+// ── Settings ──
+async function loadSettings() {
+  const res = await fetch('/api/ips');
+  const ips = await res.json();
+  const el = document.getElementById('settings-content');
+  if (!ips.length) {
+    el.innerHTML = `<div class="empty">${t('settings_no_ips')}</div>`;
+    return;
+  }
+  el.innerHTML = `
+    <div class="section-title">${t('settings_ip_names_title')}</div>
+    ${ips.map(({ ip, name }) => `
+      <div class="ip-name-row">
+        <span class="ip-name-ip">${esc(ip)}</span>
+        <input type="text" class="ip-name-input" data-ip="${esc(ip)}" value="${esc(name)}" placeholder="${t('settings_name_placeholder')}">
+        <button class="btn-small" onclick="saveIpName(this)">${t('btn_save')}</button>
+      </div>
+    `).join('')}
+  `;
+}
+
+async function saveIpName(btn) {
+  const input = btn.closest('.ip-name-row').querySelector('.ip-name-input');
+  const ip = input.dataset.ip;
+  const name = input.value.trim();
+  await fetch(`/api/ip-names/${encodeURIComponent(ip)}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name }),
+  });
+  toast(t('toast_saved'));
+  loadLog();
 }
 
 // ── Modal ──

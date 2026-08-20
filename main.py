@@ -64,6 +64,12 @@ def init_db():
             created_at TEXT DEFAULT (datetime('now'))
         )
     """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS ip_names (
+            ip TEXT PRIMARY KEY,
+            name TEXT NOT NULL
+        )
+    """)
     conn.commit()
     conn.close()
 
@@ -193,6 +199,46 @@ async def get_dates():
     ).fetchall()
     conn.close()
     return [r["d"] for r in rows]
+
+
+@app.get("/api/ip-names")
+async def get_ip_names():
+    conn = get_db()
+    rows = conn.execute("SELECT ip, name FROM ip_names").fetchall()
+    conn.close()
+    return {r["ip"]: r["name"] for r in rows}
+
+
+@app.put("/api/ip-names/{ip}")
+async def set_ip_name(ip: str, request: Request):
+    body = await request.json()
+    name = (body.get("name") or "").strip()
+    conn = get_db()
+    if name:
+        conn.execute(
+            "INSERT INTO ip_names (ip, name) VALUES (?, ?) "
+            "ON CONFLICT(ip) DO UPDATE SET name=excluded.name",
+            (ip, name),
+        )
+    else:
+        conn.execute("DELETE FROM ip_names WHERE ip=?", (ip,))
+    conn.commit()
+    conn.close()
+    await broadcast_event("entries_changed")
+    return {"ok": True}
+
+
+@app.get("/api/ips")
+async def get_known_ips():
+    """Distinct IPs seen in entries, with their assigned name (if any)."""
+    conn = get_db()
+    ip_rows = conn.execute(
+        "SELECT DISTINCT ip FROM entries WHERE ip IS NOT NULL ORDER BY ip"
+    ).fetchall()
+    name_rows = conn.execute("SELECT ip, name FROM ip_names").fetchall()
+    conn.close()
+    names = {r["ip"]: r["name"] for r in name_rows}
+    return [{"ip": r["ip"], "name": names.get(r["ip"], "")} for r in ip_rows]
 
 
 @app.get("/api/sleep/open")

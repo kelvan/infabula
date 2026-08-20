@@ -199,6 +199,34 @@ header .logo-svg { height: 38px; width: auto; }
 
 /* ── Stats ── */
 .stats-wrap { padding: 16px 20px 0; }
+.settings-wrap { padding: 16px 20px 0; }
+.ip-name-row { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+.ip-name-ip { font-family: ui-monospace, 'Cascadia Code', 'Source Code Pro', monospace; font-size: 0.68rem; color: var(--ink2); flex-shrink: 0; width: 90px; }
+.ip-name-input {
+  flex: 1;
+  min-width: 0;
+  padding: 8px 10px;
+  border: 1.5px solid var(--border);
+  border-radius: 8px;
+  font-family: inherit;
+  font-size: 0.85rem;
+  background: var(--surface);
+  color: var(--ink);
+}
+.ip-name-input:focus { outline: none; border-color: var(--accent); }
+.btn-small {
+  background: var(--accent);
+  color: white;
+  border: none;
+  padding: 8px 14px;
+  border-radius: 8px;
+  font-family: ui-monospace, 'Cascadia Code', 'Source Code Pro', monospace;
+  font-size: 0.72rem;
+  cursor: pointer;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  flex-shrink: 0;
+}
 .section-title {
   font-family: ui-monospace, 'Cascadia Code', 'Source Code Pro', monospace;
   font-size: 0.7rem;
