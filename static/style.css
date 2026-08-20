@@ -322,7 +322,7 @@ header .logo-svg { height: 38px; width: auto; }
 }
 .field input:focus, .field textarea:focus, .field select:focus { outline: none; border-color: var(--accent); }
 .fields-row { display: flex; gap: 10px; }
-.fields-row .field { flex: 1; }
+.fields-row .field { flex: 1; min-width: 0; }
 .btn {
   background: var(--accent);
   color: white;
