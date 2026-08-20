@@ -33,6 +33,7 @@ const I18N = {
     toast_wakeup: dur=>`☀️ Aufgewacht – ${dur} Schlaf`,
     toast_walk_end: dur=>`🏠 Zurück – ${dur} Spaziergang`,
     diaper_count: n=>`🧷 Windeln: ${n}`,
+    diaper_poo_count: n=>`💩 Kacka: ${n}`,
     lang_switch:'EN',
   },
   en: {
@@ -68,6 +69,7 @@ const I18N = {
     toast_wakeup: dur=>`☀️ Woke up – ${dur} sleep`,
     toast_walk_end: dur=>`🏠 Back – ${dur} walk`,
     diaper_count: n=>`🧷 Diapers: ${n}`,
+    diaper_poo_count: n=>`💩 Poo: ${n}`,
     lang_switch:'DE',
   },
 };
@@ -333,8 +335,12 @@ async function loadLog() {
     </div>
   `).join('');
 
-  const diaperCount = entries.filter(e => e.type === 'diaper').length;
-  document.getElementById('diaper-count').textContent = diaperCount ? t('diaper_count', diaperCount) : '';
+  const diaperEntries = entries.filter(e => e.type === 'diaper');
+  const pooCount = diaperEntries.filter(e => ['schmutzig','beides','dirty','both'].includes(e.meta?.diaper_type)).length;
+  const counts = [];
+  if (diaperEntries.length) counts.push(t('diaper_count', diaperEntries.length));
+  if (pooCount) counts.push(t('diaper_poo_count', pooCount));
+  document.getElementById('diaper-count').textContent = counts.join('  ·  ');
 
   const list = document.getElementById('entry-list');
   if (!entries.length) {
