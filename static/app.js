@@ -193,11 +193,6 @@ function getIpColor(ip) {
   if (!ipColorMap[ip]) { ipColorMap[ip] = IP_COLORS[colorIndex % IP_COLORS.length]; colorIndex++; }
   return ipColorMap[ip];
 }
-function shortIp(ip) {
-  if (!ip) return '?';
-  const p = ip.split('.');
-  return p.length === 4 ? p.slice(2).join('.') : ip.slice(-5);
-}
 function esc(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 
 // ── Day navigation ──
@@ -390,7 +385,7 @@ async function loadLog() {
           ${metaStr ? `<div class="entry-meta">${esc(metaStr)}</div>` : ''}
           ${e.note ? `<div class="entry-note">${esc(e.note)}</div>` : ''}
         </div>
-        <span class="ip-badge" style="background:${color}" title="${e.ip}">${shortIp(e.ip)}</span>
+        <span class="ip-badge" style="background:${color}" title="${e.ip}"></span>
         <button class="del-btn" onclick="event.stopPropagation(); deleteEntry(${e.id})" title="${t('confirm_delete')}">✕</button>
       </div>
     `;

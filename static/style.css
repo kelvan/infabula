@@ -178,13 +178,10 @@ header .logo-svg { height: 38px; width: auto; }
 .entry-meta { font-size: 0.78rem; color: var(--accent2); font-family: ui-monospace, 'Cascadia Code', 'Source Code Pro', monospace; }
 .entry-note { font-size: 0.78rem; color: var(--ink2); font-style: italic; margin-top: 2px; }
 .ip-badge {
-  font-family: ui-monospace, 'Cascadia Code', 'Source Code Pro', monospace;
-  font-size: 0.65rem;
-  padding: 2px 7px;
-  border-radius: 20px;
-  color: white;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
   flex-shrink: 0;
-  opacity: 0.9;
 }
 .del-btn {
   background: none;
