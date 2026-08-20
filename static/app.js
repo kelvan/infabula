@@ -188,8 +188,12 @@ function jumpToDate(val) {
 }
 function openDatePicker() {
   const el = document.getElementById('date-picker');
-  if (el.showPicker) el.showPicker();
-  else el.focus();
+  try {
+    if (el.showPicker) el.showPicker();
+    else el.focus();
+  } catch {
+    el.focus();
+  }
 }
 
 // ── Tab switching ──

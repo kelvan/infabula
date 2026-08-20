@@ -81,8 +81,8 @@ header .logo-svg { height: 38px; width: auto; }
   position: absolute;
   left: 50%;
   top: 100%;
-  width: 0;
-  height: 0;
+  width: 1px;
+  height: 1px;
   padding: 0;
   border: 0;
   opacity: 0;
