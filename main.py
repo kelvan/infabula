@@ -291,6 +291,8 @@ async def get_stats():
         t = e["type"]
         if t not in last:
             last[t] = e
+        if t in ("nursing", "bottle") and "feeding" not in last:
+            last["feeding"] = e
 
     sleep_entries = [e for e in entries if e["type"] == "sleep" and e["ts_end"]][:10]
     sleep_durations = []
@@ -303,8 +305,11 @@ async def get_stats():
         )
 
     intervals = {}
-    for typ in ["diaper", "bottle", "nursing"]:
-        typed = [e for e in entries if e["type"] == typ]
+    for typ in ["diaper", "feeding"]:
+        if typ == "feeding":
+            typed = [e for e in entries if e["type"] in ("nursing", "bottle")]
+        else:
+            typed = [e for e in entries if e["type"] == typ]
         if len(typed) >= 2:
             diffs = []
             for i in range(len(typed) - 1):

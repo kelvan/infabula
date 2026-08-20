@@ -1,7 +1,7 @@
 // ── i18n ──
 const I18N = {
   de: {
-    types: { diaper:'Windel', nursing:'Stillen', bottle:'Fläschchen', sleep:'Schlaf', weight:'Gewicht', note:'Notiz', walk:'Spaziergang', clothing:'Kleidung' },
+    types: { diaper:'Windel', nursing:'Stillen', bottle:'Fläschchen', sleep:'Schlaf', weight:'Gewicht', note:'Notiz', walk:'Spaziergang', clothing:'Kleidung', feeding:'Fütterung' },
     tab_log:'📋 Verlauf', tab_stats:'📊 Auswertung', tab_settings:'⚙️ Einstellungen',
     modal_new:'Neuer Eintrag',
     tile_diaper:'Windel', tile_nursing:'Stillen', tile_bottle:'Fläschchen',
@@ -38,7 +38,7 @@ const I18N = {
     lang_switch:'EN',
   },
   en: {
-    types: { diaper:'Diaper', nursing:'Nursing', bottle:'Bottle', sleep:'Sleep', weight:'Weight', note:'Note', walk:'Walk', clothing:'Clothing' },
+    types: { diaper:'Diaper', nursing:'Nursing', bottle:'Bottle', sleep:'Sleep', weight:'Weight', note:'Note', walk:'Walk', clothing:'Clothing', feeding:'Feeding' },
     tab_log:'📋 Log', tab_stats:'📊 Stats', tab_settings:'⚙️ Settings',
     modal_new:'New Entry',
     tile_diaper:'Diaper', tile_nursing:'Nursing', tile_bottle:'Bottle',
@@ -85,7 +85,7 @@ const META_VALS = {
   abgepumpt:{de:'Abgepumpt',en:'Pumped'}, formula:{de:'Formula',en:'Formula'},
 };
 
-const TYPE_ICONS = { diaper:'🧷', nursing:'🤱', bottle:'🍼', sleep:'😴', weight:'⚖️', note:'📝', walk:'🚶', clothing:'👕' };
+const TYPE_ICONS = { diaper:'🧷', nursing:'🤱', bottle:'🍼', sleep:'😴', weight:'⚖️', note:'📝', walk:'🚶', clothing:'👕', feeding:'🤱🍼' };
 
 let lang = localStorage.getItem('lang') || (navigator.language.startsWith('de') ? 'de' : 'en');
 
@@ -414,7 +414,7 @@ async function loadStats() {
   const data = await res.json();
   const el = document.getElementById('stats-content');
 
-  const lastTypes = ['diaper','nursing','bottle','sleep','walk','weight'];
+  const lastTypes = ['diaper','feeding','sleep','walk','weight'];
   let lastCards = '';
   lastTypes.forEach(key => {
     const e = data.last[key];
@@ -448,7 +448,7 @@ async function loadStats() {
   });
 
   let ivCards = '';
-  ['diaper','nursing','bottle'].forEach(key => {
+  ['diaper','feeding'].forEach(key => {
     const iv = data.intervals[key];
     if (!iv) return;
     const tp = getType(key);
