@@ -22,6 +22,7 @@ const I18N = {
     section_sleep:'Schlafdauer (letzte 10)',
     stat_interval:'Abstand', stat_avg:'Ø letzte 5',
     stat_awake_since:'Wach seit', stat_back_since:'Zurück seit',
+    stat_asleep_since:'Schläft seit', stat_walking_since:'Läuft seit',
     no_data:'Keine Daten', not_enough_data:'Zu wenig Daten', no_sleep_data:'Noch keine Schlafdaten',
     today:'Heute', yesterday:'Gestern',
     just_now:'gerade eben',
@@ -55,6 +56,7 @@ const I18N = {
     section_sleep:'Sleep duration (last 10)',
     stat_interval:'Interval', stat_avg:'avg last 5',
     stat_awake_since:'Awake since', stat_back_since:'Back since',
+    stat_asleep_since:'Asleep since', stat_walking_since:'Walking since',
     no_data:'No data', not_enough_data:'Not enough data', no_sleep_data:'No sleep data yet',
     today:'Today', yesterday:'Yesterday',
     just_now:'just now',
@@ -405,13 +407,21 @@ async function loadStats() {
     const tp = getType(key);
     let valStr = fmtAgo(e.ts_start);
     let sub = fmtTime(e.ts_start);
-    if (key === 'sleep' && e.ts_end) {
-      valStr = `${t('stat_awake_since')} ${fmtDur(Math.round(durMin(e.ts_end, new Date().toISOString())))}`;
-      sub = fmtTime(e.ts_end);
+    if (key === 'sleep') {
+      if (e.ts_end) {
+        valStr = `${t('stat_awake_since')} ${fmtDur(Math.round(durMin(e.ts_end, new Date().toISOString())))}`;
+        sub = fmtTime(e.ts_end);
+      } else {
+        valStr = `${t('stat_asleep_since')} ${fmtDur(Math.round(durMin(e.ts_start, new Date().toISOString())))}`;
+      }
     }
-    if (key === 'walk' && e.ts_end) {
-      valStr = `${t('stat_back_since')} ${fmtDur(Math.round(durMin(e.ts_end, new Date().toISOString())))}`;
-      sub = fmtTime(e.ts_end);
+    if (key === 'walk') {
+      if (e.ts_end) {
+        valStr = `${t('stat_back_since')} ${fmtDur(Math.round(durMin(e.ts_end, new Date().toISOString())))}`;
+        sub = fmtTime(e.ts_end);
+      } else {
+        valStr = `${t('stat_walking_since')} ${fmtDur(Math.round(durMin(e.ts_start, new Date().toISOString())))}`;
+      }
     }
     if (key === 'weight' && e.meta?.weight) { valStr = e.meta.weight + ' g'; sub = fmtAgo(e.ts_start); }
     lastCards += `
