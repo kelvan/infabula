@@ -132,6 +132,31 @@ function nowLocal() {
   const d = new Date();
   return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
+// Split/join instead of relying on <input type="datetime-local">, whose time
+// step is unreliable on Android WebView/Chrome — plain date+time inputs work everywhere.
+function splitDT(dt) {
+  if (!dt) return { date: '', time: '' };
+  const [date, time] = dt.split('T');
+  return { date, time: time || '' };
+}
+function joinDT(date, time) {
+  return (date && time) ? `${date}T${time}` : '';
+}
+function dtField(idPrefix, label, value) {
+  const { date, time } = splitDT(value);
+  return `
+    <div class="field"><label>${label}</label>
+      <div class="dt-row">
+        <input type="date" id="${idPrefix}-date" value="${date}">
+        <input type="time" id="${idPrefix}-time" value="${time}">
+      </div>
+    </div>`;
+}
+function readDT(idPrefix) {
+  const date = document.getElementById(`${idPrefix}-date`)?.value;
+  const time = document.getElementById(`${idPrefix}-time`)?.value;
+  return joinDT(date, time);
+}
 function fmtDate(s) {
   const [y,m,d] = s.split('-');
   const today = todayStr();
@@ -506,22 +531,20 @@ function selectType(type) {
   if (type === 'sleep_start') {
     document.getElementById('modal-title').textContent = `😴 ${t('tile_sleep_start')}`;
     fields.innerHTML = `
-      <div class="field"><label>${t('lbl_time')}</label><input type="datetime-local" id="f-start" value="${now}"></div>
+      ${dtField('f-start', t('lbl_time'), now)}
       <div class="field"><label>${t('lbl_note')}</label><textarea id="f-note" rows="2"></textarea></div>
       <button class="btn" onclick="submitEntry()">${t('btn_save_sleep')}</button>
     `;
   } else if (type === 'diaper') {
     document.getElementById('modal-title').textContent = `🧷 ${t('tile_diaper')}`;
     fields.innerHTML = `
-      <div class="fields-row">
-        <div class="field"><label>${t('lbl_time')}</label><input type="datetime-local" id="f-start" value="${now}"></div>
-        <div class="field"><label>${t('lbl_type')}</label>
-          <select id="f-diaper-type">
-            <option value="nass">${t('opt_wet')}</option>
-            <option value="schmutzig">${t('opt_dirty')}</option>
-            <option value="beides">${t('opt_both')}</option>
-          </select>
-        </div>
+      ${dtField('f-start', t('lbl_time'), now)}
+      <div class="field"><label>${t('lbl_type')}</label>
+        <select id="f-diaper-type">
+          <option value="nass">${t('opt_wet')}</option>
+          <option value="schmutzig">${t('opt_dirty')}</option>
+          <option value="beides">${t('opt_both')}</option>
+        </select>
       </div>
       <div class="field"><label>${t('lbl_note')}</label><textarea id="f-note" rows="2"></textarea></div>
       <button class="btn" onclick="submitEntry()">${t('btn_save')}</button>
@@ -529,10 +552,8 @@ function selectType(type) {
   } else if (type === 'nursing') {
     document.getElementById('modal-title').textContent = `🤱 ${t('tile_nursing')}`;
     fields.innerHTML = `
-      <div class="fields-row">
-        <div class="field"><label>${t('lbl_start')}</label><input type="datetime-local" id="f-start" value="${now}"></div>
-        <div class="field"><label>${t('lbl_end')}</label><input type="datetime-local" id="f-end"></div>
-      </div>
+      ${dtField('f-start', t('lbl_start'), now)}
+      ${dtField('f-end', t('lbl_end'), '')}
       <div class="field"><label>${t('lbl_side')}</label>
         <select id="f-side">
           <option value="">—</option>
@@ -547,10 +568,8 @@ function selectType(type) {
   } else if (type === 'bottle') {
     document.getElementById('modal-title').textContent = `🍼 ${t('tile_bottle')}`;
     fields.innerHTML = `
-      <div class="fields-row">
-        <div class="field"><label>${t('lbl_time')}</label><input type="datetime-local" id="f-start" value="${now}"></div>
-        <div class="field"><label>${t('lbl_amount')}</label><input type="number" id="f-amount" min="0" step="5" placeholder="120"></div>
-      </div>
+      ${dtField('f-start', t('lbl_time'), now)}
+      <div class="field"><label>${t('lbl_amount')}</label><input type="number" id="f-amount" min="0" step="5" placeholder="120"></div>
       <div class="field"><label>${t('lbl_content')}</label>
         <select id="f-content">
           <option value="abgepumpt">${t('opt_pumped')}</option>
@@ -563,31 +582,29 @@ function selectType(type) {
   } else if (type === 'weight') {
     document.getElementById('modal-title').textContent = `⚖️ ${t('tile_weight')}`;
     fields.innerHTML = `
-      <div class="fields-row">
-        <div class="field"><label>${t('lbl_time')}</label><input type="datetime-local" id="f-start" value="${now}"></div>
-        <div class="field"><label>${t('lbl_weight_g')}</label><input type="number" id="f-weight" min="0" step="10" placeholder="3450"></div>
-      </div>
+      ${dtField('f-start', t('lbl_time'), now)}
+      <div class="field"><label>${t('lbl_weight_g')}</label><input type="number" id="f-weight" min="0" step="10" placeholder="3450"></div>
       <div class="field"><label>${t('lbl_note')}</label><textarea id="f-note" rows="2"></textarea></div>
       <button class="btn" onclick="submitEntry()">${t('btn_save')}</button>
     `;
   } else if (type === 'walk') {
     document.getElementById('modal-title').textContent = `🚶 ${t('tile_walk')}`;
     fields.innerHTML = `
-      <div class="field"><label>${t('lbl_time')}</label><input type="datetime-local" id="f-start" value="${now}"></div>
+      ${dtField('f-start', t('lbl_time'), now)}
       <div class="field"><label>${t('lbl_note')}</label><textarea id="f-note" rows="2"></textarea></div>
       <button class="btn" onclick="submitEntry()">${t('btn_save')}</button>
     `;
   } else if (type === 'clothing') {
     document.getElementById('modal-title').textContent = `👕 ${t('tile_clothing')}`;
     fields.innerHTML = `
-      <div class="field"><label>${t('lbl_time')}</label><input type="datetime-local" id="f-start" value="${now}"></div>
+      ${dtField('f-start', t('lbl_time'), now)}
       <div class="field"><label>${t('lbl_note')}</label><textarea id="f-note" rows="2"></textarea></div>
       <button class="btn" onclick="submitEntry()">${t('btn_save')}</button>
     `;
   } else {
     document.getElementById('modal-title').textContent = `📝 ${t('tile_note')}`;
     fields.innerHTML = `
-      <div class="field"><label>${t('lbl_time')}</label><input type="datetime-local" id="f-start" value="${now}"></div>
+      ${dtField('f-start', t('lbl_time'), now)}
       <div class="field"><label>${t('lbl_note')}</label><textarea id="f-note" rows="3"></textarea></div>
       <button class="btn" onclick="submitEntry()">${t('btn_save')}</button>
     `;
@@ -595,7 +612,7 @@ function selectType(type) {
 }
 
 async function submitEntry() {
-  const start = document.getElementById('f-start')?.value;
+  const start = readDT('f-start');
   if (!start) { toast(t('toast_no_time')); return; }
   const meta = {};
   if (selectedType === 'diaper') meta.diaper_type = document.getElementById('f-diaper-type')?.value;
@@ -611,7 +628,7 @@ async function submitEntry() {
   const body = {
     type: apiType,
     ts_start: start,
-    ts_end: document.getElementById('f-end')?.value || null,
+    ts_end: readDT('f-end') || null,
     note: document.getElementById('f-note')?.value || '',
     meta,
   };
@@ -664,15 +681,13 @@ function editFieldsHtml(entry) {
 
   if (entry.type === 'diaper') {
     return `
-      <div class="fields-row">
-        <div class="field"><label>${t('lbl_time')}</label><input type="datetime-local" id="f-start" value="${start}"></div>
-        <div class="field"><label>${t('lbl_type')}</label>
-          <select id="f-diaper-type">
-            <option value="nass" ${m.diaper_type === 'nass' ? 'selected' : ''}>${t('opt_wet')}</option>
-            <option value="schmutzig" ${m.diaper_type === 'schmutzig' ? 'selected' : ''}>${t('opt_dirty')}</option>
-            <option value="beides" ${m.diaper_type === 'beides' ? 'selected' : ''}>${t('opt_both')}</option>
-          </select>
-        </div>
+      ${dtField('f-start', t('lbl_time'), start)}
+      <div class="field"><label>${t('lbl_type')}</label>
+        <select id="f-diaper-type">
+          <option value="nass" ${m.diaper_type === 'nass' ? 'selected' : ''}>${t('opt_wet')}</option>
+          <option value="schmutzig" ${m.diaper_type === 'schmutzig' ? 'selected' : ''}>${t('opt_dirty')}</option>
+          <option value="beides" ${m.diaper_type === 'beides' ? 'selected' : ''}>${t('opt_both')}</option>
+        </select>
       </div>
       <div class="field"><label>${t('lbl_note')}</label><textarea id="f-note" rows="2">${note}</textarea></div>
       <button class="btn" onclick="submitEditEntry()">${t('btn_save')}</button>
@@ -680,10 +695,8 @@ function editFieldsHtml(entry) {
   }
   if (entry.type === 'nursing') {
     return `
-      <div class="fields-row">
-        <div class="field"><label>${t('lbl_start')}</label><input type="datetime-local" id="f-start" value="${start}"></div>
-        <div class="field"><label>${t('lbl_end')}</label><input type="datetime-local" id="f-end" value="${end}"></div>
-      </div>
+      ${dtField('f-start', t('lbl_start'), start)}
+      ${dtField('f-end', t('lbl_end'), end)}
       <div class="field"><label>${t('lbl_side')}</label>
         <select id="f-side">
           <option value="">—</option>
@@ -698,10 +711,8 @@ function editFieldsHtml(entry) {
   }
   if (entry.type === 'bottle') {
     return `
-      <div class="fields-row">
-        <div class="field"><label>${t('lbl_time')}</label><input type="datetime-local" id="f-start" value="${start}"></div>
-        <div class="field"><label>${t('lbl_amount')}</label><input type="number" id="f-amount" min="0" step="5" value="${m.amount || ''}"></div>
-      </div>
+      ${dtField('f-start', t('lbl_time'), start)}
+      <div class="field"><label>${t('lbl_amount')}</label><input type="number" id="f-amount" min="0" step="5" value="${m.amount || ''}"></div>
       <div class="field"><label>${t('lbl_content')}</label>
         <select id="f-content">
           <option value="abgepumpt" ${m.content === 'abgepumpt' ? 'selected' : ''}>${t('opt_pumped')}</option>
@@ -714,43 +725,37 @@ function editFieldsHtml(entry) {
   }
   if (entry.type === 'sleep') {
     return `
-      <div class="fields-row">
-        <div class="field"><label>${t('lbl_start')}</label><input type="datetime-local" id="f-start" value="${start}"></div>
-        <div class="field"><label>${t('lbl_end')}</label><input type="datetime-local" id="f-end" value="${end}"></div>
-      </div>
+      ${dtField('f-start', t('lbl_start'), start)}
+      ${dtField('f-end', t('lbl_end'), end)}
       <div class="field"><label>${t('lbl_note')}</label><textarea id="f-note" rows="2">${note}</textarea></div>
       <button class="btn" onclick="submitEditEntry()">${t('btn_save')}</button>
     `;
   }
   if (entry.type === 'weight') {
     return `
-      <div class="fields-row">
-        <div class="field"><label>${t('lbl_time')}</label><input type="datetime-local" id="f-start" value="${start}"></div>
-        <div class="field"><label>${t('lbl_weight_g')}</label><input type="number" id="f-weight" min="0" step="10" value="${m.weight || ''}"></div>
-      </div>
+      ${dtField('f-start', t('lbl_time'), start)}
+      <div class="field"><label>${t('lbl_weight_g')}</label><input type="number" id="f-weight" min="0" step="10" value="${m.weight || ''}"></div>
       <div class="field"><label>${t('lbl_note')}</label><textarea id="f-note" rows="2">${note}</textarea></div>
       <button class="btn" onclick="submitEditEntry()">${t('btn_save')}</button>
     `;
   }
   if (entry.type === 'walk') {
     return `
-      <div class="fields-row">
-        <div class="field"><label>${t('lbl_start')}</label><input type="datetime-local" id="f-start" value="${start}"></div>
-        <div class="field"><label>${t('lbl_end')}</label><input type="datetime-local" id="f-end" value="${end}"></div>
-      </div>
+      ${dtField('f-start', t('lbl_start'), start)}
+      ${dtField('f-end', t('lbl_end'), end)}
       <div class="field"><label>${t('lbl_note')}</label><textarea id="f-note" rows="2">${note}</textarea></div>
       <button class="btn" onclick="submitEditEntry()">${t('btn_save')}</button>
     `;
   }
   return `
-    <div class="field"><label>${t('lbl_time')}</label><input type="datetime-local" id="f-start" value="${start}"></div>
+    ${dtField('f-start', t('lbl_time'), start)}
     <div class="field"><label>${t('lbl_note')}</label><textarea id="f-note" rows="3">${note}</textarea></div>
     <button class="btn" onclick="submitEditEntry()">${t('btn_save')}</button>
   `;
 }
 
 async function submitEditEntry() {
-  const start = document.getElementById('f-start')?.value;
+  const start = readDT('f-start');
   if (!start) { toast(t('toast_no_time')); return; }
   const entry = currentEntries.find(e => e.id === editEntryId);
   if (!entry) return;
@@ -766,7 +771,7 @@ async function submitEditEntry() {
 
   const body = {
     ts_start: start,
-    ts_end: document.getElementById('f-end')?.value || null,
+    ts_end: readDT('f-end') || null,
     note: document.getElementById('f-note')?.value || '',
     meta,
   };

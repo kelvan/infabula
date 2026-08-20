@@ -321,8 +321,8 @@ header .logo-svg { height: 38px; width: auto; }
   transition: border-color 0.15s;
 }
 .field input:focus, .field textarea:focus, .field select:focus { outline: none; border-color: var(--accent); }
-.fields-row { display: flex; gap: 10px; }
-.fields-row .field { flex: 1; min-width: 0; }
+.dt-row { display: flex; gap: 8px; }
+.dt-row input { flex: 1; min-width: 0; }
 .btn {
   background: var(--accent);
   color: white;
