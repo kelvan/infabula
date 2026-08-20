@@ -21,6 +21,7 @@ const I18N = {
     section_last:'Letztes Ereignis', section_intervals:'Abstände',
     section_sleep:'Schlafdauer (letzte 10)',
     stat_interval:'Abstand', stat_avg:'Ø letzte 5',
+    stat_awake_since:'Wach seit', stat_back_since:'Zurück seit',
     no_data:'Keine Daten', not_enough_data:'Zu wenig Daten', no_sleep_data:'Noch keine Schlafdaten',
     today:'Heute', yesterday:'Gestern',
     just_now:'gerade eben',
@@ -53,6 +54,7 @@ const I18N = {
     section_last:'Last event', section_intervals:'Intervals',
     section_sleep:'Sleep duration (last 10)',
     stat_interval:'Interval', stat_avg:'avg last 5',
+    stat_awake_since:'Awake since', stat_back_since:'Back since',
     no_data:'No data', not_enough_data:'Not enough data', no_sleep_data:'No sleep data yet',
     today:'Today', yesterday:'Yesterday',
     just_now:'just now',
@@ -370,7 +372,7 @@ async function loadStats() {
   const data = await res.json();
   const el = document.getElementById('stats-content');
 
-  const lastTypes = ['diaper','nursing','bottle','sleep','weight'];
+  const lastTypes = ['diaper','nursing','bottle','sleep','walk','weight'];
   let lastCards = '';
   lastTypes.forEach(key => {
     const e = data.last[key];
@@ -378,7 +380,14 @@ async function loadStats() {
     const tp = getType(key);
     let valStr = fmtAgo(e.ts_start);
     let sub = fmtTime(e.ts_start);
-    if (key === 'sleep' && e.ts_end) sub += ` (${fmtDur(Math.round(durMin(e.ts_start, e.ts_end)))})`;
+    if (key === 'sleep' && e.ts_end) {
+      valStr = `${t('stat_awake_since')} ${fmtDur(Math.round(durMin(e.ts_end, new Date().toISOString())))}`;
+      sub = fmtTime(e.ts_end);
+    }
+    if (key === 'walk' && e.ts_end) {
+      valStr = `${t('stat_back_since')} ${fmtDur(Math.round(durMin(e.ts_end, new Date().toISOString())))}`;
+      sub = fmtTime(e.ts_end);
+    }
     if (key === 'weight' && e.meta?.weight) { valStr = e.meta.weight + ' g'; sub = fmtAgo(e.ts_start); }
     lastCards += `
       <div class="stat-card">
