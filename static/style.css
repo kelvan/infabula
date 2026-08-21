@@ -1,19 +1,26 @@
 :root {
-  --bg: #f5f1ea;
-  --surface: #faf7f2;
-  --surface2: #ede8df;
-  --ink: #3a2e22;
-  --ink2: #8a7a65;
-  --accent: #b8963c;
+  --bg: #f6f1e6;
+  --surface: #fffdf9;
+  --surface2: #efe7d6;
+  --ink: #33271b;
+  --ink2: #8c7c65;
+  --accent: #b8863a;
+  --accent-soft: #f1e3c4;
+  --accent-ink: #7a5a22;
   --accent2: #d4b06a;
-  --green: #6b8c5a;
-  --border: #ddd5c4;
-  --radius: 12px;
-  --shadow: 0 2px 12px rgba(42,31,20,0.08);
   --sleep: #5b7fa8;
+  --sleep-soft: #e7edf4;
+  --walk: #6b8c5a;
+  --walk-soft: #eaf0e3;
+  --feed: #a05a72;
+  --feed-soft: #f4e2e7;
+  --border: #e4dac6;
+  --radius: 16px;
+  --shadow: 0 4px 16px rgba(51,39,27,0.08);
+  --serif: 'Newsreader', Georgia, 'Times New Roman', serif;
 }
 * { box-sizing: border-box; margin: 0; padding: 0; }
-body { background: var(--bg); color: var(--ink); font-family: Georgia, 'Times New Roman', serif; min-height: 100vh; }
+body { background: var(--bg); color: var(--ink); font-family: var(--serif); min-height: 100vh; }
 
 /* ── Header ── */
 header {
@@ -99,37 +106,52 @@ header .logo-svg { height: 38px; width: auto; }
   flex: 1;
   background: none;
   border: none;
-  padding: 11px 0;
-  font-family: ui-monospace, 'Cascadia Code', 'Source Code Pro', monospace;
-  font-size: 0.75rem;
-  text-transform: uppercase;
-  letter-spacing: 0.07em;
+  padding: 9px 0 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
   color: var(--ink2);
   cursor: pointer;
   border-bottom: 2.5px solid transparent;
   transition: all 0.15s;
 }
-.tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); }
+.tab-btn .tab-ic { width: 17px; height: 17px; stroke: currentColor; fill: none; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.tab-btn .tab-lbl { font-family: ui-monospace, 'Cascadia Code', 'Source Code Pro', monospace; font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.07em; }
+.tab-btn.active { color: var(--accent-ink); border-bottom-color: var(--accent); }
 
 /* ── Main layout ── */
 .main { max-width: 700px; margin: 0 auto; padding: 0 0 100px; }
 .tab-page { display: none; }
 .tab-page.active { display: block; }
 
-/* ── Sleep banner ── */
+/* ── Sleep / walk banner ── */
 .sleep-banner {
   margin: 16px 20px 0;
-  background: var(--sleep);
+  background: linear-gradient(135deg, var(--sleep) 0%, #4d6f96 100%);
   color: white;
   border-radius: var(--radius);
   padding: 14px 18px;
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 14px;
+  box-shadow: 0 8px 20px rgba(91,127,168,0.32);
+}
+.sleep-banner.walk { background: linear-gradient(135deg, var(--walk) 0%, #567849 100%); box-shadow: 0 8px 20px rgba(107,140,90,0.32); }
+.sleep-banner .sl-icon {
+  width: 40px; height: 40px; flex-shrink: 0; border-radius: 50%;
+  background: rgba(255,255,255,0.16);
+  display: flex; align-items: center; justify-content: center;
+  position: relative;
+}
+.sleep-banner .sl-icon .ic { width: 20px; height: 20px; stroke: #fff; }
+.sleep-banner .sl-icon .sl-dot {
+  position: absolute; top: -1px; right: -1px; width: 9px; height: 9px;
+  border-radius: 50%; background: #8fd18a; border: 2px solid var(--sleep);
   animation: pulse 2s ease-in-out infinite;
 }
-@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.85} }
-.sleep-banner .sl-icon { font-size: 1.6rem; }
+.sleep-banner.walk .sl-icon .sl-dot { border-color: var(--walk); }
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
 .sleep-banner .sl-info { flex: 1; }
 .sleep-banner .sl-label { font-family: ui-monospace, 'Cascadia Code', 'Source Code Pro', monospace; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.1em; opacity: 0.85; }
 .sleep-banner .sl-since { font-size: 0.95rem; }
@@ -146,6 +168,7 @@ header .logo-svg { height: 38px; width: auto; }
   text-transform: uppercase;
   letter-spacing: 0.05em;
 }
+.sleep-banner.walk .wake-btn { color: var(--walk); }
 
 /* ── Entry list ── */
 .day-entries { padding: 16px 20px 0; }
@@ -153,9 +176,8 @@ header .logo-svg { height: 38px; width: auto; }
 .entry-item {
   background: var(--surface);
   border: 1.5px solid var(--border);
-  border-left: 4px solid var(--border);
   border-radius: var(--radius);
-  padding: 12px 14px;
+  padding: 10px 14px;
   display: flex;
   align-items: center;
   gap: 12px;
@@ -164,7 +186,15 @@ header .logo-svg { height: 38px; width: auto; }
   cursor: pointer;
 }
 .entry-item:hover { border-color: var(--ink2); }
-.entry-icon { font-size: 1.4rem; flex-shrink: 0; width: 28px; text-align: center; }
+.entry-icon {
+  width: 36px; height: 36px; flex-shrink: 0; border-radius: 11px;
+  display: flex; align-items: center; justify-content: center;
+}
+.entry-icon .ic { width: 19px; height: 19px; stroke: currentColor; fill: none; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.entry-icon.tint-accent { background: var(--accent-soft); color: var(--accent-ink); }
+.entry-icon.tint-feed { background: var(--feed-soft); color: var(--feed); }
+.entry-icon.tint-sleep { background: var(--sleep-soft); color: var(--sleep); }
+.entry-icon.tint-walk { background: var(--walk-soft); color: var(--walk); }
 .entry-body { flex: 1; min-width: 0; }
 .entry-type {
   font-family: ui-monospace, 'Cascadia Code', 'Source Code Pro', monospace;
@@ -188,20 +218,29 @@ header .logo-svg { height: 38px; width: auto; }
   border: none;
   color: var(--border);
   cursor: pointer;
-  font-size: 0.9rem;
   padding: 4px 6px;
   border-radius: 4px;
   transition: color 0.15s;
   flex-shrink: 0;
+  display: flex;
 }
+.del-btn .ic { width: 13px; height: 13px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; }
 .del-btn:hover { color: #c03030; }
 .empty { text-align: center; color: var(--ink2); font-style: italic; padding: 48px 0; font-size: 0.9rem; }
 
 /* ── Stats ── */
 .stats-wrap { padding: 16px 20px 0; }
 .settings-wrap { padding: 16px 20px 0; }
-.ip-name-row { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
-.ip-name-ip { font-family: ui-monospace, 'Cascadia Code', 'Source Code Pro', monospace; font-size: 0.68rem; color: var(--ink2); flex-shrink: 0; width: 90px; }
+.ip-name-row { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 14px; }
+.ip-avatar {
+  width: 34px; height: 34px; border-radius: 50%; flex-shrink: 0; margin-top: 1px;
+  display: flex; align-items: center; justify-content: center;
+  color: #fff; font-family: ui-monospace, 'Cascadia Code', 'Source Code Pro', monospace;
+  font-size: 0.7rem; text-transform: uppercase;
+}
+.ip-name-fields { flex: 1; min-width: 0; }
+.ip-name-inline { display: flex; gap: 8px; }
+.ip-name-ip { display: block; font-family: ui-monospace, 'Cascadia Code', 'Source Code Pro', monospace; font-size: 0.68rem; color: var(--ink2); margin-top: 4px; }
 .ip-name-input {
   flex: 1;
   min-width: 0;
@@ -250,12 +289,17 @@ header .logo-svg { height: 38px; width: auto; }
   border-radius: var(--radius);
   padding: 14px 16px;
 }
-.stat-card .s-label { font-family: ui-monospace, 'Cascadia Code', 'Source Code Pro', monospace; font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.09em; color: var(--ink2); margin-bottom: 6px; }
-.stat-card .s-val { font-size: 1.6rem; font-weight: 600; color: var(--accent); line-height: 1; }
+.stat-card .s-label { display: flex; align-items: center; gap: 6px; font-family: ui-monospace, 'Cascadia Code', 'Source Code Pro', monospace; font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.09em; color: var(--ink2); margin-bottom: 6px; }
+.stat-card .s-label .ic { width: 14px; height: 14px; stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; flex-shrink: 0; }
+.stat-card .s-val { font-size: 1.6rem; font-weight: 600; color: var(--accent-ink); line-height: 1; }
 .stat-card .s-sub { font-size: 0.73rem; color: var(--ink2); margin-top: 4px; font-family: ui-monospace, 'Cascadia Code', 'Source Code Pro', monospace; }
+.stat-card.tint-sleep { background: var(--sleep-soft); }
+.stat-card.tint-sleep .s-label, .stat-card.tint-sleep .s-val { color: var(--sleep); }
+.stat-card.tint-walk { background: var(--walk-soft); }
+.stat-card.tint-walk .s-label, .stat-card.tint-walk .s-val { color: var(--walk); }
 .sleep-row { display: flex; align-items: center; gap: 8px; margin-bottom: 7px; }
 .sleep-bar-bg { flex: 1; height: 9px; background: var(--surface2); border-radius: 5px; overflow: hidden; }
-.sleep-bar { height: 100%; background: var(--sleep); border-radius: 5px; opacity: 0.8; }
+.sleep-bar { height: 100%; background: linear-gradient(90deg, var(--sleep), #7fa0c4); border-radius: 5px; }
 .sleep-dur { font-family: ui-monospace, 'Cascadia Code', 'Source Code Pro', monospace; font-size: 0.7rem; color: var(--ink2); width: 46px; text-align: right; }
 .sleep-time { font-family: ui-monospace, 'Cascadia Code', 'Source Code Pro', monospace; font-size: 0.68rem; color: var(--ink2); width: 88px; }
 
@@ -270,17 +314,16 @@ header .logo-svg { height: 38px; width: auto; }
   color: white;
   border: none;
   border-radius: 50%;
-  font-size: 1.7rem;
   cursor: pointer;
-  box-shadow: 0 4px 20px rgba(200,96,42,0.4);
+  box-shadow: 0 4px 20px rgba(184,134,58,0.4);
   transition: all 0.2s;
   z-index: 100;
   display: flex;
   align-items: center;
   justify-content: center;
-  line-height: 1;
 }
-.fab:hover { transform: scale(1.08) rotate(90deg); background: #a8491e; }
+.fab .ic { width: 24px; height: 24px; stroke: #fff; fill: none; stroke-width: 2; stroke-linecap: round; }
+.fab:hover { transform: scale(1.08) rotate(90deg); background: var(--accent-ink); }
 
 /* ── Modal ── */
 .modal-overlay {
@@ -306,7 +349,8 @@ header .logo-svg { height: 38px; width: auto; }
 @keyframes slideUp { from { transform: translateY(40px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
 .modal-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; }
 .modal-header h2 { font-size: 1.1rem; font-weight: 300; }
-.close-btn { background: var(--surface2); border: none; border-radius: 50%; width: 32px; height: 32px; font-size: 1.1rem; cursor: pointer; color: var(--ink2); display: flex; align-items: center; justify-content: center; }
+.close-btn { background: var(--surface2); border: none; border-radius: 50%; width: 32px; height: 32px; cursor: pointer; color: var(--ink2); display: flex; align-items: center; justify-content: center; }
+.close-btn .ic { width: 14px; height: 14px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; }
 
 /* Type picker */
 .type-grid {
@@ -325,8 +369,10 @@ header .logo-svg { height: 38px; width: auto; }
   transition: all 0.15s;
 }
 .type-tile:hover { border-color: var(--accent2); transform: translateY(-1px); }
-.type-tile.selected { border-color: var(--accent); background: #f5edda; }
-.type-tile .t-icon { font-size: 1.7rem; }
+.type-tile.selected { border-color: var(--accent); background: var(--accent-soft); }
+.type-tile .t-icon { display: flex; align-items: center; justify-content: center; }
+.type-tile .t-icon .ic { width: 22px; height: 22px; stroke: var(--ink2); fill: none; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.type-tile.selected .t-icon .ic { stroke: var(--accent-ink); }
 .type-tile .t-label { font-family: ui-monospace, 'Cascadia Code', 'Source Code Pro', monospace; font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.07em; color: var(--ink2); margin-top: 4px; }
 
 /* Form fields */
@@ -363,12 +409,20 @@ header .logo-svg { height: 38px; width: auto; }
   width: 100%;
   margin-top: 4px;
 }
-.btn:hover { background: #a8491e; }
+.btn:hover { background: var(--accent-ink); }
 
 /* IP legend */
 .ip-legend { display: flex; flex-wrap: wrap; gap: 8px; padding: 10px 20px 0; }
 .ip-legend-item { display: flex; align-items: center; gap: 5px; font-family: ui-monospace, 'Cascadia Code', 'Source Code Pro', monospace; font-size: 0.68rem; color: var(--ink2); }
-.diaper-count { padding: 10px 20px 0; font-family: ui-monospace, 'Cascadia Code', 'Source Code Pro', monospace; font-size: 0.72rem; color: var(--ink2); }
+.diaper-count { display: flex; flex-wrap: wrap; gap: 8px; padding: 12px 20px 0; }
+.count-chip {
+  display: flex; align-items: center; gap: 6px;
+  background: var(--surface); border: 1.5px solid var(--border); border-radius: 20px;
+  padding: 6px 12px;
+  font-family: ui-monospace, 'Cascadia Code', 'Source Code Pro', monospace;
+  font-size: 0.72rem; color: var(--ink);
+}
+.count-chip .ic { width: 14px; height: 14px; stroke: var(--ink2); fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 .ip-dot { width: 9px; height: 9px; border-radius: 50%; }
 
 /* Toast */

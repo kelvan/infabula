@@ -2,7 +2,7 @@
 const I18N = {
   de: {
     types: { diaper:'Windel', nursing:'Stillen', bottle:'Fläschchen', sleep:'Schlaf', weight:'Gewicht', note:'Notiz', walk:'Spaziergang', clothing:'Kleidung', feeding:'Fütterung' },
-    tab_log:'📋 Verlauf', tab_stats:'📊 Auswertung', tab_settings:'⚙️ Einstellungen',
+    tab_log:'Verlauf', tab_stats:'Auswertung', tab_settings:'Einstellungen',
     modal_new:'Neuer Eintrag',
     tile_diaper:'Windel', tile_nursing:'Stillen', tile_bottle:'Fläschchen',
     tile_sleep_start:'Eingeschlafen', tile_weight:'Gewicht', tile_note:'Notiz', tile_wakeup:'Aufgewacht',
@@ -14,7 +14,7 @@ const I18N = {
     opt_left:'Links', opt_right:'Rechts', opt_both_sides:'Beide',
     opt_pumped:'Abgepumpte Milch', opt_formula:'Formulamilch',
     btn_save_sleep:'Eingeschlafen speichern', btn_save:'Speichern',
-    banner_since:'Schläft seit', banner_so_far:'Schlaf bisher', banner_wakeup:'☀️ Aufgewacht',
+    banner_since:'Schläft seit', banner_so_far:'Schlaf bisher', banner_wakeup:'Aufgewacht',
     banner_walk_since:'Spaziergang seit', banner_walk_so_far:'Spaziergang bisher',
     still_sleeping:'noch schläft', still_walking:'läuft noch',
     no_entries:'Keine Einträge für diesen Tag',
@@ -31,16 +31,16 @@ const I18N = {
     confirm_delete:'Eintrag löschen?',
     toast_no_time:'Bitte Zeitpunkt angeben', toast_deleted:'Gelöscht',
     toast_error:'Fehler beim Speichern', toast_saved:'✓ Gespeichert',
-    toast_wakeup: dur=>`☀️ Aufgewacht – ${dur} Schlaf`,
-    toast_walk_end: dur=>`🏠 Zurück – ${dur} Spaziergang`,
-    diaper_count: n=>`🧷 Windeln: ${n}`,
-    diaper_poo_count: n=>`💩 Kacka: ${n}`,
-    feeding_ml: n=>`🍼 Fläschchen: ${n} ml`,
+    toast_wakeup: dur=>`Aufgewacht – ${dur} Schlaf`,
+    toast_walk_end: dur=>`Zurück – ${dur} Spaziergang`,
+    diaper_count: n=>`Windeln: ${n}`,
+    diaper_poo_count: n=>`Kacka: ${n}`,
+    feeding_ml: n=>`Fläschchen: ${n} ml`,
     lang_switch:'EN',
   },
   en: {
     types: { diaper:'Diaper', nursing:'Nursing', bottle:'Bottle', sleep:'Sleep', weight:'Weight', note:'Note', walk:'Walk', clothing:'Clothing', feeding:'Feeding' },
-    tab_log:'📋 Log', tab_stats:'📊 Stats', tab_settings:'⚙️ Settings',
+    tab_log:'Log', tab_stats:'Stats', tab_settings:'Settings',
     modal_new:'New Entry',
     tile_diaper:'Diaper', tile_nursing:'Nursing', tile_bottle:'Bottle',
     tile_sleep_start:'Fell asleep', tile_weight:'Weight', tile_note:'Note', tile_wakeup:'Woke up',
@@ -52,7 +52,7 @@ const I18N = {
     opt_left:'Left', opt_right:'Right', opt_both_sides:'Both',
     opt_pumped:'Pumped milk', opt_formula:'Formula',
     btn_save_sleep:'Save fell asleep', btn_save:'Save',
-    banner_since:'Sleeping since', banner_so_far:'sleep so far', banner_wakeup:'☀️ Woke up',
+    banner_since:'Sleeping since', banner_so_far:'sleep so far', banner_wakeup:'Woke up',
     banner_walk_since:'Walking since', banner_walk_so_far:'walk so far',
     still_sleeping:'still sleeping', still_walking:'still walking',
     no_entries:'No entries for this day',
@@ -69,11 +69,11 @@ const I18N = {
     confirm_delete:'Delete entry?',
     toast_no_time:'Please enter a time', toast_deleted:'Deleted',
     toast_error:'Error saving', toast_saved:'✓ Saved',
-    toast_wakeup: dur=>`☀️ Woke up – ${dur} sleep`,
-    toast_walk_end: dur=>`🏠 Back – ${dur} walk`,
-    diaper_count: n=>`🧷 Diapers: ${n}`,
-    diaper_poo_count: n=>`💩 Poo: ${n}`,
-    feeding_ml: n=>`🍼 Bottle: ${n} ml`,
+    toast_wakeup: dur=>`Woke up – ${dur} sleep`,
+    toast_walk_end: dur=>`Back – ${dur} walk`,
+    diaper_count: n=>`Diapers: ${n}`,
+    diaper_poo_count: n=>`Poo: ${n}`,
+    feeding_ml: n=>`Bottle: ${n} ml`,
     lang_switch:'DE',
   },
 };
@@ -87,7 +87,26 @@ const META_VALS = {
   abgepumpt:{de:'Abgepumpt',en:'Pumped'}, formula:{de:'Formula',en:'Formula'},
 };
 
-const TYPE_ICONS = { diaper:'🧷', nursing:'🤱', bottle:'🍼', sleep:'😴', weight:'⚖️', note:'📝', walk:'🚶', clothing:'👕', feeding:'🤱🍼' };
+const ICONS = {
+  diaper: '<path d="M4.5 8h15c.3 0 .5.2.5.5C20 13.7 16.4 18 12 18S4 13.7 4 8.5c0-.3.2-.5.5-.5Z"/><path d="M6.2 8.8c1.7 1 3.8 1.5 5.8 1.5s4.1-.5 5.8-1.5"/><path d="M3 9.3h1.7M19.3 9.3H21"/>',
+  nursing: '<path d="M12 20.5S4.5 15.8 4.5 10.2A4.2 4.2 0 0 1 12 7.4a4.2 4.2 0 0 1 7.5 2.8c0 5.6-7.5 10.3-7.5 10.3Z"/>',
+  bottle: '<path d="M9 3h6v3.2c0 .6.2 1.1.6 1.6l1 1.2c.9 1 1.4 2.3 1.4 3.7V19a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2v-6.3c0-1.4.5-2.7 1.4-3.7l1-1.2c.4-.5.6-1 .6-1.6V3Z"/><path d="M7.3 13.5h9.4"/><path d="M10 3h4"/>',
+  feeding: '<path d="M9 3h6v3.2c0 .6.2 1.1.6 1.6l1 1.2c.9 1 1.4 2.3 1.4 3.7V19a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2v-6.3c0-1.4.5-2.7 1.4-3.7l1-1.2c.4-.5.6-1 .6-1.6V3Z"/><path d="M7.3 13.5h9.4"/><path d="M10 3h4"/>',
+  sleep: '<path d="M20 14.3A8 8 0 1 1 9.7 4a6.3 6.3 0 0 0 10.3 10.3Z"/>',
+  walk: '<ellipse cx="15" cy="16" rx="2.6" ry="3.6" transform="rotate(12 15 16)"/><circle cx="12.6" cy="12.4" r=".9"/><circle cx="14" cy="11.3" r=".95"/><circle cx="15.6" cy="11.1" r=".95"/><circle cx="17" cy="11.8" r=".85"/><ellipse cx="8" cy="7.5" rx="2" ry="2.8" transform="rotate(-12 8 7.5)"/><circle cx="6" cy="4.6" r=".7"/><circle cx="7.3" cy="3.8" r=".75"/><circle cx="8.7" cy="3.9" r=".7"/>',
+  weight: '<circle cx="12" cy="12" r="8.2"/><path d="M12 8.6v3.8l2.6 1.6"/>',
+  note: '<path d="M6 3.5h9L19.5 8v12.5a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4.5a1 1 0 0 1 1-1Z"/><path d="M8.5 12h7M8.5 15.5h7M8.5 8.5h3"/>',
+  clothing: '<path d="M8.5 4 5.8 5.7a1.4 1.4 0 0 0-.5 1.8L6.6 10l1.9-.9v9.4a1 1 0 0 0 1 1h5a1 1 0 0 0 1-1V9.1l1.9.9 1.3-2.5a1.4 1.4 0 0 0-.5-1.8L15.5 4a4 4 0 0 1-7 0Z"/>',
+  sun: '<circle cx="12" cy="12" r="4.2"/><path d="M12 3v2.2M12 18.8V21M21 12h-2.2M5.2 12H3M18.4 5.6l-1.5 1.5M7.1 16.9l-1.5 1.5M18.4 18.4l-1.5-1.5M7.1 7.1 5.6 5.6"/>',
+  home: '<path d="M4 11 12 4l8 7"/><path d="M6 10v9.5a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1V10"/><path d="M10 20.5V15h4v5.5"/>',
+};
+function icon(name) { return `<svg viewBox="0 0 24 24" class="ic">${ICONS[name] || ''}</svg>`; }
+function typeTint(type) {
+  if (type === 'sleep') return 'sleep';
+  if (type === 'walk') return 'walk';
+  if (type === 'nursing' || type === 'bottle' || type === 'feeding') return 'feed';
+  return 'accent';
+}
 
 let lang = localStorage.getItem('lang') || (navigator.language.startsWith('de') ? 'de' : 'en');
 
@@ -96,7 +115,7 @@ function t(key, arg) {
   return typeof val === 'function' ? val(arg) : (val ?? key);
 }
 function tMeta(val) { return (META_VALS[val] && META_VALS[val][lang]) || val; }
-function getType(key) { return { label: (I18N[lang].types[key] || key), icon: TYPE_ICONS[key] || '❓' }; }
+function getType(key) { return { label: (I18N[lang].types[key] || key), icon: key in ICONS ? key : 'note' }; }
 
 function switchLang() {
   lang = lang === 'de' ? 'en' : 'de';
@@ -110,9 +129,9 @@ function switchLang() {
 function initUI() {
   document.getElementById('html-root').lang = lang;
   document.getElementById('lang-btn').textContent = t('lang_switch');
-  document.getElementById('tab-btn-log').textContent = t('tab_log');
-  document.getElementById('tab-btn-stats').textContent = t('tab_stats');
-  document.getElementById('tab-btn-settings').textContent = t('tab_settings');
+  document.querySelector('#tab-btn-log .tab-lbl').textContent = t('tab_log');
+  document.querySelector('#tab-btn-stats .tab-lbl').textContent = t('tab_stats');
+  document.querySelector('#tab-btn-settings .tab-lbl').textContent = t('tab_settings');
   document.getElementById('fab').title = t('fab_title');
   ['diaper','nursing','bottle','sleep_start','weight','note','walk','clothing'].forEach(k => {
     const el = document.getElementById('tile-'+k);
@@ -256,7 +275,7 @@ function renderSleepBanner() {
   const dur = Math.round(durMin(openSleepEntry.ts_start, new Date().toISOString()));
   wrap.innerHTML = `
     <div class="sleep-banner">
-      <div class="sl-icon">😴</div>
+      <div class="sl-icon">${icon('sleep')}<span class="sl-dot"></span></div>
       <div class="sl-info">
         <div class="sl-label">${t('banner_since')} ${since}</div>
         <div class="sl-since">${fmtDur(dur)} ${t('banner_so_far')}</div>
@@ -293,8 +312,8 @@ function renderWalkBanner() {
   const since = fmtTime(openWalkEntry.ts_start);
   const dur = Math.round(durMin(openWalkEntry.ts_start, new Date().toISOString()));
   wrap.innerHTML = `
-    <div class="sleep-banner">
-      <div class="sl-icon">🚶</div>
+    <div class="sleep-banner walk">
+      <div class="sl-icon">${icon('walk')}<span class="sl-dot"></span></div>
       <div class="sl-info">
         <div class="sl-label">${t('banner_walk_since')} ${since}</div>
         <div class="sl-since">${fmtDur(dur)} ${t('banner_walk_so_far')}</div>
@@ -345,11 +364,12 @@ async function loadLog() {
   const diaperEntries = entries.filter(e => e.type === 'diaper');
   const pooCount = diaperEntries.filter(e => ['schmutzig','beides','dirty','both'].includes(e.meta?.diaper_type)).length;
   const feedingMl = entries.filter(e => e.type === 'bottle').reduce((sum, e) => sum + (Number(e.meta?.amount) || 0), 0);
-  const counts = [];
-  if (diaperEntries.length) counts.push(t('diaper_count', diaperEntries.length));
-  if (pooCount) counts.push(t('diaper_poo_count', pooCount));
-  if (feedingMl) counts.push(t('feeding_ml', feedingMl));
-  document.getElementById('diaper-count').textContent = counts.join('  ·  ');
+  const chip = (iconName, label) => `<div class="count-chip">${icon(iconName)}<span>${esc(label)}</span></div>`;
+  const chips = [];
+  if (diaperEntries.length) chips.push(chip('diaper', t('diaper_count', diaperEntries.length)));
+  if (pooCount) chips.push(chip('diaper', t('diaper_poo_count', pooCount)));
+  if (feedingMl) chips.push(chip('bottle', t('feeding_ml', feedingMl)));
+  document.getElementById('diaper-count').innerHTML = chips.join('');
 
   const list = document.getElementById('entry-list');
   if (!entries.length) {
@@ -391,8 +411,8 @@ async function loadLog() {
     }
 
     return `
-      <div class="entry-item" style="border-left-color:${color}" onclick="openEditModal(${e.id})">
-        <div class="entry-icon">${tp.icon}</div>
+      <div class="entry-item" onclick="openEditModal(${e.id})">
+        <div class="entry-icon tint-${typeTint(e.type)}">${icon(tp.icon)}</div>
         <div class="entry-body">
           <div class="entry-type">${tp.label}</div>
           <div class="entry-time">${timeStr}</div>
@@ -400,7 +420,7 @@ async function loadLog() {
           ${e.note ? `<div class="entry-note">${esc(e.note)}</div>` : ''}
         </div>
         <span class="ip-badge" style="background:${color}" title="${esc(e.ip)}"></span>
-        <button class="del-btn" onclick="event.stopPropagation(); deleteEntry(${e.id})" title="${t('confirm_delete')}">✕</button>
+        <button class="del-btn" onclick="event.stopPropagation(); deleteEntry(${e.id})" title="${t('confirm_delete')}"><svg viewBox="0 0 24 24" class="ic"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
       </div>
     `;
   }).join('');
@@ -444,9 +464,10 @@ async function loadStats() {
       }
     }
     if (key === 'weight' && e.meta?.weight) { valStr = e.meta.weight + ' g'; sub = fmtAgo(e.ts_start); }
+    const active = (key === 'sleep' || key === 'walk') && !e.ts_end;
     lastCards += `
-      <div class="stat-card">
-        <div class="s-label">${tp.icon} ${tp.label}</div>
+      <div class="stat-card${active ? ' tint-'+key : ''}">
+        <div class="s-label">${icon(tp.icon)}${tp.label}</div>
         <div class="s-val" style="font-size:1rem;padding-top:2px">${valStr}</div>
         <div class="s-sub">${sub}</div>
       </div>`;
@@ -459,7 +480,7 @@ async function loadStats() {
     const tp = getType(key);
     ivCards += `
       <div class="stat-card">
-        <div class="s-label">${tp.icon} ${tp.label} · ${t('stat_interval')}</div>
+        <div class="s-label">${icon(tp.icon)}${tp.label} · ${t('stat_interval')}</div>
         <div class="s-val">${fmtDur(iv.last)}</div>
         <div class="s-sub">${t('stat_avg')}: ${fmtDur(iv.avg)}</div>
       </div>`;
@@ -501,9 +522,14 @@ async function loadSettings() {
     <div class="section-title">${t('settings_ip_names_title')}</div>
     ${ips.map(({ ip, name }) => `
       <div class="ip-name-row">
-        <span class="ip-name-ip">${esc(ip)}</span>
-        <input type="text" class="ip-name-input" data-ip="${esc(ip)}" value="${esc(name)}" placeholder="${t('settings_name_placeholder')}">
-        <button class="btn-small" onclick="saveIpName(this)">${t('btn_save')}</button>
+        <div class="ip-avatar" style="background:${getIpColor(name || ip)}">${esc(name ? name.charAt(0).toUpperCase() : '?')}</div>
+        <div class="ip-name-fields">
+          <div class="ip-name-inline">
+            <input type="text" class="ip-name-input" data-ip="${esc(ip)}" value="${esc(name)}" placeholder="${t('settings_name_placeholder')}">
+            <button class="btn-small" onclick="saveIpName(this)">${t('btn_save')}</button>
+          </div>
+          <span class="ip-name-ip">${esc(ip)}</span>
+        </div>
       </div>
     `).join('')}
   `;
@@ -539,7 +565,7 @@ function openModal() {
     const tile = document.createElement('div');
     tile.className = 'type-tile';
     tile.dataset.type = 'sleep_end';
-    tile.innerHTML = `<div class="t-icon">☀️</div><div class="t-label">${t('tile_wakeup')}</div>`;
+    tile.innerHTML = `<div class="t-icon">${icon('sun')}</div><div class="t-label">${t('tile_wakeup')}</div>`;
     tile.onclick = () => wakeUpFromModal();
     grid.appendChild(tile);
   } else if (!openSleepEntry && existing) {
@@ -554,7 +580,7 @@ function openModal() {
     const tile = document.createElement('div');
     tile.className = 'type-tile';
     tile.dataset.type = 'walk_end';
-    tile.innerHTML = `<div class="t-icon">🏠</div><div class="t-label">${t('tile_walk_end')}</div>`;
+    tile.innerHTML = `<div class="t-icon">${icon('home')}</div><div class="t-label">${t('tile_walk_end')}</div>`;
     tile.onclick = () => endWalkFromModal();
     grid.appendChild(tile);
   } else if (!openWalkEntry && existingWalk) {
@@ -595,14 +621,14 @@ function selectType(type) {
   fields.classList.add('visible');
 
   if (type === 'sleep_start') {
-    document.getElementById('modal-title').textContent = `😴 ${t('tile_sleep_start')}`;
+    document.getElementById('modal-title').textContent = t('tile_sleep_start');
     fields.innerHTML = `
       ${dtField('f-start', t('lbl_time'), now)}
       <div class="field"><label>${t('lbl_note')}</label><textarea id="f-note" rows="2"></textarea></div>
       <button class="btn" onclick="submitEntry()">${t('btn_save_sleep')}</button>
     `;
   } else if (type === 'diaper') {
-    document.getElementById('modal-title').textContent = `🧷 ${t('tile_diaper')}`;
+    document.getElementById('modal-title').textContent = t('tile_diaper');
     fields.innerHTML = `
       ${dtField('f-start', t('lbl_time'), now)}
       <div class="field"><label>${t('lbl_type')}</label>
@@ -616,7 +642,7 @@ function selectType(type) {
       <button class="btn" onclick="submitEntry()">${t('btn_save')}</button>
     `;
   } else if (type === 'nursing') {
-    document.getElementById('modal-title').textContent = `🤱 ${t('tile_nursing')}`;
+    document.getElementById('modal-title').textContent = t('tile_nursing');
     fields.innerHTML = `
       ${dtField('f-start', t('lbl_start'), now)}
       ${dtField('f-end', t('lbl_end'), '')}
@@ -632,7 +658,7 @@ function selectType(type) {
       <button class="btn" onclick="submitEntry()">${t('btn_save')}</button>
     `;
   } else if (type === 'bottle') {
-    document.getElementById('modal-title').textContent = `🍼 ${t('tile_bottle')}`;
+    document.getElementById('modal-title').textContent = t('tile_bottle');
     fields.innerHTML = `
       ${dtField('f-start', t('lbl_time'), now)}
       <div class="field"><label>${t('lbl_amount')}</label><input type="number" id="f-amount" min="0" step="5" placeholder="120"></div>
@@ -646,7 +672,7 @@ function selectType(type) {
       <button class="btn" onclick="submitEntry()">${t('btn_save')}</button>
     `;
   } else if (type === 'weight') {
-    document.getElementById('modal-title').textContent = `⚖️ ${t('tile_weight')}`;
+    document.getElementById('modal-title').textContent = t('tile_weight');
     fields.innerHTML = `
       ${dtField('f-start', t('lbl_time'), now)}
       <div class="field"><label>${t('lbl_weight_g')}</label><input type="number" id="f-weight" min="0" step="10" placeholder="3450"></div>
@@ -654,21 +680,21 @@ function selectType(type) {
       <button class="btn" onclick="submitEntry()">${t('btn_save')}</button>
     `;
   } else if (type === 'walk') {
-    document.getElementById('modal-title').textContent = `🚶 ${t('tile_walk')}`;
+    document.getElementById('modal-title').textContent = t('tile_walk');
     fields.innerHTML = `
       ${dtField('f-start', t('lbl_time'), now)}
       <div class="field"><label>${t('lbl_note')}</label><textarea id="f-note" rows="2"></textarea></div>
       <button class="btn" onclick="submitEntry()">${t('btn_save')}</button>
     `;
   } else if (type === 'clothing') {
-    document.getElementById('modal-title').textContent = `👕 ${t('tile_clothing')}`;
+    document.getElementById('modal-title').textContent = t('tile_clothing');
     fields.innerHTML = `
       ${dtField('f-start', t('lbl_time'), now)}
       <div class="field"><label>${t('lbl_note')}</label><textarea id="f-note" rows="2"></textarea></div>
       <button class="btn" onclick="submitEntry()">${t('btn_save')}</button>
     `;
   } else {
-    document.getElementById('modal-title').textContent = `📝 ${t('tile_note')}`;
+    document.getElementById('modal-title').textContent = t('tile_note');
     fields.innerHTML = `
       ${dtField('f-start', t('lbl_time'), now)}
       <div class="field"><label>${t('lbl_note')}</label><textarea id="f-note" rows="3"></textarea></div>
@@ -732,7 +758,7 @@ function openEditModal(id) {
   document.querySelectorAll('.type-tile').forEach(tp => tp.classList.remove('selected'));
   document.getElementById('type-grid').style.display = 'none';
   const tp = getType(entry.type);
-  document.getElementById('modal-title').textContent = `${tp.icon} ${tp.label}`;
+  document.getElementById('modal-title').textContent = tp.label;
   const fields = document.getElementById('form-fields');
   fields.classList.add('visible');
   fields.innerHTML = editFieldsHtml(entry);
