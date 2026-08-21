@@ -479,6 +479,8 @@ async function loadStats() {
     <div class="section-title">${t('section_sleep')}</div>
     ${sleepBars}
   `;
+
+  if (document.getElementById('tab-stats').classList.contains('active')) setTimeout(loadStats, 60000);
 }
 
 // ── Settings ──
