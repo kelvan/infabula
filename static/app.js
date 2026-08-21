@@ -93,6 +93,7 @@ const ICONS = {
   bottle: '<rect x="7" y="8.5" width="10" height="11.5" rx="3"/><path d="M9.3 8.5V6.6a1 1 0 0 1 1-1h3.4a1 1 0 0 1 1 1v1.9"/><path d="M10.3 5.6c0-1.5.8-2.6 1.7-2.6s1.7 1.1 1.7 2.6"/><path d="M9 12.3h1.6M9 15.3h1.6M9 18.3h1.6"/>',
   feeding: '<rect x="7" y="8.5" width="10" height="11.5" rx="3"/><path d="M9.3 8.5V6.6a1 1 0 0 1 1-1h3.4a1 1 0 0 1 1 1v1.9"/><path d="M10.3 5.6c0-1.5.8-2.6 1.7-2.6s1.7 1.1 1.7 2.6"/><path d="M9 12.3h1.6M9 15.3h1.6M9 18.3h1.6"/>',
   sleep: '<path d="M20 14.3A8 8 0 1 1 9.7 4a6.3 6.3 0 0 0 10.3 10.3Z"/>',
+  zzz: '<path d="M3 15h6l-6 6h6"/><path d="M10 9h5l-5 5h5"/><path d="M16 4h4l-4 4h4"/>',
   walk: '<ellipse cx="15" cy="16" rx="2.6" ry="3.6" transform="rotate(12 15 16)"/><circle cx="12.6" cy="12.4" r=".9"/><circle cx="14" cy="11.3" r=".95"/><circle cx="15.6" cy="11.1" r=".95"/><circle cx="17" cy="11.8" r=".85"/><ellipse cx="8" cy="7.5" rx="2" ry="2.8" transform="rotate(-12 8 7.5)"/><circle cx="6" cy="4.6" r=".7"/><circle cx="7.3" cy="3.8" r=".75"/><circle cx="8.7" cy="3.9" r=".7"/>',
   weight: '<circle cx="12" cy="12" r="8.2"/><path d="M12 8.6v3.8l2.6 1.6"/>',
   note: '<path d="M6 3.5h9L19.5 8v12.5a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4.5a1 1 0 0 1 1-1Z"/><path d="M8.5 12h7M8.5 15.5h7M8.5 8.5h3"/>',
@@ -101,6 +102,7 @@ const ICONS = {
   home: '<path d="M4 11 12 4l8 7"/><path d="M6 10v9.5a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1V10"/><path d="M10 20.5V15h4v5.5"/>',
 };
 function icon(name) { return `<svg viewBox="0 0 24 24" class="ic">${ICONS[name] || ''}</svg>`; }
+function typeIcon(name) { return name === 'sleep' ? icon('zzz') : icon(name); }
 function typeTint(type) {
   if (type === 'sleep') return 'sleep';
   if (type === 'walk') return 'walk';
@@ -412,7 +414,7 @@ async function loadLog() {
 
     return `
       <div class="entry-item" onclick="openEditModal(${e.id})">
-        <div class="entry-icon tint-${typeTint(e.type)}">${icon(tp.icon)}</div>
+        <div class="entry-icon tint-${typeTint(e.type)}">${typeIcon(tp.icon)}</div>
         <div class="entry-body">
           <div class="entry-type">${tp.label}</div>
           <div class="entry-time">${timeStr}</div>
@@ -467,7 +469,7 @@ async function loadStats() {
     const active = (key === 'sleep' || key === 'walk') && !e.ts_end;
     lastCards += `
       <div class="stat-card${active ? ' tint-'+key : ''}">
-        <div class="s-label">${icon(tp.icon)}${tp.label}</div>
+        <div class="s-label">${typeIcon(tp.icon)}${tp.label}</div>
         <div class="s-val" style="font-size:1rem;padding-top:2px">${valStr}</div>
         <div class="s-sub">${sub}</div>
       </div>`;
@@ -480,7 +482,7 @@ async function loadStats() {
     const tp = getType(key);
     ivCards += `
       <div class="stat-card">
-        <div class="s-label">${icon(tp.icon)}${tp.label} · ${t('stat_interval')}</div>
+        <div class="s-label">${typeIcon(tp.icon)}${tp.label} · ${t('stat_interval')}</div>
         <div class="s-val">${fmtDur(iv.last)}</div>
         <div class="s-sub">${t('stat_avg')}: ${fmtDur(iv.avg)}</div>
       </div>`;
