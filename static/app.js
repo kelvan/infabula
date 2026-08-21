@@ -235,7 +235,8 @@ function switchTab(name, btn) {
   document.querySelectorAll('.tab-page').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
   document.getElementById('tab-'+name).classList.add('active');
-  btn.classList.add('active');
+  (btn || document.getElementById('tab-btn-'+name)).classList.add('active');
+  location.hash = name;
   if (name === 'stats') loadStats();
   if (name === 'settings') loadSettings();
 }
@@ -877,3 +878,5 @@ initUI();
 updateDayNav();
 loadLog();
 initEvents();
+const initialTab = ['log','stats','settings'].includes(location.hash.slice(1)) ? location.hash.slice(1) : 'log';
+if (initialTab !== 'log') switchTab(initialTab);
