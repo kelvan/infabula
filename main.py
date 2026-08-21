@@ -1,9 +1,12 @@
 import asyncio
+import csv
+import io
 import json
 import os
 import sqlite3
 import time
 from datetime import datetime
+from itertools import groupby
 
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, Response, StreamingResponse
@@ -331,3 +334,123 @@ async def get_stats(date: str = None):
         "sleep_durations": sleep_durations,
         "intervals": intervals,
     }
+
+
+# ── Export report ──
+def fetch_entries_range(start: str, end: str):
+    if start > end:
+        start, end = end, start
+    conn = get_db()
+    rows = conn.execute(
+        "SELECT * FROM entries WHERE date(ts_start) BETWEEN ? AND ? ORDER BY ts_start ASC",
+        (start, end),
+    ).fetchall()
+    conn.close()
+    return [row_to_dict(r) for r in rows], start, end
+
+
+def build_report(entries: list[dict], start: str, end: str) -> dict:
+    days: dict[str, dict] = {}
+    totals = {
+        "diaper": 0, "diaper_wet": 0, "diaper_dirty": 0,
+        "feeding": 0, "feeding_ml": 0,
+        "sleep_count": 0, "sleep_min": 0,
+        "walk_count": 0, "walk_min": 0,
+        "notes": 0,
+    }
+    weights = []
+
+    def day_bucket(d):
+        return days.setdefault(d, {
+            "date": d, "diaper": 0, "diaper_wet": 0, "diaper_dirty": 0,
+            "feeding": 0, "feeding_ml": 0, "sleep_min": 0, "walk_min": 0,
+            "walk_count": 0,
+        })
+
+    for e in entries:
+        d = e["ts_start"][:10]
+        bucket = day_bucket(d)
+        t = e["type"]
+        m = e["meta"] or {}
+        if t == "diaper":
+            bucket["diaper"] += 1
+            totals["diaper"] += 1
+            dt = m.get("diaper_type", "")
+            if dt in ("nass", "wet", "beides", "both"):
+                bucket["diaper_wet"] += 1
+                totals["diaper_wet"] += 1
+            if dt in ("schmutzig", "dirty", "beides", "both"):
+                bucket["diaper_dirty"] += 1
+                totals["diaper_dirty"] += 1
+        elif t in ("nursing", "bottle"):
+            bucket["feeding"] += 1
+            totals["feeding"] += 1
+            if t == "bottle" and m.get("amount"):
+                ml = int(m["amount"])
+                bucket["feeding_ml"] += ml
+                totals["feeding_ml"] += ml
+        elif t == "sleep" and e["ts_end"]:
+            mins = round(
+                (datetime.fromisoformat(e["ts_end"]) - datetime.fromisoformat(e["ts_start"])).total_seconds() / 60
+            )
+            bucket["sleep_min"] += mins
+            totals["sleep_min"] += mins
+            totals["sleep_count"] += 1
+        elif t == "walk" and e["ts_end"]:
+            mins = round(
+                (datetime.fromisoformat(e["ts_end"]) - datetime.fromisoformat(e["ts_start"])).total_seconds() / 60
+            )
+            bucket["walk_min"] += mins
+            bucket["walk_count"] += 1
+            totals["walk_min"] += mins
+            totals["walk_count"] += 1
+        elif t == "weight" and m.get("weight"):
+            weights.append({"time": e["ts_start"], "weight": m["weight"]})
+        elif t == "note" and e.get("note"):
+            totals["notes"] += 1
+
+    weight_change = weights[-1]["weight"] - weights[0]["weight"] if len(weights) >= 2 else None
+
+    entries_by_day = [
+        {"date": d, "day_entries": list(items)}
+        for d, items in groupby(entries, key=lambda e: e["ts_start"][:10])
+    ]
+
+    return {
+        "start": start,
+        "end": end,
+        "days": sorted(days.values(), key=lambda d: d["date"]),
+        "totals": totals,
+        "weights": weights,
+        "weight_change": weight_change,
+        "entries_by_day": entries_by_day,
+        "has_entries": bool(entries),
+    }
+
+
+@app.get("/report", response_class=HTMLResponse)
+async def report(request: Request, start: str, end: str):
+    entries, start, end = fetch_entries_range(start, end)
+    data = build_report(entries, start, end)
+    return templates.TemplateResponse(
+        "report.html", {"request": request, "v": ASSET_VERSION, **data}
+    )
+
+
+@app.get("/api/export.csv")
+async def export_csv(start: str, end: str):
+    entries, start, end = fetch_entries_range(start, end)
+    buf = io.StringIO()
+    w = csv.writer(buf)
+    w.writerow(["id", "type", "start", "end", "note", "meta", "ip"])
+    for e in entries:
+        w.writerow([
+            e["id"], e["type"], e["ts_start"], e["ts_end"] or "",
+            e["note"] or "", json.dumps(e["meta"]), e["ip"] or "",
+        ])
+    filename = f"infabula-{start}_{end}.csv"
+    return Response(
+        content=buf.getvalue(),
+        media_type="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )

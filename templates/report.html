@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>infabula – Report {{ start }} – {{ end }}</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,500&display=swap">
+<style>
+  :root{
+    --bg:#f6f1e6; --surface:#fffdf9; --surface2:#efe7d6;
+    --ink:#33271b; --ink2:#8c7c65;
+    --accent:#b8863a; --accent-soft:#f1e3c4; --accent-ink:#7a5a22;
+    --border:#e4dac6; --radius:14px;
+    --serif:'Newsreader',Georgia,'Times New Roman',serif;
+    --mono: ui-monospace,'JetBrains Mono','Cascadia Code','Source Code Pro',monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--serif); margin: 0; padding: 32px 24px 80px; }
+  .wrap { max-width: 760px; margin: 0 auto; }
+  h1 { font-size: 1.6rem; font-weight: 600; margin: 0 0 2px; }
+  .range { font-family: var(--mono); font-size: 0.8rem; color: var(--ink2); margin-bottom: 24px; }
+  .actions { display: flex; gap: 10px; margin-bottom: 28px; }
+  .actions a, .actions button {
+    font-family: var(--mono); font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em;
+    background: var(--accent); color: #fff; border: none; border-radius: 8px; padding: 9px 16px;
+    cursor: pointer; text-decoration: none;
+  }
+  .actions .secondary { background: var(--surface2); color: var(--ink); border: 1.5px solid var(--border); }
+  .section-title {
+    font-family: var(--mono); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.1em;
+    color: var(--ink2); margin: 28px 0 12px; border-bottom: 1px solid var(--border); padding-bottom: 6px;
+  }
+  .totals-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
+  .stat-card { background: var(--surface); border: 1.5px solid var(--border); border-radius: var(--radius); padding: 12px 14px; }
+  .stat-card .label { font-family: var(--mono); font-size: 0.66rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--ink2); margin-bottom: 4px; }
+  .stat-card .val { font-size: 1.25rem; font-weight: 600; color: var(--accent-ink); }
+  table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+  th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border); }
+  th { font-family: var(--mono); font-size: 0.62rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--ink2); }
+  td.num, th.num { text-align: right; }
+  td.num { font-family: var(--mono); }
+  .day-block { margin-bottom: 18px; }
+  .day-title { font-size: 1.05rem; font-weight: 600; margin-bottom: 6px; }
+  .entry-row { display: flex; gap: 10px; padding: 5px 0; border-bottom: 1px solid var(--border); font-size: 0.85rem; align-items: baseline; }
+  .entry-row .time { font-family: var(--mono); color: var(--ink2); width: 46px; flex-shrink: 0; }
+  .entry-row .type { width: 76px; flex-shrink: 0; color: var(--ink2); font-family: var(--mono); font-size: 0.66rem; text-transform: uppercase; letter-spacing: 0.05em; }
+  .entry-row .meta { color: var(--ink); }
+  .entry-row .meta .note { color: var(--ink2); font-style: italic; }
+  .empty { color: var(--ink2); font-style: italic; }
+  @media print {
+    body { background: #fff; padding: 0 8px; }
+    .actions { display: none; }
+    .stat-card, .day-block { break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>infabula report</h1>
+  <div class="range">{{ start }}{% if end != start %} – {{ end }}{% endif %}</div>
+
+  <div class="actions">
+    <button onclick="window.print()">Print / Save as PDF</button>
+    <a class="secondary" href="/api/export.csv?start={{ start }}&end={{ end }}">Download CSV</a>
+  </div>
+
+  {% if has_entries %}
+  <div class="section-title">Totals</div>
+  <div class="totals-grid">
+    <div class="stat-card"><div class="label">Diapers</div><div class="val">{{ totals.diaper }}</div></div>
+    <div class="stat-card"><div class="label">Wet / Dirty</div><div class="val">{{ totals.diaper_wet }} / {{ totals.diaper_dirty }}</div></div>
+    <div class="stat-card"><div class="label">Feedings</div><div class="val">{{ totals.feeding }}</div></div>
+    {% if totals.feeding_ml %}
+    <div class="stat-card"><div class="label">Bottle total</div><div class="val">{{ totals.feeding_ml }} ml</div></div>
+    {% endif %}
+    <div class="stat-card"><div class="label">Sleep sessions</div><div class="val">{{ totals.sleep_count }}</div></div>
+    <div class="stat-card"><div class="label">Sleep total</div><div class="val">{{ totals.sleep_min // 60 }}h {{ totals.sleep_min % 60 }}m</div></div>
+    {% if totals.walk_count %}
+    <div class="stat-card"><div class="label">Walks</div><div class="val">{{ totals.walk_count }}</div></div>
+    <div class="stat-card"><div class="label">Walk total</div><div class="val">{{ totals.walk_min // 60 }}h {{ totals.walk_min % 60 }}m</div></div>
+    {% endif %}
+    {% if weight_change is not none %}
+    <div class="stat-card"><div class="label">Weight change</div><div class="val">{{ '+' if weight_change > 0 else '' }}{{ weight_change }} g</div></div>
+    {% endif %}
+    {% if totals.notes %}
+    <div class="stat-card"><div class="label">Notes</div><div class="val">{{ totals.notes }}</div></div>
+    {% endif %}
+  </div>
+
+  {% if days|length > 1 %}
+  <div class="section-title">Daily breakdown</div>
+  <table>
+    <thead><tr><th>Date</th><th class="num">Diapers</th><th class="num">Feedings</th><th class="num">Sleep</th><th class="num">Walk</th></tr></thead>
+    <tbody>
+    {% for d in days %}
+      <tr>
+        <td>{{ d.date }}</td>
+        <td class="num">{{ d.diaper }}</td>
+        <td class="num">{{ d.feeding }}{% if d.feeding_ml %} ({{ d.feeding_ml }} ml){% endif %}</td>
+        <td class="num">{{ d.sleep_min // 60 }}h {{ d.sleep_min % 60 }}m</td>
+        <td class="num">{% if d.walk_count %}{{ d.walk_min // 60 }}h {{ d.walk_min % 60 }}m{% else %}–{% endif %}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+
+  {% if weights %}
+  <div class="section-title">Weight</div>
+  <table>
+    <thead><tr><th>Date</th><th class="num">Weight</th></tr></thead>
+    <tbody>
+    {% for w in weights %}
+      <tr><td>{{ w.time[:16].replace('T', ' ') }}</td><td class="num">{{ w.weight }} g</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+
+  <div class="section-title">Full log</div>
+  {% for day in entries_by_day %}
+    <div class="day-block">
+      <div class="day-title">{{ day.date }}</div>
+      {% for e in day.day_entries %}
+        <div class="entry-row">
+          <div class="time">{{ e.ts_start[11:16] }}</div>
+          <div class="type">{{ e.type }}</div>
+          <div class="meta">
+            {%- if e.type == 'diaper' %}{{ e.meta.diaper_type or '' }}
+            {%- elif e.type == 'bottle' and e.meta.amount %}{{ e.meta.amount }} ml
+            {%- elif e.type == 'weight' and e.meta.weight %}{{ e.meta.weight }} g
+            {%- elif e.type == 'nursing' and e.meta.side %}{{ e.meta.side }}
+            {%- endif -%}
+            {%- if e.ts_end %} → {{ e.ts_end[11:16] }}{% endif -%}
+            {%- if e.note %} <span class="note">{{ e.note }}</span>{% endif -%}
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+  {% endfor %}
+  {% else %}
+  <div class="empty">No entries in this range.</div>
+  {% endif %}
+</div>
+</body>
+</html>

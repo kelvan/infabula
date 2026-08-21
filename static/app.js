@@ -25,6 +25,8 @@ const I18N = {
     stat_asleep_since:'Schläft seit', stat_walking_since:'Läuft seit',
     no_data:'Keine Daten', not_enough_data:'Zu wenig Daten', no_sleep_data:'Noch keine Schlafdaten',
     settings_ip_names_title:'Geräte', settings_name_placeholder:'Name eingeben', settings_no_ips:'Noch keine Geräte bekannt',
+    export_title:'Export', range_today:'Heute', range_week:'Diese Woche', range_month:'Diesen Monat', range_custom:'Frei wählen',
+    btn_open_report:'Bericht öffnen', btn_download_csv:'CSV herunterladen',
     today:'Heute', yesterday:'Gestern',
     just_now:'gerade eben',
     ago_min: n=>`vor ${n} min`, ago_hour: n=>`vor ${n} h`, ago_day: n=>`vor ${n} d`,
@@ -63,6 +65,8 @@ const I18N = {
     stat_asleep_since:'Asleep since', stat_walking_since:'Walking since',
     no_data:'No data', not_enough_data:'Not enough data', no_sleep_data:'No sleep data yet',
     settings_ip_names_title:'Devices', settings_name_placeholder:'Enter name', settings_no_ips:'No devices seen yet',
+    export_title:'Export', range_today:'Today', range_week:'This week', range_month:'This month', range_custom:'Custom',
+    btn_open_report:'Open report', btn_download_csv:'Download CSV',
     today:'Today', yesterday:'Yesterday',
     just_now:'just now',
     ago_min: n=>`${n} min ago`, ago_hour: n=>`${n} h ago`, ago_day: n=>`${n} d ago`,
@@ -139,6 +143,13 @@ function initUI() {
     const el = document.getElementById('tile-'+k);
     if (el) el.querySelector('.t-label').textContent = t('tile_'+k);
   });
+  document.getElementById('export-title').textContent = t('export_title');
+  document.querySelector('.range-pill[data-range=today]').textContent = t('range_today');
+  document.querySelector('.range-pill[data-range=week]').textContent = t('range_week');
+  document.querySelector('.range-pill[data-range=month]').textContent = t('range_month');
+  document.querySelector('.range-pill[data-range=custom]').textContent = t('range_custom');
+  document.getElementById('export-report-btn').textContent = t('btn_open_report');
+  document.getElementById('export-csv-btn').textContent = t('btn_download_csv');
 }
 
 const IP_COLORS = [
@@ -923,6 +934,39 @@ function initSwipe() {
   main.addEventListener('touchcancel', () => { tracking = false; }, { passive: true });
 }
 
+// ── Export ──
+let exportRange = 'today';
+function selectRange(r) {
+  exportRange = r;
+  document.querySelectorAll('.range-pill').forEach(b => b.classList.toggle('active', b.dataset.range === r));
+  document.getElementById('custom-range').classList.toggle('visible', r === 'custom');
+}
+function exportDates() {
+  const today = todayStr();
+  if (exportRange === 'today') return { start: today, end: today };
+  if (exportRange === 'week') {
+    const d = new Date();
+    const monday = new Date(d);
+    monday.setDate(d.getDate() - ((d.getDay() + 6) % 7));
+    return { start: `${monday.getFullYear()}-${pad(monday.getMonth()+1)}-${pad(monday.getDate())}`, end: today };
+  }
+  if (exportRange === 'month') {
+    const d = new Date();
+    return { start: `${d.getFullYear()}-${pad(d.getMonth()+1)}-01`, end: today };
+  }
+  const start = document.getElementById('export-start').value || today;
+  const end = document.getElementById('export-end').value || today;
+  return { start, end };
+}
+function openReport() {
+  const { start, end } = exportDates();
+  window.open(`/report?start=${start}&end=${end}`, '_blank');
+}
+function downloadCsv() {
+  const { start, end } = exportDates();
+  window.location.href = `/api/export.csv?start=${start}&end=${end}`;
+}
+
 // ── Live sync (SSE) ──
 function initEvents() {
   const es = new EventSource('/api/events');
@@ -939,5 +983,7 @@ updateDayNav();
 loadLog();
 initEvents();
 initSwipe();
+document.getElementById('export-start').value = todayStr();
+document.getElementById('export-end').value = todayStr();
 const initialTab = TAB_ORDER.includes(location.hash.slice(1)) ? location.hash.slice(1) : 'log';
 if (initialTab !== 'log') switchTab(initialTab);
