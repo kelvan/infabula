@@ -895,6 +895,32 @@ function toast(msg) {
   setTimeout(() => el.classList.remove('show'), 2200);
 }
 
+// ── Swipe to switch tabs ──
+const TAB_ORDER = ['log', 'stats', 'settings'];
+function initSwipe() {
+  const main = document.querySelector('.main');
+  let sx = 0, sy = 0, tracking = false;
+  main.addEventListener('touchstart', (e) => {
+    if (e.touches.length !== 1) return;
+    sx = e.touches[0].clientX;
+    sy = e.touches[0].clientY;
+    tracking = true;
+  }, { passive: true });
+  main.addEventListener('touchend', (e) => {
+    if (!tracking) return;
+    tracking = false;
+    const dx = e.changedTouches[0].clientX - sx;
+    const dy = e.changedTouches[0].clientY - sy;
+    if (Math.abs(dx) < 60 || Math.abs(dx) < Math.abs(dy) * 1.5) return;
+    const current = document.querySelector('.tab-page.active').id.replace('tab-', '');
+    const idx = TAB_ORDER.indexOf(current) + (dx < 0 ? 1 : -1);
+    if (idx < 0 || idx >= TAB_ORDER.length) return;
+    const name = TAB_ORDER[idx];
+    switchTab(name, document.getElementById('tab-btn-' + name));
+  }, { passive: true });
+  main.addEventListener('touchcancel', () => { tracking = false; }, { passive: true });
+}
+
 // ── Live sync (SSE) ──
 function initEvents() {
   const es = new EventSource('/api/events');
@@ -910,5 +936,6 @@ initUI();
 updateDayNav();
 loadLog();
 initEvents();
-const initialTab = ['log','stats','settings'].includes(location.hash.slice(1)) ? location.hash.slice(1) : 'log';
+initSwipe();
+const initialTab = TAB_ORDER.includes(location.hash.slice(1)) ? location.hash.slice(1) : 'log';
 if (initialTab !== 'log') switchTab(initialTab);
