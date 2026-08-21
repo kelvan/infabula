@@ -20,7 +20,7 @@ const I18N = {
     no_entries:'Keine Einträge für diesen Tag',
     section_last:'Letztes Ereignis', section_intervals:'Abstände',
     section_sleep:'Schlafdauer (letzte 10)',
-    stat_interval:'Abstand', stat_avg:'Ø letzte 5',
+    stat_interval:'Abstand', stat_avg:'Ø diesen Tag',
     stat_awake_since:'Wach seit', stat_back_since:'Zurück seit',
     stat_asleep_since:'Schläft seit', stat_walking_since:'Läuft seit',
     no_data:'Keine Daten', not_enough_data:'Zu wenig Daten', no_sleep_data:'Noch keine Schlafdaten',
@@ -58,7 +58,7 @@ const I18N = {
     no_entries:'No entries for this day',
     section_last:'Last event', section_intervals:'Intervals',
     section_sleep:'Sleep duration (last 10)',
-    stat_interval:'Interval', stat_avg:'avg last 5',
+    stat_interval:'Interval', stat_avg:'avg this day',
     stat_awake_since:'Awake since', stat_back_since:'Back since',
     stat_asleep_since:'Asleep since', stat_walking_since:'Walking since',
     no_data:'No data', not_enough_data:'Not enough data', no_sleep_data:'No sleep data yet',
@@ -236,12 +236,14 @@ function changeDay(delta) {
   currentDate = `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
   updateDayNav();
   loadLog();
+  if (document.getElementById('tab-stats').classList.contains('active')) loadStats();
 }
 function jumpToDate(val) {
   if (!val) return;
   currentDate = val;
   updateDayNav();
   loadLog();
+  if (document.getElementById('tab-stats').classList.contains('active')) loadStats();
 }
 function openDatePicker() {
   const el = document.getElementById('date-picker');
@@ -437,7 +439,7 @@ async function deleteEntry(id) {
 
 // ── Stats ──
 async function loadStats() {
-  const res = await fetch('/api/stats');
+  const res = await fetch('/api/stats?date=' + currentDate);
   const data = await res.json();
   const el = document.getElementById('stats-content');
 

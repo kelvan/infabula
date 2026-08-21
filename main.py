@@ -6,7 +6,7 @@ import time
 from datetime import datetime
 
 from fastapi import FastAPI, Request
-from fastapi.responses import HTMLResponse, StreamingResponse
+from fastapi.responses import HTMLResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
@@ -278,13 +278,18 @@ async def delete_entry(entry_id: int):
 
 
 @app.get("/api/stats")
-async def get_stats():
+async def get_stats(date: str = None):
     conn = get_db()
     rows = conn.execute(
         "SELECT * FROM entries ORDER BY ts_start DESC LIMIT 500"
     ).fetchall()
+    day = date or datetime.now().strftime("%Y-%m-%d")
+    day_rows = conn.execute(
+        "SELECT * FROM entries WHERE date(ts_start)=? ORDER BY ts_start ASC", (day,)
+    ).fetchall()
     conn.close()
     entries = [row_to_dict(r) for r in rows]
+    day_entries = [row_to_dict(r) for r in day_rows]
 
     last = {}
     for e in entries:
@@ -307,21 +312,19 @@ async def get_stats():
     intervals = {}
     for typ in ["diaper", "feeding"]:
         if typ == "feeding":
-            typed = [e for e in entries if e["type"] in ("nursing", "bottle")]
+            typed = [e for e in day_entries if e["type"] in ("nursing", "bottle")]
         else:
-            typed = [e for e in entries if e["type"] == typ]
+            typed = [e for e in day_entries if e["type"] == typ]
         if len(typed) >= 2:
             diffs = []
             for i in range(len(typed) - 1):
                 a = datetime.fromisoformat(typed[i]["ts_start"])
                 b = datetime.fromisoformat(typed[i + 1]["ts_start"])
-                diff_min = abs((a - b).total_seconds() / 60)
-                diffs.append(round(diff_min))
-            if diffs:
-                intervals[typ] = {
-                    "last": diffs[0],
-                    "avg": round(sum(diffs[:5]) / len(diffs[:5])),
-                }
+                diffs.append(round((b - a).total_seconds() / 60))
+            intervals[typ] = {
+                "last": diffs[-1],
+                "avg": round(sum(diffs) / len(diffs)),
+            }
 
     return {
         "last": last,
