@@ -488,6 +488,8 @@ function spanEndMinutes(e, nowMin) {
   return nowMin != null ? nowMin : 1440;
 }
 
+const MOOD_EMOJI = { happy: '😊', neutral: '😐', fussy: '😕', crying: '😢' };
+
 function renderTimeline() {
   const wrap = document.getElementById('timeline-view');
   if (!wrap) return;
@@ -496,18 +498,19 @@ function renderTimeline() {
   const walks = entries.filter(e => e.type === 'walk');
   const feeds = entries.filter(e => e.type === 'nursing' || e.type === 'bottle');
   const diapers = entries.filter(e => e.type === 'diaper');
+  const moods = entries.filter(e => e.type === 'mood');
   const isToday = currentDate === todayStr();
   const now = new Date();
   const nowMin = isToday ? now.getHours() * 60 + now.getMinutes() : null;
 
   const wide = window.matchMedia('(min-width: 640px)').matches;
   wrap.innerHTML = wide
-    ? renderTimelineWide(sleeps, walks, feeds, diapers, nowMin)
-    : renderTimelineNarrow(sleeps, walks, feeds, diapers, nowMin);
+    ? renderTimelineWide(sleeps, walks, feeds, diapers, moods, nowMin)
+    : renderTimelineNarrow(sleeps, walks, feeds, diapers, moods, nowMin);
 }
 
-function renderTimelineNarrow(sleeps, walks, feeds, diapers, nowMin) {
-  const px = 30, gridH = px * 24, laneW = 144, barW = 56;
+function renderTimelineNarrow(sleeps, walks, feeds, diapers, moods, nowMin) {
+  const px = 30, gridH = px * 24, laneW = 132, barW = 56, moodColW = 24, totalW = laneW * 2 + moodColW;
   const sleepLeft = (laneW - barW) / 2, walkLeft = laneW + (laneW - barW) / 2;
 
   let bars = '';
@@ -534,10 +537,17 @@ function renderTimelineNarrow(sleeps, walks, feeds, diapers, nowMin) {
     lines += `<div style="position:absolute;left:0px;top:${top}px;width:${laneW*2}px;height:4px;background:rgba(184,134,58,0.35);border-top:1px solid var(--accent);border-bottom:1px solid var(--accent);"></div>`;
   });
 
+  let moodMarks = '';
+  moods.forEach(e => {
+    const top = dayMinutes(e.ts_start) / 60 * px - 8;
+    const emoji = MOOD_EMOJI[e.meta?.mood] || MOOD_EMOJI.neutral;
+    moodMarks += `<div style="position:absolute;left:${laneW*2}px;top:${top}px;width:${moodColW}px;text-align:center;font-size:15px;line-height:1;">${emoji}</div>`;
+  });
+
   let hours = '';
   for (let h = 0; h <= 24; h++) {
     const top = h * px;
-    hours += `<div style="position:absolute;left:0;top:${top}px;width:${laneW*2}px;height:1px;background:var(--border);"></div>`;
+    hours += `<div style="position:absolute;left:0;top:${top}px;width:${totalW}px;height:1px;background:var(--border);"></div>`;
     if (h % 6 === 0) hours += `<div style="position:absolute;left:-30px;top:${top-5}px;width:26px;text-align:right;font-family:var(--tl-mono);font-size:9px;color:var(--ink2);">${pad(h)}</div>`;
   }
 
@@ -545,7 +555,7 @@ function renderTimelineNarrow(sleeps, walks, feeds, diapers, nowMin) {
   if (nowMin != null) {
     const top = nowMin / 60 * px;
     nowLine = `
-      <div style="position:absolute;left:-30px;top:${top}px;width:${laneW*2+30}px;height:0;border-top:1.5px dashed var(--accent-ink);z-index:5;"></div>
+      <div style="position:absolute;left:-30px;top:${top}px;width:${totalW+30}px;height:0;border-top:1.5px dashed var(--accent-ink);z-index:5;"></div>
       <div style="position:absolute;left:-30px;top:${top-11}px;background:var(--accent-ink);color:#fff;font-family:var(--tl-mono);font-size:8px;letter-spacing:0.05em;padding:2px 4px;border-radius:4px;z-index:5;">${t('tl_now')}</div>`;
   }
 
@@ -559,17 +569,19 @@ function renderTimelineNarrow(sleeps, walks, feeds, diapers, nowMin) {
         <div class="tl-legend" style="margin-left:30px;">
           <div class="tl-legend-item"><span class="tl-legend-swatch" style="background:var(--feed);"></span><span class="lbl" style="font-size:9px;color:var(--feed);">${t('types').feeding}</span></div>
           <div class="tl-legend-item"><span class="tl-legend-swatch" style="background:var(--accent);"></span><span class="lbl" style="font-size:9px;color:var(--accent-ink);">${t('types').diaper}</span></div>
+          <div class="tl-legend-item"><span style="font-size:12px;line-height:1;">${MOOD_EMOJI.happy}</span><span class="lbl" style="font-size:9px;color:var(--mood);">${t('types').mood}</span></div>
         </div>
         <div style="position:relative;height:${gridH}px;margin-left:30px;">
           <div style="position:absolute;left:${laneW}px;top:0;width:1px;height:${gridH}px;background:var(--border);"></div>
-          ${hours}${lines}${bars}${nowLine}
+          <div style="position:absolute;left:${laneW*2}px;top:0;width:1px;height:${gridH}px;background:var(--border);"></div>
+          ${hours}${lines}${bars}${moodMarks}${nowLine}
         </div>
       </div>
     </div>
   `;
 }
 
-function renderTimelineWide(sleeps, walks, feeds, diapers, nowMin) {
+function renderTimelineWide(sleeps, walks, feeds, diapers, moods, nowMin) {
   const px = 28, trackW = px * 24, rowH = 80, barH = 40;
 
   let bars = '';
@@ -594,6 +606,13 @@ function renderTimelineWide(sleeps, walks, feeds, diapers, nowMin) {
   diapers.forEach(e => {
     const left = dayMinutes(e.ts_start) / 60 * px - 2;
     lines += `<div style="position:absolute;left:${left}px;top:0;width:4px;height:${rowH*2}px;background:rgba(184,134,58,0.35);border-left:1px solid var(--accent);border-right:1px solid var(--accent);"></div>`;
+  });
+
+  let moodMarks = '';
+  moods.forEach(e => {
+    const left = dayMinutes(e.ts_start) / 60 * px - 8;
+    const emoji = MOOD_EMOJI[e.meta?.mood] || MOOD_EMOJI.neutral;
+    moodMarks += `<div style="position:absolute;left:${left}px;top:0;width:16px;text-align:center;font-size:15px;line-height:1;">${emoji}</div>`;
   });
 
   let hours = '';
@@ -621,9 +640,11 @@ function renderTimelineWide(sleeps, walks, feeds, diapers, nowMin) {
           <div style="position:absolute;left:-70px;top:${rowH}px;width:62px;height:${rowH}px;display:flex;align-items:center;gap:5px;color:var(--walk);">${icon('walk')}<span class="lbl" style="font-size:10px;">${t('types').walk}</span></div>
           ${lines}${bars}${nowLine}
         </div>
-        <div class="tl-legend" style="margin-top:12px;">
+        <div style="position:relative;width:${trackW}px;height:20px;margin-top:2px;">${moodMarks}</div>
+        <div class="tl-legend" style="margin-top:10px;">
           <div class="tl-legend-item"><span class="tl-legend-swatch" style="background:var(--feed);"></span><span class="lbl" style="font-size:9px;color:var(--feed);">${t('types').feeding}</span></div>
           <div class="tl-legend-item"><span class="tl-legend-swatch" style="background:var(--accent);"></span><span class="lbl" style="font-size:9px;color:var(--accent-ink);">${t('types').diaper}</span></div>
+          <div class="tl-legend-item"><span style="font-size:12px;line-height:1;">${MOOD_EMOJI.happy}</span><span class="lbl" style="font-size:9px;color:var(--mood);">${t('types').mood}</span></div>
         </div>
       </div>
     </div>
