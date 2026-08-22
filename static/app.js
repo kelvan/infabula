@@ -210,6 +210,10 @@ function fmtDate(s) {
   if (s === yesterday) return t('yesterday');
   return `${d}.${m}.${y}`;
 }
+function fmtStartTime(iso) {
+  const d = iso.slice(0, 10);
+  return d === currentDate ? fmtTime(iso) : `${fmtDate(d)} ${fmtTime(iso)}`;
+}
 function fmtTime(iso) {
   if (!iso) return '';
   const d = new Date(iso);
@@ -402,15 +406,15 @@ async function loadLog() {
     if (e.type === 'sleep') {
       if (e.ts_end) {
         const dur = Math.round(durMin(e.ts_start, e.ts_end));
-        timeStr = `${fmtTime(e.ts_start)} – ${fmtTime(e.ts_end)}`;
+        timeStr = `${fmtStartTime(e.ts_start)} – ${fmtTime(e.ts_end)}`;
         metaStr = fmtDur(dur);
       } else {
-        timeStr = `${fmtTime(e.ts_start)} – ${t('still_sleeping')}`;
+        timeStr = `${fmtStartTime(e.ts_start)} – ${t('still_sleeping')}`;
       }
     }
     if (e.type === 'diaper' && m.diaper_type) metaStr = tMeta(m.diaper_type);
     if (e.type === 'nursing') {
-      if (e.ts_end) timeStr = `${fmtTime(e.ts_start)} – ${fmtTime(e.ts_end)}`;
+      if (e.ts_end) timeStr = `${fmtStartTime(e.ts_start)} – ${fmtTime(e.ts_end)}`;
       if (m.side) metaStr = tMeta(m.side);
     }
     if (e.type === 'bottle' && m.amount) metaStr = `${m.amount} ml`;
@@ -418,10 +422,10 @@ async function loadLog() {
     if (e.type === 'walk') {
       if (e.ts_end) {
         const dur = Math.round(durMin(e.ts_start, e.ts_end));
-        timeStr = `${fmtTime(e.ts_start)} – ${fmtTime(e.ts_end)}`;
+        timeStr = `${fmtStartTime(e.ts_start)} – ${fmtTime(e.ts_end)}`;
         metaStr = fmtDur(dur);
       } else {
-        timeStr = `${fmtTime(e.ts_start)} – ${t('still_walking')}`;
+        timeStr = `${fmtStartTime(e.ts_start)} – ${t('still_walking')}`;
       }
     }
 

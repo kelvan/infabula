@@ -182,8 +182,8 @@ async def get_entries(date: str = None, limit: int = 300):
     conn = get_db()
     if date:
         rows = conn.execute(
-            "SELECT * FROM entries WHERE date(ts_start)=? ORDER BY ts_start DESC",
-            (date,),
+            "SELECT * FROM entries WHERE date(ts_start)=? OR date(ts_end)=? ORDER BY ts_start DESC",
+            (date, date),
         ).fetchall()
     else:
         rows = conn.execute(
