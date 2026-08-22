@@ -83,11 +83,20 @@
 <script>
 (function() {
   var h = location.hash.slice(1);
-  if (h !== 'stats' && h !== 'settings') return;
-  document.getElementById('tab-log').classList.remove('active');
-  document.getElementById('tab-btn-log').classList.remove('active');
-  document.getElementById('tab-' + h).classList.add('active');
-  document.getElementById('tab-btn-' + h).classList.add('active');
+  if (h === 'stats' || h === 'settings') {
+    document.getElementById('tab-log').classList.remove('active');
+    document.getElementById('tab-btn-log').classList.remove('active');
+    document.getElementById('tab-' + h).classList.add('active');
+    document.getElementById('tab-btn-' + h).classList.add('active');
+  }
+  var v = localStorage.getItem('logView');
+  if (v === 'timeline') {
+    document.querySelectorAll('#log-view-toggle .range-pill').forEach(function(b) {
+      b.classList.toggle('active', b.dataset.view === v);
+    });
+    document.getElementById('log-list-view').style.display = 'none';
+    document.getElementById('timeline-view').style.display = '';
+  }
 })();
 </script>
 

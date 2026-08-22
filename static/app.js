@@ -467,9 +467,10 @@ async function deleteEntry(id) {
 }
 
 // ── Timeline ──
-let logView = 'list';
+let logView = localStorage.getItem('logView') || 'list';
 function setLogView(view) {
   logView = view;
+  localStorage.setItem('logView', view);
   document.querySelectorAll('#log-view-toggle .range-pill').forEach(b => b.classList.toggle('active', b.dataset.view === view));
   document.getElementById('log-list-view').style.display = view === 'list' ? '' : 'none';
   document.getElementById('timeline-view').style.display = view === 'timeline' ? '' : 'none';
@@ -1235,6 +1236,7 @@ function initEvents() {
 // ── Init ──
 initUI();
 updateDayNav();
+setLogView(logView);
 loadLog();
 initEvents();
 initSwipe();
