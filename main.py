@@ -73,6 +73,12 @@ def init_db():
             name TEXT NOT NULL
         )
     """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS settings (
+            key TEXT PRIMARY KEY,
+            value TEXT NOT NULL
+        )
+    """)
     conn.commit()
     conn.close()
 
@@ -225,6 +231,33 @@ async def set_ip_name(ip: str, request: Request):
         )
     else:
         conn.execute("DELETE FROM ip_names WHERE ip=?", (ip,))
+    conn.commit()
+    conn.close()
+    await broadcast_event("entries_changed")
+    return {"ok": True}
+
+
+@app.get("/api/settings")
+async def get_settings():
+    conn = get_db()
+    rows = conn.execute("SELECT key, value FROM settings").fetchall()
+    conn.close()
+    return {r["key"]: r["value"] for r in rows}
+
+
+@app.put("/api/settings/{key}")
+async def set_setting(key: str, request: Request):
+    body = await request.json()
+    value = (body.get("value") or "").strip()
+    conn = get_db()
+    if value:
+        conn.execute(
+            "INSERT INTO settings (key, value) VALUES (?, ?) "
+            "ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+            (key, value),
+        )
+    else:
+        conn.execute("DELETE FROM settings WHERE key=?", (key,))
     conn.commit()
     conn.close()
     await broadcast_event("entries_changed")

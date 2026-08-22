@@ -231,6 +231,9 @@ header .logo-svg { height: 38px; width: auto; }
 /* ── Stats ── */
 .stats-wrap { padding: 16px 20px 0; }
 .settings-wrap { padding: 16px 20px 0; }
+.birthday-row { display: flex; gap: 8px; margin-bottom: 18px; }
+.birthday-row input { flex: 1; padding: 9px 10px; border: 1.5px solid var(--border); border-radius: 8px; font-family: inherit; font-size: 0.85rem; background: var(--surface); color: var(--ink); }
+.birthday-row input:focus { outline: none; border-color: var(--accent); }
 .ip-name-row { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 14px; }
 .ip-avatar {
   width: 34px; height: 34px; border-radius: 50%; flex-shrink: 0; margin-top: 1px;

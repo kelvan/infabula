@@ -25,6 +25,7 @@ const I18N = {
     stat_asleep_since:'Schläft seit', stat_walking_since:'Läuft seit',
     no_data:'Keine Daten', not_enough_data:'Zu wenig Daten', no_sleep_data:'Noch keine Schlafdaten',
     settings_ip_names_title:'Geräte', settings_name_placeholder:'Name eingeben', settings_no_ips:'Noch keine Geräte bekannt',
+    settings_baby_title:'Baby',
     export_title:'Export', range_today:'Heute', range_week:'Diese Woche', range_month:'Diesen Monat', range_custom:'Frei wählen',
     btn_open_report:'Bericht öffnen', btn_download_csv:'CSV herunterladen',
     today:'Heute', yesterday:'Gestern',
@@ -65,6 +66,7 @@ const I18N = {
     stat_asleep_since:'Asleep since', stat_walking_since:'Walking since',
     no_data:'No data', not_enough_data:'Not enough data', no_sleep_data:'No sleep data yet',
     settings_ip_names_title:'Devices', settings_name_placeholder:'Enter name', settings_no_ips:'No devices seen yet',
+    settings_baby_title:'Baby',
     export_title:'Export', range_today:'Today', range_week:'This week', range_month:'This month', range_custom:'Custom',
     btn_open_report:'Open report', btn_download_csv:'Download CSV',
     today:'Today', yesterday:'Yesterday',
@@ -530,16 +532,23 @@ async function loadStats() {
 
 // ── Settings ──
 async function loadSettings() {
-  const res = await fetch('/api/ips');
-  const ips = await res.json();
+  const [ipsRes, settingsRes] = await Promise.all([fetch('/api/ips'), fetch('/api/settings')]);
+  const ips = await ipsRes.json();
+  const settings = await settingsRes.json();
   const el = document.getElementById('settings-content');
-  if (!ips.length) {
-    el.innerHTML = `<div class="empty">${t('settings_no_ips')}</div>`;
-    return;
-  }
-  el.innerHTML = `
-    <div class="section-title">${t('settings_ip_names_title')}</div>
-    ${ips.map(({ ip, name }) => `
+
+  let html = `
+    <div class="section-title">${t('settings_baby_title')}</div>
+    <div class="birthday-row">
+      <input type="date" id="birthday-input" value="${esc(settings.birthday || '')}">
+      <button class="btn-small" onclick="saveBirthday()">${t('btn_save')}</button>
+    </div>
+  `;
+
+  html += `<div class="section-title">${t('settings_ip_names_title')}</div>`;
+  html += !ips.length
+    ? `<div class="empty">${t('settings_no_ips')}</div>`
+    : ips.map(({ ip, name }) => `
       <div class="ip-name-row">
         <div class="ip-avatar" style="background:${getIpColor(name || ip)}">${esc(name ? name.charAt(0).toUpperCase() : '?')}</div>
         <div class="ip-name-fields">
@@ -550,8 +559,19 @@ async function loadSettings() {
           <span class="ip-name-ip">${esc(ip)}</span>
         </div>
       </div>
-    `).join('')}
-  `;
+    `).join('');
+
+  el.innerHTML = html;
+}
+
+async function saveBirthday() {
+  const value = document.getElementById('birthday-input').value;
+  await fetch('/api/settings/birthday', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ value }),
+  });
+  toast(t('toast_saved'));
 }
 
 async function saveIpName(btn) {
