@@ -510,7 +510,8 @@ function renderTimeline() {
 }
 
 function renderTimelineNarrow(sleeps, walks, feeds, diapers, moods, nowMin) {
-  const px = 30, gridH = px * 24, laneW = 132, barW = 56, moodColW = 24, totalW = laneW * 2 + moodColW;
+  const px = 30, gridH = px * 24, barW = 56;
+  const moodColW = moods.length ? 24 : 0, laneW = (288 - moodColW) / 2, totalW = laneW * 2 + moodColW;
   const sleepLeft = (laneW - barW) / 2, walkLeft = laneW + (laneW - barW) / 2;
 
   let bars = '';
@@ -573,7 +574,7 @@ function renderTimelineNarrow(sleeps, walks, feeds, diapers, moods, nowMin) {
         </div>
         <div style="position:relative;height:${gridH}px;margin-left:30px;">
           <div style="position:absolute;left:${laneW}px;top:0;width:1px;height:${gridH}px;background:var(--border);"></div>
-          <div style="position:absolute;left:${laneW*2}px;top:0;width:1px;height:${gridH}px;background:var(--border);"></div>
+          ${moodColW ? `<div style="position:absolute;left:${laneW*2}px;top:0;width:1px;height:${gridH}px;background:var(--border);"></div>` : ''}
           ${hours}${lines}${bars}${moodMarks}${nowLine}
         </div>
       </div>
