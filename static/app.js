@@ -520,12 +520,12 @@ function renderTimelineNarrow(sleeps, walks, feeds, diapers, nowMin) {
 
   let lines = '';
   feeds.forEach(e => {
-    const top = dayMinutes(e.ts_start) / 60 * px - 1;
-    lines += `<div style="position:absolute;left:0px;top:${top}px;width:${laneW*2}px;height:2px;background:var(--feed);opacity:0.55;"></div>`;
+    const top = dayMinutes(e.ts_start) / 60 * px - 2;
+    lines += `<div style="position:absolute;left:0px;top:${top}px;width:${laneW*2}px;height:4px;background:rgba(160,90,114,0.35);border-top:1px solid var(--feed);border-bottom:1px solid var(--feed);"></div>`;
   });
   diapers.forEach(e => {
-    const top = dayMinutes(e.ts_start) / 60 * px - 1;
-    lines += `<div style="position:absolute;left:0px;top:${top}px;width:${laneW*2}px;height:2px;background:var(--accent);opacity:0.55;"></div>`;
+    const top = dayMinutes(e.ts_start) / 60 * px - 2;
+    lines += `<div style="position:absolute;left:0px;top:${top}px;width:${laneW*2}px;height:4px;background:rgba(184,134,58,0.35);border-top:1px solid var(--accent);border-bottom:1px solid var(--accent);"></div>`;
   });
 
   let hours = '';
@@ -582,12 +582,12 @@ function renderTimelineWide(sleeps, walks, feeds, diapers, nowMin) {
 
   let lines = '';
   feeds.forEach(e => {
-    const left = dayMinutes(e.ts_start) / 60 * px - 1;
-    lines += `<div style="position:absolute;left:${left}px;top:0;width:2px;height:${rowH*2}px;background:var(--feed);opacity:0.55;"></div>`;
+    const left = dayMinutes(e.ts_start) / 60 * px - 2;
+    lines += `<div style="position:absolute;left:${left}px;top:0;width:4px;height:${rowH*2}px;background:rgba(160,90,114,0.35);border-left:1px solid var(--feed);border-right:1px solid var(--feed);"></div>`;
   });
   diapers.forEach(e => {
-    const left = dayMinutes(e.ts_start) / 60 * px - 1;
-    lines += `<div style="position:absolute;left:${left}px;top:0;width:2px;height:${rowH*2}px;background:var(--accent);opacity:0.55;"></div>`;
+    const left = dayMinutes(e.ts_start) / 60 * px - 2;
+    lines += `<div style="position:absolute;left:${left}px;top:0;width:4px;height:${rowH*2}px;background:rgba(184,134,58,0.35);border-left:1px solid var(--accent);border-right:1px solid var(--accent);"></div>`;
   });
 
   let hours = '';
