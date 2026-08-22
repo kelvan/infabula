@@ -521,30 +521,34 @@ function renderTimelineNarrow(sleeps, walks, feeds, diapers, moods, nowMin, grid
     const start = dayMinutes(e.ts_start);
     const top = start / 60 * px;
     const h = Math.max((spanEndMinutes(e, nowMin) - start) / 60 * px, 4);
-    bars += `<div style="position:absolute;left:${sleepLeft}px;top:${top}px;width:${barW}px;height:${h}px;background:var(--sleep-soft);border:1.5px solid var(--sleep);border-radius:8px;"></div>`;
+    bars += `<div style="position:absolute;left:${sleepLeft}px;top:${top}px;width:${barW}px;height:${h}px;background:var(--sleep-soft);border:1.5px solid var(--sleep);border-radius:8px;cursor:pointer;" onclick="openEditModal(${e.id})"></div>`;
   });
   walks.forEach(e => {
     const start = dayMinutes(e.ts_start);
     const top = start / 60 * px;
     const h = Math.max((spanEndMinutes(e, nowMin) - start) / 60 * px, 4);
-    bars += `<div style="position:absolute;left:${walkLeft}px;top:${top}px;width:${barW}px;height:${h}px;background:var(--walk-soft);border:1.5px solid var(--walk);border-radius:8px;"></div>`;
+    bars += `<div style="position:absolute;left:${walkLeft}px;top:${top}px;width:${barW}px;height:${h}px;background:var(--walk-soft);border:1.5px solid var(--walk);border-radius:8px;cursor:pointer;" onclick="openEditModal(${e.id})"></div>`;
   });
 
   let lines = '';
   feeds.forEach(e => {
-    const top = dayMinutes(e.ts_start) / 60 * px - 2;
-    lines += `<div style="position:absolute;left:0px;top:${top}px;width:${laneW*2}px;height:4px;background:rgba(160,90,114,0.35);border-top:1px solid var(--feed);border-bottom:1px solid var(--feed);"></div>`;
+    const center = dayMinutes(e.ts_start) / 60 * px;
+    lines += `<div style="position:absolute;left:0px;top:${center-8}px;width:${laneW*2}px;height:16px;cursor:pointer;" onclick="openEditModal(${e.id})">
+      <div style="position:absolute;left:0;top:6px;width:100%;height:4px;background:rgba(160,90,114,0.35);border-top:1px solid var(--feed);border-bottom:1px solid var(--feed);"></div>
+    </div>`;
   });
   diapers.forEach(e => {
-    const top = dayMinutes(e.ts_start) / 60 * px - 2;
-    lines += `<div style="position:absolute;left:0px;top:${top}px;width:${laneW*2}px;height:4px;background:rgba(184,134,58,0.35);border-top:1px solid var(--accent);border-bottom:1px solid var(--accent);"></div>`;
+    const center = dayMinutes(e.ts_start) / 60 * px;
+    lines += `<div style="position:absolute;left:0px;top:${center-8}px;width:${laneW*2}px;height:16px;cursor:pointer;" onclick="openEditModal(${e.id})">
+      <div style="position:absolute;left:0;top:6px;width:100%;height:4px;background:rgba(184,134,58,0.35);border-top:1px solid var(--accent);border-bottom:1px solid var(--accent);"></div>
+    </div>`;
   });
 
   let moodMarks = '';
   moods.forEach(e => {
-    const top = dayMinutes(e.ts_start) / 60 * px - 8;
+    const center = dayMinutes(e.ts_start) / 60 * px;
     const emoji = MOOD_EMOJI[e.meta?.mood] || MOOD_EMOJI.neutral;
-    moodMarks += `<div style="position:absolute;left:${laneW*2}px;top:${top}px;width:${moodColW}px;text-align:center;font-size:15px;line-height:1;">${emoji}</div>`;
+    moodMarks += `<div style="position:absolute;left:${laneW*2}px;top:${center-10}px;width:${moodColW}px;height:20px;display:flex;align-items:center;justify-content:center;font-size:15px;line-height:1;cursor:pointer;" onclick="openEditModal(${e.id})">${emoji}</div>`;
   });
 
   let hours = '';
@@ -592,30 +596,34 @@ function renderTimelineWide(sleeps, walks, feeds, diapers, moods, nowMin) {
     const start = dayMinutes(e.ts_start);
     const left = start / 60 * px;
     const w = Math.max((spanEndMinutes(e, nowMin) - start) / 60 * px, 4);
-    bars += `<div style="position:absolute;left:${left}px;top:20px;width:${w}px;height:${barH}px;background:var(--sleep-soft);border:1.5px solid var(--sleep);border-radius:8px;"></div>`;
+    bars += `<div style="position:absolute;left:${left}px;top:20px;width:${w}px;height:${barH}px;background:var(--sleep-soft);border:1.5px solid var(--sleep);border-radius:8px;cursor:pointer;" onclick="openEditModal(${e.id})"></div>`;
   });
   walks.forEach(e => {
     const start = dayMinutes(e.ts_start);
     const left = start / 60 * px;
     const w = Math.max((spanEndMinutes(e, nowMin) - start) / 60 * px, 4);
-    bars += `<div style="position:absolute;left:${left}px;top:${rowH+20}px;width:${w}px;height:${barH}px;background:var(--walk-soft);border:1.5px solid var(--walk);border-radius:8px;"></div>`;
+    bars += `<div style="position:absolute;left:${left}px;top:${rowH+20}px;width:${w}px;height:${barH}px;background:var(--walk-soft);border:1.5px solid var(--walk);border-radius:8px;cursor:pointer;" onclick="openEditModal(${e.id})"></div>`;
   });
 
   let lines = '';
   feeds.forEach(e => {
-    const left = dayMinutes(e.ts_start) / 60 * px - 2;
-    lines += `<div style="position:absolute;left:${left}px;top:0;width:4px;height:${rowH*2}px;background:rgba(160,90,114,0.35);border-left:1px solid var(--feed);border-right:1px solid var(--feed);"></div>`;
+    const center = dayMinutes(e.ts_start) / 60 * px;
+    lines += `<div style="position:absolute;left:${center-8}px;top:0;width:16px;height:${rowH*2}px;cursor:pointer;" onclick="openEditModal(${e.id})">
+      <div style="position:absolute;left:6px;top:0;width:4px;height:100%;background:rgba(160,90,114,0.35);border-left:1px solid var(--feed);border-right:1px solid var(--feed);"></div>
+    </div>`;
   });
   diapers.forEach(e => {
-    const left = dayMinutes(e.ts_start) / 60 * px - 2;
-    lines += `<div style="position:absolute;left:${left}px;top:0;width:4px;height:${rowH*2}px;background:rgba(184,134,58,0.35);border-left:1px solid var(--accent);border-right:1px solid var(--accent);"></div>`;
+    const center = dayMinutes(e.ts_start) / 60 * px;
+    lines += `<div style="position:absolute;left:${center-8}px;top:0;width:16px;height:${rowH*2}px;cursor:pointer;" onclick="openEditModal(${e.id})">
+      <div style="position:absolute;left:6px;top:0;width:4px;height:100%;background:rgba(184,134,58,0.35);border-left:1px solid var(--accent);border-right:1px solid var(--accent);"></div>
+    </div>`;
   });
 
   let moodMarks = '';
   moods.forEach(e => {
-    const left = dayMinutes(e.ts_start) / 60 * px - 8;
+    const center = dayMinutes(e.ts_start) / 60 * px;
     const emoji = MOOD_EMOJI[e.meta?.mood] || MOOD_EMOJI.neutral;
-    moodMarks += `<div style="position:absolute;left:${left}px;top:0;width:16px;text-align:center;font-size:15px;line-height:1;">${emoji}</div>`;
+    moodMarks += `<div style="position:absolute;left:${center-10}px;top:0;width:20px;height:20px;display:flex;align-items:center;justify-content:center;font-size:15px;line-height:1;cursor:pointer;" onclick="openEditModal(${e.id})">${emoji}</div>`;
   });
 
   let hours = '';
