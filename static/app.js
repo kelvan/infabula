@@ -504,14 +504,15 @@ function renderTimeline() {
   const nowMin = isToday ? now.getHours() * 60 + now.getMinutes() : null;
 
   const wide = window.matchMedia('(min-width: 640px)').matches;
+  const gridW = Math.max(wrap.clientWidth - 40 - 30, 240);
   wrap.innerHTML = wide
     ? renderTimelineWide(sleeps, walks, feeds, diapers, moods, nowMin)
-    : renderTimelineNarrow(sleeps, walks, feeds, diapers, moods, nowMin);
+    : renderTimelineNarrow(sleeps, walks, feeds, diapers, moods, nowMin, gridW);
 }
 
-function renderTimelineNarrow(sleeps, walks, feeds, diapers, moods, nowMin) {
+function renderTimelineNarrow(sleeps, walks, feeds, diapers, moods, nowMin, gridW) {
   const px = 30, gridH = px * 24, barW = 56;
-  const moodColW = moods.length ? 24 : 0, laneW = (288 - moodColW) / 2, totalW = laneW * 2 + moodColW;
+  const moodColW = moods.length ? 24 : 0, laneW = (gridW - moodColW) / 2, totalW = laneW * 2 + moodColW;
   const sleepLeft = (laneW - barW) / 2, walkLeft = laneW + (laneW - barW) / 2;
 
   let bars = '';
