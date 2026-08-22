@@ -271,6 +271,13 @@ header .logo-svg { height: 38px; width: auto; }
 }
 .btn-small.secondary { background: var(--surface2); color: var(--ink); border: 1.5px solid var(--border); }
 .range-pills { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+.view-toggle { display: flex; gap: 8px; padding: 14px 20px 0; }
+.timeline-wrap { padding: 16px 20px 20px; }
+.tl-legend { display: flex; gap: 16px; margin-bottom: 10px; }
+.tl-legend-item { display: flex; align-items: center; gap: 5px; }
+.tl-legend-swatch { width: 12px; height: 2px; display: inline-block; }
+.tl-lane-header { display: flex; align-items: center; justify-content: center; gap: 5px; }
+.timeline-wrap .ic { width: 14px; height: 14px; stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 .range-pill {
   background: var(--surface); border: 1.5px solid var(--border); border-radius: 20px;
   padding: 7px 14px; font-family: ui-monospace, 'Cascadia Code', 'Source Code Pro', monospace;

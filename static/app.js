@@ -27,6 +27,7 @@ const I18N = {
     settings_ip_names_title:'Geräte', settings_name_placeholder:'Name eingeben', settings_no_ips:'Noch keine Geräte bekannt',
     settings_baby_title:'Baby',
     export_title:'Export', range_today:'Heute', range_week:'Diese Woche', range_month:'Diesen Monat', range_custom:'Frei wählen',
+    view_list:'Liste', view_timeline:'Zeitstrahl', tl_now:'JETZT',
     btn_open_report:'Bericht öffnen', btn_download_csv:'CSV herunterladen',
     today:'Heute', yesterday:'Gestern',
     just_now:'gerade eben',
@@ -68,6 +69,7 @@ const I18N = {
     settings_ip_names_title:'Devices', settings_name_placeholder:'Enter name', settings_no_ips:'No devices seen yet',
     settings_baby_title:'Baby',
     export_title:'Export', range_today:'Today', range_week:'This week', range_month:'This month', range_custom:'Custom',
+    view_list:'List', view_timeline:'Timeline', tl_now:'NOW',
     btn_open_report:'Open report', btn_download_csv:'Download CSV',
     today:'Today', yesterday:'Yesterday',
     just_now:'just now',
@@ -150,6 +152,8 @@ function initUI() {
   document.querySelector('.range-pill[data-range=week]').textContent = t('range_week');
   document.querySelector('.range-pill[data-range=month]').textContent = t('range_month');
   document.querySelector('.range-pill[data-range=custom]').textContent = t('range_custom');
+  document.querySelector('#log-view-toggle .range-pill[data-view=list]').textContent = t('view_list');
+  document.querySelector('#log-view-toggle .range-pill[data-view=timeline]').textContent = t('view_timeline');
   document.getElementById('export-report-btn').textContent = t('btn_open_report');
   document.getElementById('export-csv-btn').textContent = t('btn_download_csv');
 }
@@ -395,6 +399,7 @@ async function loadLog() {
   const list = document.getElementById('entry-list');
   if (!entries.length) {
     list.innerHTML = `<div class="empty">${t('no_entries')}</div>`;
+    if (logView === 'timeline') renderTimeline();
     return;
   }
 
@@ -445,6 +450,7 @@ async function loadLog() {
       </div>
     `;
   }).join('');
+  if (logView === 'timeline') renderTimeline();
 }
 
 async function deleteEntry(id) {
@@ -452,6 +458,170 @@ async function deleteEntry(id) {
   await fetch('/api/entries/'+id, { method: 'DELETE' });
   toast(t('toast_deleted'));
   loadLog();
+}
+
+// ── Timeline ──
+let logView = 'list';
+function setLogView(view) {
+  logView = view;
+  document.querySelectorAll('#log-view-toggle .range-pill').forEach(b => b.classList.toggle('active', b.dataset.view === view));
+  document.getElementById('log-list-view').style.display = view === 'list' ? '' : 'none';
+  document.getElementById('timeline-view').style.display = view === 'timeline' ? '' : 'none';
+  if (view === 'timeline') renderTimeline();
+}
+
+function dayMinutes(iso) {
+  const d = iso.slice(0, 10);
+  if (d < currentDate) return 0;
+  if (d > currentDate) return 1440;
+  const [h, m] = iso.slice(11, 16).split(':').map(Number);
+  return h * 60 + m;
+}
+function spanEndMinutes(e, nowMin) {
+  if (e.ts_end) return dayMinutes(e.ts_end);
+  return nowMin != null ? nowMin : 1440;
+}
+
+function renderTimeline() {
+  const wrap = document.getElementById('timeline-view');
+  if (!wrap) return;
+  const entries = currentEntries;
+  const sleeps = entries.filter(e => e.type === 'sleep');
+  const walks = entries.filter(e => e.type === 'walk');
+  const feeds = entries.filter(e => e.type === 'nursing' || e.type === 'bottle');
+  const diapers = entries.filter(e => e.type === 'diaper');
+  const isToday = currentDate === todayStr();
+  const now = new Date();
+  const nowMin = isToday ? now.getHours() * 60 + now.getMinutes() : null;
+
+  const wide = window.matchMedia('(min-width: 640px)').matches;
+  wrap.innerHTML = wide
+    ? renderTimelineWide(sleeps, walks, feeds, diapers, nowMin)
+    : renderTimelineNarrow(sleeps, walks, feeds, diapers, nowMin);
+}
+
+function renderTimelineNarrow(sleeps, walks, feeds, diapers, nowMin) {
+  const px = 30, gridH = px * 24, laneW = 144, barW = 56;
+  const sleepLeft = (laneW - barW) / 2, walkLeft = laneW + (laneW - barW) / 2;
+
+  let bars = '';
+  sleeps.forEach(e => {
+    const start = dayMinutes(e.ts_start);
+    const top = start / 60 * px;
+    const h = Math.max((spanEndMinutes(e, nowMin) - start) / 60 * px, 4);
+    bars += `<div style="position:absolute;left:${sleepLeft}px;top:${top}px;width:${barW}px;height:${h}px;background:var(--sleep-soft);border:1.5px solid var(--sleep);border-radius:8px;"></div>`;
+  });
+  walks.forEach(e => {
+    const start = dayMinutes(e.ts_start);
+    const top = start / 60 * px;
+    const h = Math.max((spanEndMinutes(e, nowMin) - start) / 60 * px, 4);
+    bars += `<div style="position:absolute;left:${walkLeft}px;top:${top}px;width:${barW}px;height:${h}px;background:var(--walk-soft);border:1.5px solid var(--walk);border-radius:8px;"></div>`;
+  });
+
+  let lines = '';
+  feeds.forEach(e => {
+    const top = dayMinutes(e.ts_start) / 60 * px - 1;
+    lines += `<div style="position:absolute;left:0px;top:${top}px;width:${laneW*2}px;height:2px;background:var(--feed);opacity:0.55;"></div>`;
+  });
+  diapers.forEach(e => {
+    const top = dayMinutes(e.ts_start) / 60 * px - 1;
+    lines += `<div style="position:absolute;left:0px;top:${top}px;width:${laneW*2}px;height:2px;background:var(--accent);opacity:0.55;"></div>`;
+  });
+
+  let hours = '';
+  for (let h = 0; h <= 24; h++) {
+    const top = h * px;
+    hours += `<div style="position:absolute;left:0;top:${top}px;width:${laneW*2}px;height:1px;background:var(--border);"></div>`;
+    if (h % 6 === 0) hours += `<div style="position:absolute;left:-30px;top:${top-5}px;width:26px;text-align:right;font-family:var(--tl-mono);font-size:9px;color:var(--ink2);">${pad(h)}</div>`;
+  }
+
+  let nowLine = '';
+  if (nowMin != null) {
+    const top = nowMin / 60 * px;
+    nowLine = `
+      <div style="position:absolute;left:-30px;top:${top}px;width:${laneW*2+30}px;height:0;border-top:1.5px dashed var(--accent-ink);z-index:5;"></div>
+      <div style="position:absolute;left:-30px;top:${top-11}px;background:var(--accent-ink);color:#fff;font-family:var(--tl-mono);font-size:8px;letter-spacing:0.05em;padding:2px 4px;border-radius:4px;z-index:5;">${t('tl_now')}</div>`;
+  }
+
+  return `
+    <div class="timeline-wrap" style="--tl-mono:ui-monospace,'Cascadia Code','Source Code Pro',monospace;">
+      <div style="position:relative;">
+        <div style="display:flex;margin-left:30px;margin-bottom:4px;">
+          <div class="tl-lane-header" style="width:${laneW}px;color:var(--sleep);">${icon('sleep')}<span class="lbl" style="font-size:10px;">${t('types').sleep}</span></div>
+          <div class="tl-lane-header" style="width:${laneW}px;color:var(--walk);">${icon('walk')}<span class="lbl" style="font-size:10px;">${t('types').walk}</span></div>
+        </div>
+        <div class="tl-legend" style="margin-left:30px;">
+          <div class="tl-legend-item"><span class="tl-legend-swatch" style="background:var(--feed);"></span><span class="lbl" style="font-size:9px;color:var(--feed);">${t('types').feeding}</span></div>
+          <div class="tl-legend-item"><span class="tl-legend-swatch" style="background:var(--accent);"></span><span class="lbl" style="font-size:9px;color:var(--accent-ink);">${t('types').diaper}</span></div>
+        </div>
+        <div style="position:relative;height:${gridH}px;margin-left:30px;">
+          <div style="position:absolute;left:${laneW}px;top:0;width:1px;height:${gridH}px;background:var(--border);"></div>
+          ${hours}${lines}${bars}${nowLine}
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function renderTimelineWide(sleeps, walks, feeds, diapers, nowMin) {
+  const px = 28, trackW = px * 24, rowH = 80, barH = 40;
+
+  let bars = '';
+  sleeps.forEach(e => {
+    const start = dayMinutes(e.ts_start);
+    const left = start / 60 * px;
+    const w = Math.max((spanEndMinutes(e, nowMin) - start) / 60 * px, 4);
+    bars += `<div style="position:absolute;left:${left}px;top:20px;width:${w}px;height:${barH}px;background:var(--sleep-soft);border:1.5px solid var(--sleep);border-radius:8px;"></div>`;
+  });
+  walks.forEach(e => {
+    const start = dayMinutes(e.ts_start);
+    const left = start / 60 * px;
+    const w = Math.max((spanEndMinutes(e, nowMin) - start) / 60 * px, 4);
+    bars += `<div style="position:absolute;left:${left}px;top:${rowH+20}px;width:${w}px;height:${barH}px;background:var(--walk-soft);border:1.5px solid var(--walk);border-radius:8px;"></div>`;
+  });
+
+  let lines = '';
+  feeds.forEach(e => {
+    const left = dayMinutes(e.ts_start) / 60 * px - 1;
+    lines += `<div style="position:absolute;left:${left}px;top:0;width:2px;height:${rowH*2}px;background:var(--feed);opacity:0.55;"></div>`;
+  });
+  diapers.forEach(e => {
+    const left = dayMinutes(e.ts_start) / 60 * px - 1;
+    lines += `<div style="position:absolute;left:${left}px;top:0;width:2px;height:${rowH*2}px;background:var(--accent);opacity:0.55;"></div>`;
+  });
+
+  let hours = '';
+  for (let h = 0; h <= 24; h += 3) {
+    const left = h * px;
+    hours += `<div style="position:absolute;left:${left}px;top:0;width:1px;height:${rowH*2}px;background:var(--border);"></div>`;
+    hours += `<span style="position:absolute;left:${left}px;top:-22px;font-family:var(--tl-mono);font-size:10px;color:var(--ink2);">${pad(h)}</span>`;
+  }
+
+  let nowLine = '';
+  if (nowMin != null) {
+    const left = nowMin / 60 * px;
+    nowLine = `
+      <div style="position:absolute;left:${left}px;top:-4px;width:0;height:${rowH*2+8}px;border-left:1.5px dashed var(--accent-ink);z-index:5;"></div>
+      <div style="position:absolute;left:${left-19}px;top:-18px;background:var(--accent-ink);color:#fff;font-family:var(--tl-mono);font-size:8px;letter-spacing:0.05em;padding:2px 4px;border-radius:4px;z-index:5;">${t('tl_now')}</div>`;
+  }
+
+  return `
+    <div class="timeline-wrap" style="--tl-mono:ui-monospace,'Cascadia Code','Source Code Pro',monospace;">
+      <div style="position:relative;margin-left:70px;">
+        <div style="position:relative;height:18px;margin-bottom:8px;">${hours}</div>
+        <div style="position:relative;width:${trackW}px;height:${rowH*2}px;">
+          <div style="position:absolute;left:0;top:${rowH}px;width:${trackW}px;height:1px;background:var(--border);"></div>
+          <div style="position:absolute;left:-70px;top:0;width:62px;height:${rowH}px;display:flex;align-items:center;gap:5px;color:var(--sleep);">${icon('sleep')}<span class="lbl" style="font-size:10px;">${t('types').sleep}</span></div>
+          <div style="position:absolute;left:-70px;top:${rowH}px;width:62px;height:${rowH}px;display:flex;align-items:center;gap:5px;color:var(--walk);">${icon('walk')}<span class="lbl" style="font-size:10px;">${t('types').walk}</span></div>
+          ${lines}${bars}${nowLine}
+        </div>
+        <div class="tl-legend" style="margin-top:12px;">
+          <div class="tl-legend-item"><span class="tl-legend-swatch" style="background:var(--feed);"></span><span class="lbl" style="font-size:9px;color:var(--feed);">${t('types').feeding}</span></div>
+          <div class="tl-legend-item"><span class="tl-legend-swatch" style="background:var(--accent);"></span><span class="lbl" style="font-size:9px;color:var(--accent-ink);">${t('types').diaper}</span></div>
+        </div>
+      </div>
+    </div>
+  `;
 }
 
 // ── Stats ──
@@ -1011,3 +1181,12 @@ document.getElementById('export-start').value = todayStr();
 document.getElementById('export-end').value = todayStr();
 const initialTab = TAB_ORDER.includes(location.hash.slice(1)) ? location.hash.slice(1) : 'log';
 if (initialTab !== 'log') switchTab(initialTab);
+
+let tlResizeTimer;
+window.addEventListener('resize', () => {
+  clearTimeout(tlResizeTimer);
+  tlResizeTimer = setTimeout(() => { if (logView === 'timeline') renderTimeline(); }, 200);
+});
+setInterval(() => {
+  if (logView === 'timeline' && document.getElementById('tab-log').classList.contains('active')) renderTimeline();
+}, 60000);
