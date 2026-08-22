@@ -14,6 +14,8 @@
   --walk-soft: #eaf0e3;
   --feed: #a05a72;
   --feed-soft: #f4e2e7;
+  --mood: #7a6a9e;
+  --mood-soft: #e9e5f2;
   --border: #e4dac6;
   --radius: 16px;
   --shadow: 0 4px 16px rgba(51,39,27,0.08);
@@ -193,6 +195,7 @@ header .logo-svg { height: 38px; width: auto; }
 .entry-icon .ic { width: 19px; height: 19px; stroke: currentColor; fill: none; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
 .entry-icon.tint-accent { background: var(--accent-soft); color: var(--accent-ink); }
 .entry-icon.tint-feed { background: var(--feed-soft); color: var(--feed); }
+.entry-icon.tint-mood { background: var(--mood-soft); color: var(--mood); }
 .entry-icon.tint-sleep { background: var(--sleep-soft); color: var(--sleep); }
 .entry-icon.tint-walk { background: var(--walk-soft); color: var(--walk); }
 .entry-body { flex: 1; min-width: 0; }

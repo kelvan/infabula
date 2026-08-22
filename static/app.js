@@ -1,18 +1,19 @@
 // ── i18n ──
 const I18N = {
   de: {
-    types: { diaper:'Windel', nursing:'Stillen', bottle:'Fläschchen', sleep:'Schlaf', weight:'Gewicht', note:'Notiz', walk:'Spaziergang', clothing:'Kleidung', feeding:'Fütterung' },
+    types: { diaper:'Windel', nursing:'Stillen', bottle:'Fläschchen', sleep:'Schlaf', weight:'Gewicht', note:'Notiz', walk:'Spaziergang', clothing:'Kleidung', feeding:'Fütterung', mood:'Stimmung' },
     tab_log:'Verlauf', tab_stats:'Auswertung', tab_settings:'Einstellungen',
     modal_new:'Neuer Eintrag',
     tile_diaper:'Windel', tile_nursing:'Stillen', tile_bottle:'Fläschchen',
     tile_sleep_start:'Eingeschlafen', tile_weight:'Gewicht', tile_note:'Notiz', tile_wakeup:'Aufgewacht',
-    tile_walk:'Spaziergang', tile_clothing:'Kleidung wechseln', tile_walk_end:'Zurück',
+    tile_walk:'Spaziergang', tile_clothing:'Kleidung wechseln', tile_walk_end:'Zurück', tile_mood:'Stimmung',
     fab_title:'Neuer Eintrag',
     lbl_time:'Zeitpunkt', lbl_note:'Notiz', lbl_type:'Art', lbl_amount:'Menge (ml)',
-    lbl_content:'Inhalt', lbl_side:'Seite', lbl_start:'Beginn', lbl_end:'Ende', lbl_weight_g:'Gewicht (g)',
+    lbl_content:'Inhalt', lbl_side:'Seite', lbl_start:'Beginn', lbl_end:'Ende', lbl_weight_g:'Gewicht (g)', lbl_mood:'Stimmung',
     opt_wet:'Nass', opt_dirty:'Schmutzig', opt_both:'Beides',
     opt_left:'Links', opt_right:'Rechts', opt_both_sides:'Beide',
     opt_pumped:'Abgepumpte Milch', opt_formula:'Formulamilch',
+    opt_mood_happy:'Fröhlich', opt_mood_neutral:'Neutral', opt_mood_fussy:'Quengelig', opt_mood_crying:'Weint',
     btn_save_sleep:'Eingeschlafen speichern', btn_save:'Speichern',
     banner_since:'Schläft seit', banner_so_far:'Schlaf bisher', banner_wakeup:'Aufgewacht',
     banner_walk_since:'Spaziergang seit', banner_walk_so_far:'Spaziergang bisher',
@@ -43,18 +44,19 @@ const I18N = {
     lang_switch:'EN',
   },
   en: {
-    types: { diaper:'Diaper', nursing:'Nursing', bottle:'Bottle', sleep:'Sleep', weight:'Weight', note:'Note', walk:'Walk', clothing:'Clothing', feeding:'Feeding' },
+    types: { diaper:'Diaper', nursing:'Nursing', bottle:'Bottle', sleep:'Sleep', weight:'Weight', note:'Note', walk:'Walk', clothing:'Clothing', feeding:'Feeding', mood:'Mood' },
     tab_log:'Log', tab_stats:'Stats', tab_settings:'Settings',
     modal_new:'New Entry',
     tile_diaper:'Diaper', tile_nursing:'Nursing', tile_bottle:'Bottle',
     tile_sleep_start:'Fell asleep', tile_weight:'Weight', tile_note:'Note', tile_wakeup:'Woke up',
-    tile_walk:'Walk', tile_clothing:'Clothing change', tile_walk_end:'Back',
+    tile_walk:'Walk', tile_clothing:'Clothing change', tile_walk_end:'Back', tile_mood:'Mood',
     fab_title:'New Entry',
     lbl_time:'Time', lbl_note:'Note', lbl_type:'Type', lbl_amount:'Amount (ml)',
-    lbl_content:'Content', lbl_side:'Side', lbl_start:'Start', lbl_end:'End', lbl_weight_g:'Weight (g)',
+    lbl_content:'Content', lbl_side:'Side', lbl_start:'Start', lbl_end:'End', lbl_weight_g:'Weight (g)', lbl_mood:'Mood',
     opt_wet:'Wet', opt_dirty:'Dirty', opt_both:'Both',
     opt_left:'Left', opt_right:'Right', opt_both_sides:'Both',
     opt_pumped:'Pumped milk', opt_formula:'Formula',
+    opt_mood_happy:'Happy', opt_mood_neutral:'Neutral', opt_mood_fussy:'Fussy', opt_mood_crying:'Crying',
     btn_save_sleep:'Save fell asleep', btn_save:'Save',
     banner_since:'Sleeping since', banner_so_far:'sleep so far', banner_wakeup:'Woke up',
     banner_walk_since:'Walking since', banner_walk_so_far:'walk so far',
@@ -93,6 +95,7 @@ const META_VALS = {
   links:{de:'Links',en:'Left'}, rechts:{de:'Rechts',en:'Right'}, beide:{de:'Beide',en:'Both'},
   left:{de:'Links',en:'Left'}, right:{de:'Rechts',en:'Right'},
   abgepumpt:{de:'Abgepumpt',en:'Pumped'}, formula:{de:'Formula',en:'Formula'},
+  happy:{de:'Fröhlich',en:'Happy'}, neutral:{de:'Neutral',en:'Neutral'}, fussy:{de:'Quengelig',en:'Fussy'}, crying:{de:'Weint',en:'Crying'},
 };
 
 const ICONS = {
@@ -108,6 +111,7 @@ const ICONS = {
   clothing: '<path d="M8.5 4 5.8 5.7a1.4 1.4 0 0 0-.5 1.8L6.6 10l1.9-.9v9.4a1 1 0 0 0 1 1h5a1 1 0 0 0 1-1V9.1l1.9.9 1.3-2.5a1.4 1.4 0 0 0-.5-1.8L15.5 4a4 4 0 0 1-7 0Z"/>',
   sun: '<circle cx="12" cy="12" r="4.2"/><path d="M12 3v2.2M12 18.8V21M21 12h-2.2M5.2 12H3M18.4 5.6l-1.5 1.5M7.1 16.9l-1.5 1.5M18.4 18.4l-1.5-1.5M7.1 7.1 5.6 5.6"/>',
   home: '<path d="M4 11 12 4l8 7"/><path d="M6 10v9.5a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1V10"/><path d="M10 20.5V15h4v5.5"/>',
+  mood: '<circle cx="12" cy="12" r="8.3"/><circle cx="9.2" cy="10.3" r=".9"/><circle cx="14.8" cy="10.3" r=".9"/><path d="M8.3 14.5c1 1.6 2.3 2.5 3.7 2.5s2.7-.9 3.7-2.5"/>',
 };
 function icon(name) { return `<svg viewBox="0 0 24 24" class="ic">${ICONS[name] || ''}</svg>`; }
 function typeIcon(name) { return name === 'sleep' ? icon('zzz') : icon(name); }
@@ -115,6 +119,7 @@ function typeTint(type) {
   if (type === 'sleep') return 'sleep';
   if (type === 'walk') return 'walk';
   if (type === 'nursing' || type === 'bottle' || type === 'feeding') return 'feed';
+  if (type === 'mood') return 'mood';
   return 'accent';
 }
 
@@ -143,7 +148,7 @@ function initUI() {
   document.querySelector('#tab-btn-stats .tab-lbl').textContent = t('tab_stats');
   document.querySelector('#tab-btn-settings .tab-lbl').textContent = t('tab_settings');
   document.getElementById('fab').title = t('fab_title');
-  ['diaper','nursing','bottle','sleep_start','weight','note','walk','clothing'].forEach(k => {
+  ['diaper','nursing','bottle','sleep_start','weight','note','walk','clothing','mood'].forEach(k => {
     const el = document.getElementById('tile-'+k);
     if (el) el.querySelector('.t-label').textContent = t('tile_'+k);
   });
@@ -426,6 +431,7 @@ async function loadLog() {
     }
     if (e.type === 'bottle' && m.amount) metaStr = `${m.amount} ml`;
     if (e.type === 'weight' && m.weight) metaStr = `${m.weight} g`;
+    if (e.type === 'mood' && m.mood) metaStr = tMeta(m.mood);
     if (e.type === 'walk') {
       if (e.ts_end) {
         const dur = Math.round(durMin(e.ts_start, e.ts_end));
@@ -902,6 +908,21 @@ function selectType(type) {
       <div class="field"><label>${t('lbl_note')}</label><textarea id="f-note" rows="2"></textarea></div>
       <button class="btn" onclick="submitEntry()">${t('btn_save')}</button>
     `;
+  } else if (type === 'mood') {
+    document.getElementById('modal-title').textContent = t('tile_mood');
+    fields.innerHTML = `
+      ${dtField('f-start', t('lbl_time'), now)}
+      <div class="field"><label>${t('lbl_mood')}</label>
+        <select id="f-mood">
+          <option value="happy">${t('opt_mood_happy')}</option>
+          <option value="neutral">${t('opt_mood_neutral')}</option>
+          <option value="fussy">${t('opt_mood_fussy')}</option>
+          <option value="crying">${t('opt_mood_crying')}</option>
+        </select>
+      </div>
+      <div class="field"><label>${t('lbl_note')}</label><textarea id="f-note" rows="2"></textarea></div>
+      <button class="btn" onclick="submitEntry()">${t('btn_save')}</button>
+    `;
   } else {
     document.getElementById('modal-title').textContent = t('tile_note');
     fields.innerHTML = `
@@ -923,6 +944,7 @@ async function submitEntry() {
     meta.content = document.getElementById('f-content')?.value;
   }
   if (selectedType === 'weight') meta.weight = document.getElementById('f-weight')?.value;
+  if (selectedType === 'mood') meta.mood = document.getElementById('f-mood')?.value;
 
   const apiType = selectedType === 'sleep_start' ? 'sleep' : selectedType;
 
@@ -1048,6 +1070,21 @@ function editFieldsHtml(entry) {
       <button class="btn" onclick="submitEditEntry()">${t('btn_save')}</button>
     `;
   }
+  if (entry.type === 'mood') {
+    return `
+      ${dtField('f-start', t('lbl_time'), start)}
+      <div class="field"><label>${t('lbl_mood')}</label>
+        <select id="f-mood">
+          <option value="happy" ${m.mood === 'happy' ? 'selected' : ''}>${t('opt_mood_happy')}</option>
+          <option value="neutral" ${m.mood === 'neutral' ? 'selected' : ''}>${t('opt_mood_neutral')}</option>
+          <option value="fussy" ${m.mood === 'fussy' ? 'selected' : ''}>${t('opt_mood_fussy')}</option>
+          <option value="crying" ${m.mood === 'crying' ? 'selected' : ''}>${t('opt_mood_crying')}</option>
+        </select>
+      </div>
+      <div class="field"><label>${t('lbl_note')}</label><textarea id="f-note" rows="2">${note}</textarea></div>
+      <button class="btn" onclick="submitEditEntry()">${t('btn_save')}</button>
+    `;
+  }
   return `
     ${dtField('f-start', t('lbl_time'), start)}
     <div class="field"><label>${t('lbl_note')}</label><textarea id="f-note" rows="3">${note}</textarea></div>
@@ -1069,6 +1106,7 @@ async function submitEditEntry() {
     meta.content = document.getElementById('f-content')?.value;
   }
   if (entry.type === 'weight') meta.weight = document.getElementById('f-weight')?.value;
+  if (entry.type === 'mood') meta.mood = document.getElementById('f-mood')?.value;
 
   const body = {
     ts_start: start,
