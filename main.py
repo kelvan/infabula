@@ -12,10 +12,18 @@ from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from sqlalchemy import delete, distinct, func, select
+
+from db import Entry, IpName, Session, Setting, sqlite_file
+from migrate import run_migrations
 
 app = FastAPI()
-DB_PATH = os.getenv("DB_PATH", "infabula.db")
 ASSET_VERSION = str(int(time.time()))
+
+# ts_start/ts_end hold 'YYYY-MM-DDTHH:MM'; substr is the portable way to get
+# the date part across SQLite, PostgreSQL and MariaDB.
+DAY_START = func.substr(Entry.ts_start, 1, 10)
+DAY_END = func.substr(Entry.ts_end, 1, 10)
 
 # ── SSE pub-sub ──
 subscribers: set[asyncio.Queue] = set()
@@ -47,59 +55,31 @@ async def sse_events():
     return StreamingResponse(event_stream(), media_type="text/event-stream")
 
 
-def get_db():
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    return conn
-
-
-def init_db():
-    conn = get_db()
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS entries (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            type TEXT NOT NULL,
-            ts_start TEXT NOT NULL,
-            ts_end TEXT,
-            note TEXT,
-            meta TEXT,
-            ip TEXT,
-            created_at TEXT DEFAULT (datetime('now'))
-        )
-    """)
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS ip_names (
-            ip TEXT PRIMARY KEY,
-            name TEXT NOT NULL
-        )
-    """)
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS settings (
-            key TEXT PRIMARY KEY,
-            value TEXT NOT NULL
-        )
-    """)
-    conn.commit()
-    conn.close()
-
-
 def backup_db():
-    db_dir = os.path.dirname(os.path.abspath(DB_PATH))
+    """Snapshot the database file on startup.
+
+    Only meaningful for SQLite — server-backed databases are expected to have
+    their own backup story, so this is skipped for them.
+    """
+    path = sqlite_file()
+    if not path or not os.path.exists(path):
+        return
+    db_dir = os.path.dirname(os.path.abspath(path))
     backup_dir = os.path.join(db_dir, "backups")
     os.makedirs(backup_dir, exist_ok=True)
-    name, ext = os.path.splitext(os.path.basename(DB_PATH))
+    name, ext = os.path.splitext(os.path.basename(path))
     timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-    backup_path = os.path.join(backup_dir, f"{name}-{timestamp}{ext}")
-    src = get_db()
-    dst = sqlite3.connect(backup_path)
+    src = sqlite3.connect(path)
+    dst = sqlite3.connect(os.path.join(backup_dir, f"{name}-{timestamp}{ext}"))
     with dst:
         src.backup(dst)
     dst.close()
     src.close()
 
 
-init_db()
 backup_db()
+run_migrations()
+
 
 class CachedStaticFiles(StaticFiles):
     def file_response(self, *args, **kwargs):
@@ -120,10 +100,8 @@ def get_client_ip(request: Request) -> str:
     return request.client.host if request.client else "unknown"
 
 
-def row_to_dict(r):
-    d = dict(r)
-    d["meta"] = json.loads(d["meta"] or "{}")
-    return d
+def row_to_dict(entry: Entry) -> dict:
+    return entry.as_dict()
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -136,130 +114,102 @@ async def index(request: Request):
 @app.post("/api/entries")
 async def create_entry(request: Request):
     body = await request.json()
-    ip = get_client_ip(request)
-    conn = get_db()
-    cur = conn.execute(
-        "INSERT INTO entries (type, ts_start, ts_end, note, meta, ip) VALUES (?, ?, ?, ?, ?, ?)",
-        (
-            body["type"],
-            body["ts_start"],
-            body.get("ts_end"),
-            body.get("note", ""),
-            json.dumps(body.get("meta", {})),
-            ip,
-        ),
+    entry = Entry(
+        type=body["type"],
+        ts_start=body["ts_start"],
+        ts_end=body.get("ts_end"),
+        note=body.get("note", ""),
+        meta=body.get("meta", {}),
+        ip=get_client_ip(request),
     )
-    conn.commit()
-    new_id = cur.lastrowid
-    row = conn.execute("SELECT * FROM entries WHERE id=?", (new_id,)).fetchone()
-    conn.close()
+    async with Session.begin() as session:
+        session.add(entry)
     await broadcast_event("entries_changed")
-    return row_to_dict(row)
+    return row_to_dict(entry)
 
 
 @app.patch("/api/entries/{entry_id}")
 async def patch_entry(entry_id: int, request: Request):
     body = await request.json()
-    conn = get_db()
-    if "ts_start" in body:
-        conn.execute(
-            "UPDATE entries SET ts_start=? WHERE id=?", (body["ts_start"], entry_id)
-        )
-    if "ts_end" in body:
-        conn.execute(
-            "UPDATE entries SET ts_end=? WHERE id=?", (body["ts_end"], entry_id)
-        )
-    if "note" in body:
-        conn.execute("UPDATE entries SET note=? WHERE id=?", (body["note"], entry_id))
-    if "meta" in body:
-        conn.execute(
-            "UPDATE entries SET meta=? WHERE id=?",
-            (json.dumps(body["meta"]), entry_id),
-        )
-    conn.commit()
-    row = conn.execute("SELECT * FROM entries WHERE id=?", (entry_id,)).fetchone()
-    conn.close()
+    async with Session.begin() as session:
+        entry = await session.get(Entry, entry_id)
+        if entry is None:
+            return None
+        for field in ("ts_start", "ts_end", "note", "meta"):
+            if field in body:
+                setattr(entry, field, body[field])
     await broadcast_event("entries_changed")
-    return row_to_dict(row)
+    return row_to_dict(entry)
 
 
 @app.get("/api/entries")
 async def get_entries(date: str = None, limit: int = 300):
-    conn = get_db()
-    if date:
-        rows = conn.execute(
-            "SELECT * FROM entries WHERE date(ts_start)=? OR date(ts_end)=? ORDER BY ts_start DESC",
-            (date, date),
-        ).fetchall()
-    else:
-        rows = conn.execute(
-            "SELECT * FROM entries ORDER BY ts_start DESC LIMIT ?", (limit,)
-        ).fetchall()
-    conn.close()
+    async with Session() as session:
+        stmt = select(Entry).order_by(Entry.ts_start.desc())
+        if date:
+            stmt = stmt.where((DAY_START == date) | (DAY_END == date))
+        else:
+            stmt = stmt.limit(limit)
+        rows = (await session.scalars(stmt)).all()
     return [row_to_dict(r) for r in rows]
 
 
 @app.get("/api/entries/dates")
 async def get_dates():
     """Return list of distinct dates that have entries."""
-    conn = get_db()
-    rows = conn.execute(
-        "SELECT DISTINCT date(ts_start) as d FROM entries ORDER BY d DESC LIMIT 90"
-    ).fetchall()
-    conn.close()
-    return [r["d"] for r in rows]
+    async with Session() as session:
+        rows = (
+            await session.scalars(
+                select(distinct(DAY_START)).order_by(DAY_START.desc()).limit(90)
+            )
+        ).all()
+    return list(rows)
 
 
 @app.get("/api/ip-names")
 async def get_ip_names():
-    conn = get_db()
-    rows = conn.execute("SELECT ip, name FROM ip_names").fetchall()
-    conn.close()
-    return {r["ip"]: r["name"] for r in rows}
+    async with Session() as session:
+        rows = (await session.scalars(select(IpName))).all()
+    return {r.ip: r.name for r in rows}
 
 
 @app.put("/api/ip-names/{ip}")
 async def set_ip_name(ip: str, request: Request):
     body = await request.json()
     name = (body.get("name") or "").strip()
-    conn = get_db()
-    if name:
-        conn.execute(
-            "INSERT INTO ip_names (ip, name) VALUES (?, ?) "
-            "ON CONFLICT(ip) DO UPDATE SET name=excluded.name",
-            (ip, name),
-        )
-    else:
-        conn.execute("DELETE FROM ip_names WHERE ip=?", (ip,))
-    conn.commit()
-    conn.close()
+    async with Session.begin() as session:
+        row = await session.get(IpName, ip)
+        if not name:
+            if row is not None:
+                await session.delete(row)
+        elif row is None:
+            session.add(IpName(ip=ip, name=name))
+        else:
+            row.name = name
     await broadcast_event("entries_changed")
     return {"ok": True}
 
 
 @app.get("/api/settings")
 async def get_settings():
-    conn = get_db()
-    rows = conn.execute("SELECT key, value FROM settings").fetchall()
-    conn.close()
-    return {r["key"]: r["value"] for r in rows}
+    async with Session() as session:
+        rows = (await session.scalars(select(Setting))).all()
+    return {r.key: r.value for r in rows}
 
 
 @app.put("/api/settings/{key}")
 async def set_setting(key: str, request: Request):
     body = await request.json()
     value = (body.get("value") or "").strip()
-    conn = get_db()
-    if value:
-        conn.execute(
-            "INSERT INTO settings (key, value) VALUES (?, ?) "
-            "ON CONFLICT(key) DO UPDATE SET value=excluded.value",
-            (key, value),
-        )
-    else:
-        conn.execute("DELETE FROM settings WHERE key=?", (key,))
-    conn.commit()
-    conn.close()
+    async with Session.begin() as session:
+        row = await session.get(Setting, key)
+        if not value:
+            if row is not None:
+                await session.delete(row)
+        elif row is None:
+            session.add(Setting(key=key, value=value))
+        else:
+            row.value = value
     await broadcast_event("entries_changed")
     return {"ok": True}
 
@@ -267,63 +217,63 @@ async def set_setting(key: str, request: Request):
 @app.get("/api/ips")
 async def get_known_ips():
     """Distinct IPs seen in entries, with their assigned name (if any)."""
-    conn = get_db()
-    ip_rows = conn.execute(
-        "SELECT DISTINCT ip FROM entries WHERE ip IS NOT NULL ORDER BY ip"
-    ).fetchall()
-    name_rows = conn.execute("SELECT ip, name FROM ip_names").fetchall()
-    conn.close()
-    names = {r["ip"]: r["name"] for r in name_rows}
-    return [{"ip": r["ip"], "name": names.get(r["ip"], "")} for r in ip_rows]
+    async with Session() as session:
+        ips = (
+            await session.scalars(
+                select(distinct(Entry.ip))
+                .where(Entry.ip.is_not(None))
+                .order_by(Entry.ip)
+            )
+        ).all()
+        name_rows = (await session.scalars(select(IpName))).all()
+    names = {r.ip: r.name for r in name_rows}
+    return [{"ip": ip, "name": names.get(ip, "")} for ip in ips]
+
+
+async def _open_entry(entry_type: str):
+    """Most recent entry of this type without an end time, if any."""
+    async with Session() as session:
+        entry = await session.scalar(
+            select(Entry)
+            .where(Entry.type == entry_type, Entry.ts_end.is_(None))
+            .order_by(Entry.ts_start.desc())
+            .limit(1)
+        )
+    return row_to_dict(entry) if entry else None
 
 
 @app.get("/api/sleep/open")
 async def get_open_sleep():
-    """Return the most recent sleep entry without ts_end, if any."""
-    conn = get_db()
-    row = conn.execute(
-        "SELECT * FROM entries WHERE type='sleep' AND ts_end IS NULL ORDER BY ts_start DESC LIMIT 1"
-    ).fetchone()
-    conn.close()
-    if row:
-        return row_to_dict(row)
-    return None
+    return await _open_entry("sleep")
 
 
 @app.get("/api/walk/open")
 async def get_open_walk():
-    """Return the most recent walk entry without ts_end, if any."""
-    conn = get_db()
-    row = conn.execute(
-        "SELECT * FROM entries WHERE type='walk' AND ts_end IS NULL ORDER BY ts_start DESC LIMIT 1"
-    ).fetchone()
-    conn.close()
-    if row:
-        return row_to_dict(row)
-    return None
+    return await _open_entry("walk")
 
 
 @app.delete("/api/entries/{entry_id}")
 async def delete_entry(entry_id: int):
-    conn = get_db()
-    conn.execute("DELETE FROM entries WHERE id = ?", (entry_id,))
-    conn.commit()
-    conn.close()
+    async with Session.begin() as session:
+        await session.execute(delete(Entry).where(Entry.id == entry_id))
     await broadcast_event("entries_changed")
     return {"ok": True}
 
 
 @app.get("/api/stats")
 async def get_stats(date: str = None):
-    conn = get_db()
-    rows = conn.execute(
-        "SELECT * FROM entries ORDER BY ts_start DESC LIMIT 500"
-    ).fetchall()
     day = date or datetime.now().strftime("%Y-%m-%d")
-    day_rows = conn.execute(
-        "SELECT * FROM entries WHERE date(ts_start)=? ORDER BY ts_start ASC", (day,)
-    ).fetchall()
-    conn.close()
+    async with Session() as session:
+        rows = (
+            await session.scalars(
+                select(Entry).order_by(Entry.ts_start.desc()).limit(500)
+            )
+        ).all()
+        day_rows = (
+            await session.scalars(
+                select(Entry).where(DAY_START == day).order_by(Entry.ts_start.asc())
+            )
+        ).all()
     entries = [row_to_dict(r) for r in rows]
     day_entries = [row_to_dict(r) for r in day_rows]
 
@@ -370,15 +320,17 @@ async def get_stats(date: str = None):
 
 
 # ── Export report ──
-def fetch_entries_range(start: str, end: str):
+async def fetch_entries_range(start: str, end: str):
     if start > end:
         start, end = end, start
-    conn = get_db()
-    rows = conn.execute(
-        "SELECT * FROM entries WHERE date(ts_start) BETWEEN ? AND ? ORDER BY ts_start ASC",
-        (start, end),
-    ).fetchall()
-    conn.close()
+    async with Session() as session:
+        rows = (
+            await session.scalars(
+                select(Entry)
+                .where(DAY_START.between(start, end))
+                .order_by(Entry.ts_start.asc())
+            )
+        ).all()
     return [row_to_dict(r) for r in rows], start, end
 
 
@@ -463,7 +415,7 @@ def build_report(entries: list[dict], start: str, end: str) -> dict:
 
 @app.get("/report", response_class=HTMLResponse)
 async def report(request: Request, start: str, end: str):
-    entries, start, end = fetch_entries_range(start, end)
+    entries, start, end = await fetch_entries_range(start, end)
     data = build_report(entries, start, end)
     return templates.TemplateResponse(
         "report.html", {"request": request, "v": ASSET_VERSION, **data}
@@ -472,15 +424,22 @@ async def report(request: Request, start: str, end: str):
 
 @app.get("/api/export.csv")
 async def export_csv(start: str, end: str):
-    entries, start, end = fetch_entries_range(start, end)
+    entries, start, end = await fetch_entries_range(start, end)
     buf = io.StringIO()
     w = csv.writer(buf)
     w.writerow(["id", "type", "start", "end", "note", "meta", "ip"])
     for e in entries:
-        w.writerow([
-            e["id"], e["type"], e["ts_start"], e["ts_end"] or "",
-            e["note"] or "", json.dumps(e["meta"]), e["ip"] or "",
-        ])
+        w.writerow(
+            [
+                e["id"],
+                e["type"],
+                e["ts_start"],
+                e["ts_end"] or "",
+                e["note"] or "",
+                json.dumps(e["meta"]),
+                e["ip"] or "",
+            ]
+        )
     filename = f"infabula-{start}_{end}.csv"
     return Response(
         content=buf.getvalue(),

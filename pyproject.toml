@@ -8,6 +8,17 @@ dependencies = [
     "uvicorn[standard]",
     "jinja2",
     "python-multipart",
+    "sqlalchemy[asyncio]>=2.0",
+    "alembic>=1.13",
+    "aiosqlite",
+]
+
+[project.optional-dependencies]
+postgres = [
+    "asyncpg",
+]
+mysql = [
+    "aiomysql",
 ]
 
 [tool.ruff]

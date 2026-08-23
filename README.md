@@ -39,7 +39,15 @@ Assign a name to each device's IP address — the log legend and colors group by
 
 ## Data
 
-SQLite database, path configurable via env var `DB_PATH` (default: `infabula.db` in the current directory). A timestamped backup is written to a `backups/` folder next to the database on every startup.
+Set the database with the `DB_URL` env var — SQLite, PostgreSQL and MariaDB/MySQL are supported:
+
+```bash
+DB_URL=sqlite:///infabula.db
+DB_URL=postgresql://user:pass@host/infabula   # needs: uv sync --extra postgres
+DB_URL=mysql://user:pass@host/infabula        # needs: uv sync --extra mysql
+```
+
+Defaults to SQLite; the older `DB_PATH` var still works and maps to a SQLite file. The schema is managed by Alembic and migrated automatically on startup — a database from before Alembic was introduced is adopted as-is, not re-created. On SQLite a timestamped backup is written to a `backups/` folder next to the database on every startup.
 
 ## Podman/Docker (optional)
 
