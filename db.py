@@ -58,11 +58,18 @@ def is_sqlite(url: str | None = None) -> bool:
 
 
 def sqlite_file(url: str | None = None) -> str | None:
-    """Filesystem path behind a SQLite URL, or None for other backends."""
+    """Filesystem path behind a SQLite URL, or None for other backends.
+
+    SQLite URLs carry one separator slash before a relative path and two
+    before an absolute one, so exactly one slash is removed — stripping all
+    of them would silently turn '/app/data/x.db' into 'app/data/x.db'.
+    """
     url = url or database_url()
     if not is_sqlite(url):
         return None
-    path = url.partition("://")[2].lstrip("/")
+    path = url.partition("://")[2]
+    if path.startswith("/"):
+        path = path[1:]
     return path or None
 
 
