@@ -127,6 +127,44 @@ header .logo-svg { height: 38px; width: auto; }
 .tab-page { display: none; }
 .tab-page.active { display: block; }
 
+/* ── Birthday banner ── */
+.birthday-banner {
+  margin: 16px 20px 0;
+  background: linear-gradient(135deg, #c9963f 0%, #a3722a 100%);
+  color: #fff;
+  border-radius: var(--radius);
+  padding: 14px 18px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  box-shadow: 0 8px 20px rgba(184,134,58,0.32);
+  position: relative;
+  overflow: hidden;
+}
+.birthday-banner.major {
+  background: linear-gradient(135deg, var(--accent) 0%, #8a5a1c 100%);
+  box-shadow: 0 10px 24px rgba(138,90,28,0.36);
+}
+.birthday-banner .bd-speck {
+  position: absolute;
+  background: rgba(255,255,255,0.45);
+  border-radius: 1px;
+  pointer-events: none;
+}
+.birthday-banner .bd-icon {
+  width: 40px; height: 40px; flex-shrink: 0; border-radius: 50%;
+  background: rgba(255,255,255,0.18);
+  display: flex; align-items: center; justify-content: center;
+}
+.birthday-banner .bd-icon .ic { width: 21px; height: 21px; stroke: #fff; fill: none; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.birthday-banner .bd-info { flex: 1; min-width: 0; }
+.birthday-banner .bd-label {
+  font-family: ui-monospace, 'Cascadia Code', 'Source Code Pro', monospace;
+  font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.1em;
+  color: rgba(255,255,255,0.78);
+}
+.birthday-banner .bd-headline { font-size: 1.05rem; font-weight: 600; margin-top: 2px; }
+
 /* ── Sleep / walk banner ── */
 .sleep-banner {
   margin: 16px 20px 0;

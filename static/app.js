@@ -27,6 +27,13 @@ const I18N = {
     no_data:'Keine Daten', not_enough_data:'Zu wenig Daten', no_sleep_data:'Noch keine Schlafdaten',
     settings_ip_names_title:'Geräte', settings_name_placeholder:'Name eingeben', settings_no_ips:'Noch keine Geräte bekannt',
     settings_baby_title:'Baby',
+    lbl_baby_name:'Name', lbl_birthday:'Geburtstag', baby_name_placeholder:'Name des Babys',
+    baby_fallback:'Baby',
+    bd_welcome:'Willkommen', bd_happy:'🎉 Alles Gute',
+    bd_born_today: name=>`${name} ist heute geboren`,
+    bd_month_label: n=>`${n}-Monats-Tag`,
+    bd_months_old: a=>`${a.name} ist heute ${a.n} Monate alt`,
+    bd_years_old: a=>`${a.name} ist heute ${a.n} ${a.n === 1 ? 'Jahr' : 'Jahre'} alt`,
     export_title:'Export', range_today:'Heute', range_week:'Diese Woche', range_month:'Diesen Monat', range_custom:'Frei wählen',
     view_list:'Liste', view_timeline:'Zeitstrahl', tl_now:'JETZT',
     btn_open_report:'Bericht öffnen', btn_download_csv:'CSV herunterladen',
@@ -70,6 +77,13 @@ const I18N = {
     no_data:'No data', not_enough_data:'Not enough data', no_sleep_data:'No sleep data yet',
     settings_ip_names_title:'Devices', settings_name_placeholder:'Enter name', settings_no_ips:'No devices seen yet',
     settings_baby_title:'Baby',
+    lbl_baby_name:'Name', lbl_birthday:'Birthday', baby_name_placeholder:"Baby's name",
+    baby_fallback:'Baby',
+    bd_welcome:'Welcome', bd_happy:'🎉 Happy birthday',
+    bd_born_today: name=>`${name} was born today`,
+    bd_month_label: n=>`Happy ${n}-month day`,
+    bd_months_old: a=>`${a.name} is ${a.n} months old today`,
+    bd_years_old: a=>`${a.name} is ${a.n} ${a.n === 1 ? 'year' : 'years'} old today`,
     export_title:'Export', range_today:'Today', range_week:'This week', range_month:'This month', range_custom:'Custom',
     view_list:'List', view_timeline:'Timeline', tl_now:'NOW',
     btn_open_report:'Open report', btn_download_csv:'Download CSV',
@@ -112,6 +126,7 @@ const ICONS = {
   sun: '<circle cx="12" cy="12" r="4.2"/><path d="M12 3v2.2M12 18.8V21M21 12h-2.2M5.2 12H3M18.4 5.6l-1.5 1.5M7.1 16.9l-1.5 1.5M18.4 18.4l-1.5-1.5M7.1 7.1 5.6 5.6"/>',
   home: '<path d="M4 11 12 4l8 7"/><path d="M6 10v9.5a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1V10"/><path d="M10 20.5V15h4v5.5"/>',
   mood: '<circle cx="12" cy="12" r="8.3"/><circle cx="9.2" cy="10.3" r=".9"/><circle cx="14.8" cy="10.3" r=".9"/><path d="M8.3 14.5c1 1.6 2.3 2.5 3.7 2.5s2.7-.9 3.7-2.5"/>',
+  cake: '<path d="M4 20.5h16"/><path d="M4.5 20.5v-5.2c0-1 .8-1.8 1.8-1.8h11.4c1 0 1.8.8 1.8 1.8v5.2"/><path d="M4.5 16.6c1.2 0 1.2 1.2 2.5 1.2s1.2-1.2 2.5-1.2 1.2 1.2 2.5 1.2 1.2-1.2 2.5-1.2 1.2 1.2 2.5 1.2 1.3-1.2 2.5-1.2"/><path d="M12 13.5v-3"/><path d="M12 9.6c-.7-.5-.7-1.5 0-2.3.7.8.7 1.8 0 2.3Z"/>',
 };
 function icon(name) { return `<svg viewBox="0 0 24 24" class="ic">${ICONS[name] || ''}</svg>`; }
 function typeIcon(name) { return name === 'sleep' ? icon('zzz') : icon(name); }
@@ -137,6 +152,7 @@ function switchLang() {
   localStorage.setItem('lang', lang);
   initUI();
   loadLog();
+  renderBirthdayBanner();
   if (document.getElementById('tab-stats').classList.contains('active')) loadStats();
   if (document.getElementById('tab-settings').classList.contains('active')) loadSettings();
 }
@@ -255,6 +271,7 @@ function updateDayNav() {
   document.getElementById('day-label').textContent = fmtDate(currentDate);
   document.getElementById('date-picker').value = currentDate;
   document.getElementById('btn-next').disabled = currentDate >= todayStr();
+  renderBirthdayBanner();
 }
 function changeDay(delta) {
   const d = new Date(currentDate);
@@ -290,6 +307,78 @@ function switchTab(name, btn) {
   location.hash = name;
   if (name === 'stats') loadStats();
   if (name === 'settings') loadSettings();
+}
+
+// ── Birthday banner ──
+let baby = { name: '', birthday: '' };
+
+async function loadBaby() {
+  try {
+    const res = await fetch('/api/baby');
+    baby = res.ok ? await res.json() : { name: '', birthday: '' };
+  } catch {
+    baby = { name: '', birthday: '' };
+  }
+  renderBirthdayBanner();
+}
+
+function daysInMonth(year, month) {
+  return new Date(year, month + 1, 0).getDate();
+}
+
+/** Milestone for `dateStr`, or null when that day isn't one. */
+function birthdayMilestone(birthday, dateStr) {
+  if (!birthday) return null;
+  const [by, bm, bd] = birthday.split('-').map(Number);
+  const [dy, dm, dd] = dateStr.split('-').map(Number);
+  if (!by || !dy) return null;
+  if (dateStr < birthday) return null;
+  if (dateStr === birthday) return { kind: 'born' };
+
+  // A baby born on the 31st has no 31st in a 30-day month — celebrate on the
+  // last day of that month instead.
+  const effectiveDay = Math.min(bd, daysInMonth(dy, dm - 1));
+  if (dd !== effectiveDay) return null;
+
+  const months = (dy - by) * 12 + (dm - bm);
+  if (months <= 0) return null;
+  if (months < 12) return { kind: 'months', value: months };
+  if (months % 12) return null;
+  return { kind: 'years', value: months / 12 };
+}
+
+function renderBirthdayBanner() {
+  const wrap = document.getElementById('birthday-banner-wrap');
+  if (!wrap) return;
+  const ms = birthdayMilestone(baby.birthday, currentDate);
+  if (!ms) { wrap.innerHTML = ''; return; }
+
+  const who = baby.name || t('baby_fallback');
+  let label, headline;
+  if (ms.kind === 'born') {
+    label = t('bd_welcome');
+    headline = t('bd_born_today', who);
+  } else if (ms.kind === 'months') {
+    label = t('bd_month_label', ms.value);
+    headline = t('bd_months_old', { name: who, n: ms.value });
+  } else {
+    label = t('bd_happy');
+    headline = t('bd_years_old', { name: who, n: ms.value });
+  }
+
+  wrap.innerHTML = `
+    <div class="birthday-banner${ms.kind === 'years' ? ' major' : ''}">
+      ${[[38,9,4,4,25],[56,20,3,6,-18],[72,8,5,3,40],[84,34,3,5,12]].map(
+        ([l, t2, w, h, r]) =>
+          `<span class="bd-speck" style="left:${l}%;top:${t2}px;width:${w}px;height:${h}px;transform:rotate(${r}deg)"></span>`
+      ).join('')}
+      <div class="bd-icon">${icon('cake')}</div>
+      <div class="bd-info">
+        <div class="bd-label">${esc(label)}</div>
+        <div class="bd-headline">${esc(headline)}</div>
+      </div>
+    </div>
+  `;
 }
 
 // ── Sleep banner ──
@@ -740,16 +829,21 @@ async function loadStats() {
 
 // ── Settings ──
 async function loadSettings() {
-  const [ipsRes, settingsRes] = await Promise.all([fetch('/api/ips'), fetch('/api/settings')]);
+  const [ipsRes, babyRes] = await Promise.all([fetch('/api/ips'), fetch('/api/baby')]);
   const ips = await ipsRes.json();
-  const settings = await settingsRes.json();
+  const babyInfo = await babyRes.json();
   const el = document.getElementById('settings-content');
 
   let html = `
     <div class="section-title">${t('settings_baby_title')}</div>
-    <div class="birthday-row">
-      <input type="date" id="birthday-input" value="${esc(settings.birthday || '')}">
-      <button class="btn-small" onclick="saveBirthday()">${t('btn_save')}</button>
+    <div class="field"><label>${t('lbl_baby_name')}</label>
+      <input type="text" id="baby-name-input" value="${esc(babyInfo.name || '')}" placeholder="${t('baby_name_placeholder')}">
+    </div>
+    <div class="field"><label>${t('lbl_birthday')}</label>
+      <div class="birthday-row">
+        <input type="date" id="birthday-input" value="${esc(babyInfo.birthday || '')}">
+        <button class="btn-small" onclick="saveBaby()">${t('btn_save')}</button>
+      </div>
     </div>
   `;
 
@@ -772,14 +866,17 @@ async function loadSettings() {
   el.innerHTML = html;
 }
 
-async function saveBirthday() {
-  const value = document.getElementById('birthday-input').value;
-  await fetch('/api/settings/birthday', {
+async function saveBaby() {
+  const name = document.getElementById('baby-name-input').value;
+  const birthday = document.getElementById('birthday-input').value;
+  await fetch('/api/baby', {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ value }),
+    body: JSON.stringify({ name, birthday }),
   });
+  baby = { name: name.trim(), birthday };
   toast(t('toast_saved'));
+  renderBirthdayBanner();
 }
 
 async function saveIpName(btn) {
@@ -1243,6 +1340,7 @@ function initEvents() {
 
 // ── Init ──
 initUI();
+loadBaby();
 updateDayNav();
 setLogView(logView);
 loadLog();

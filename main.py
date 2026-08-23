@@ -17,6 +17,7 @@ from sqlalchemy import delete, distinct, func, select
 from db import (
     DEFAULT_BABY_ID,
     DEFAULT_USER_ID,
+    Baby,
     Entry,
     IpName,
     Session,
@@ -232,6 +233,31 @@ async def set_setting(key: str, request: Request):
             session.add(Setting(key=key, value=value))
         else:
             row.value = value
+    await broadcast_event("entries_changed")
+    return {"ok": True}
+
+
+@app.get("/api/baby")
+async def get_baby():
+    async with Session() as session:
+        baby = await session.get(Baby, DEFAULT_BABY_ID)
+    if baby is None:
+        return {"name": "", "birthday": ""}
+    return {"name": baby.name, "birthday": baby.birthday or ""}
+
+
+@app.put("/api/baby")
+async def set_baby(request: Request):
+    body = await request.json()
+    async with Session.begin() as session:
+        baby = await session.get(Baby, DEFAULT_BABY_ID)
+        if baby is None:
+            baby = Baby(id=DEFAULT_BABY_ID, name="")
+            session.add(baby)
+        if "name" in body:
+            baby.name = (body.get("name") or "").strip()
+        if "birthday" in body:
+            baby.birthday = (body.get("birthday") or "").strip() or None
     await broadcast_event("entries_changed")
     return {"ok": True}
 
