@@ -580,6 +580,74 @@ function spanEndMinutes(e, nowMin) {
 
 const MOOD_EMOJI = { happy: '😊', neutral: '😐', fussy: '😕', crying: '😢' };
 
+// Stretches at the edges of the day holding nothing but sleep get squeezed to
+// this fraction of the normal scale, so a long night doesn't push the busy
+// hours off-screen. Anything shorter than the threshold is left alone.
+const TL_SQUEEZE = 0.22;
+const TL_SQUEEZE_MIN = 150;
+
+/**
+ * Piecewise minute -> pixel scale for one day.
+ *
+ * Returns `at(minute)`, the total `size`, and the squeezed ranges so the grid
+ * can mark them.
+ */
+function makeTimeScale(entries, pxPerHour, nowMin) {
+  const per = pxPerHour / 60;
+
+  // Anchors are the moments worth showing at full scale. Sleep is excluded:
+  // squeezing it is the whole point. With nothing but sleep, fall back to the
+  // sleep spans so the day still has something to frame.
+  // An entry without ts_end is a point in time, not something running until
+  // the end of the day — anchoring on spanEndMinutes here would peg the tail
+  // to 24:00 and defeat the squeeze. Ongoing spans are covered by the `now`
+  // anchor below.
+  const anchor = (e) => [
+    dayMinutes(e.ts_start),
+    e.ts_end ? dayMinutes(e.ts_end) : dayMinutes(e.ts_start),
+  ];
+
+  const spans = [];
+  entries.forEach(e => {
+    if (e.type === 'sleep') return;
+    spans.push(anchor(e));
+  });
+  if (!spans.length) entries.forEach(e => spans.push(anchor(e)));
+  if (nowMin != null) spans.push([nowMin, nowMin]);
+
+  let head = 0;
+  let tail = 1440;
+  if (spans.length) {
+    const first = Math.min(...spans.map(s => s[0]));
+    const last = Math.max(...spans.map(s => s[1]));
+    // Keep a whole hour of context on each side of the busy stretch.
+    head = Math.max(0, Math.floor(first / 60) * 60 - 60);
+    tail = Math.min(1440, Math.ceil(last / 60) * 60 + 60);
+  }
+  if (head < TL_SQUEEZE_MIN) head = 0;
+  if (1440 - tail < TL_SQUEEZE_MIN) tail = 1440;
+
+  const headPx = head * per * TL_SQUEEZE;
+  const bodyPx = (tail - head) * per;
+  const tailPx = (1440 - tail) * per * TL_SQUEEZE;
+
+  const at = (min) => {
+    const m = Math.max(0, Math.min(1440, min));
+    if (m <= head) return m * per * TL_SQUEEZE;
+    if (m <= tail) return headPx + (m - head) * per;
+    return headPx + bodyPx + (m - tail) * per * TL_SQUEEZE;
+  };
+
+  return {
+    at,
+    size: headPx + bodyPx + tailPx,
+    head,
+    tail,
+    squeezed: head > 0 || tail < 1440,
+    isSqueezed: (min) => min < head || min > tail,
+  };
+}
+
 function renderTimeline() {
   const wrap = document.getElementById('timeline-view');
   if (!wrap) return;
@@ -595,39 +663,38 @@ function renderTimeline() {
 
   const wide = window.matchMedia('(min-width: 640px)').matches;
   const gridW = Math.max(wrap.clientWidth - 40 - 30, 240);
+  const scale = makeTimeScale(entries, wide ? 28 : 30, nowMin);
   wrap.innerHTML = wide
-    ? renderTimelineWide(sleeps, walks, feeds, diapers, moods, nowMin)
-    : renderTimelineNarrow(sleeps, walks, feeds, diapers, moods, nowMin, gridW);
+    ? renderTimelineWide(sleeps, walks, feeds, diapers, moods, nowMin, scale)
+    : renderTimelineNarrow(sleeps, walks, feeds, diapers, moods, nowMin, gridW, scale);
 }
 
-function renderTimelineNarrow(sleeps, walks, feeds, diapers, moods, nowMin, gridW) {
-  const px = 30, gridH = px * 24, barW = 56;
+function renderTimelineNarrow(sleeps, walks, feeds, diapers, moods, nowMin, gridW, scale) {
+  const px = 30, gridH = scale.size, barW = 56;
   const moodColW = moods.length ? 24 : 0, laneW = (gridW - moodColW) / 2, totalW = laneW * 2 + moodColW;
   const sleepLeft = (laneW - barW) / 2, walkLeft = laneW + (laneW - barW) / 2;
 
   let bars = '';
   sleeps.forEach(e => {
-    const start = dayMinutes(e.ts_start);
-    const top = start / 60 * px;
-    const h = Math.max((spanEndMinutes(e, nowMin) - start) / 60 * px, 4);
+    const top = scale.at(dayMinutes(e.ts_start));
+    const h = Math.max(scale.at(spanEndMinutes(e, nowMin)) - top, 4);
     bars += `<div style="position:absolute;left:${sleepLeft}px;top:${top}px;width:${barW}px;height:${h}px;background:var(--sleep-soft);border:1.5px solid var(--sleep);border-radius:8px;cursor:pointer;" onclick="openEditModal(${e.id})"></div>`;
   });
   walks.forEach(e => {
-    const start = dayMinutes(e.ts_start);
-    const top = start / 60 * px;
-    const h = Math.max((spanEndMinutes(e, nowMin) - start) / 60 * px, 4);
+    const top = scale.at(dayMinutes(e.ts_start));
+    const h = Math.max(scale.at(spanEndMinutes(e, nowMin)) - top, 4);
     bars += `<div style="position:absolute;left:${walkLeft}px;top:${top}px;width:${barW}px;height:${h}px;background:var(--walk-soft);border:1.5px solid var(--walk);border-radius:8px;cursor:pointer;" onclick="openEditModal(${e.id})"></div>`;
   });
 
   let lines = '';
   feeds.forEach(e => {
-    const center = dayMinutes(e.ts_start) / 60 * px;
+    const center = scale.at(dayMinutes(e.ts_start));
     lines += `<div style="position:absolute;left:0px;top:${center-8}px;width:${laneW*2}px;height:16px;cursor:pointer;" onclick="openEditModal(${e.id})">
       <div style="position:absolute;left:0;top:6px;width:100%;height:4px;background:rgba(160,90,114,0.35);border-top:1px solid var(--feed);border-bottom:1px solid var(--feed);"></div>
     </div>`;
   });
   diapers.forEach(e => {
-    const center = dayMinutes(e.ts_start) / 60 * px;
+    const center = scale.at(dayMinutes(e.ts_start));
     lines += `<div style="position:absolute;left:0px;top:${center-8}px;width:${laneW*2}px;height:16px;cursor:pointer;" onclick="openEditModal(${e.id})">
       <div style="position:absolute;left:0;top:6px;width:100%;height:4px;background:rgba(184,134,58,0.35);border-top:1px solid var(--accent);border-bottom:1px solid var(--accent);"></div>
     </div>`;
@@ -635,21 +702,37 @@ function renderTimelineNarrow(sleeps, walks, feeds, diapers, moods, nowMin, grid
 
   let moodMarks = '';
   moods.forEach(e => {
-    const center = dayMinutes(e.ts_start) / 60 * px;
+    const center = scale.at(dayMinutes(e.ts_start));
     const emoji = MOOD_EMOJI[e.meta?.mood] || MOOD_EMOJI.neutral;
     moodMarks += `<div style="position:absolute;left:${laneW*2}px;top:${center-10}px;width:${moodColW}px;height:20px;display:flex;align-items:center;justify-content:center;font-size:15px;line-height:1;cursor:pointer;" onclick="openEditModal(${e.id})">${emoji}</div>`;
   });
 
   let hours = '';
+  if (scale.head > 0) {
+    hours += `<div class="tl-squeezed" style="left:0;top:0;width:${totalW}px;height:${scale.at(scale.head)}px;"></div>`;
+  }
+  if (scale.tail < 1440) {
+    const top = scale.at(scale.tail);
+    hours += `<div class="tl-squeezed" style="left:0;top:${top}px;width:${totalW}px;height:${scale.size - top}px;"></div>`;
+  }
   for (let h = 0; h <= 24; h++) {
-    const top = h * px;
-    hours += `<div style="position:absolute;left:0;top:${top}px;width:${totalW}px;height:1px;background:var(--border);"></div>`;
-    if (h % 6 === 0) hours += `<div style="position:absolute;left:-30px;top:${top-5}px;width:26px;text-align:right;font-family:var(--tl-mono);font-size:9px;color:var(--ink2);">${pad(h)}</div>`;
+    const min = h * 60;
+    const top = scale.at(min);
+    const squeezed = scale.isSqueezed(min);
+    // Inside a squeezed stretch the hour lines would collide, so only the
+    // boundary hours are drawn there.
+    const edge = min === scale.head || min === scale.tail;
+    if (!squeezed || edge || h === 0 || h === 24) {
+      hours += `<div style="position:absolute;left:0;top:${top}px;width:${totalW}px;height:1px;background:var(--border);"></div>`;
+    }
+    if ((!squeezed && h % 3 === 0) || edge || h === 0 || h === 24) {
+      hours += `<div style="position:absolute;left:-30px;top:${top-5}px;width:26px;text-align:right;font-family:var(--tl-mono);font-size:9px;color:var(--ink2);">${pad(h)}</div>`;
+    }
   }
 
   let nowLine = '';
   if (nowMin != null) {
-    const top = nowMin / 60 * px;
+    const top = scale.at(nowMin);
     nowLine = `
       <div style="position:absolute;left:-30px;top:${top}px;width:${totalW+30}px;height:0;border-top:1.5px dashed var(--accent-ink);z-index:5;"></div>
       <div style="position:absolute;left:-30px;top:${top-11}px;background:var(--accent-ink);color:#fff;font-family:var(--tl-mono);font-size:8px;letter-spacing:0.05em;padding:2px 4px;border-radius:4px;z-index:5;">${t('tl_now')}</div>`;
@@ -677,32 +760,30 @@ function renderTimelineNarrow(sleeps, walks, feeds, diapers, moods, nowMin, grid
   `;
 }
 
-function renderTimelineWide(sleeps, walks, feeds, diapers, moods, nowMin) {
-  const px = 28, trackW = px * 24, rowH = 80, barH = 40;
+function renderTimelineWide(sleeps, walks, feeds, diapers, moods, nowMin, scale) {
+  const trackW = scale.size, rowH = 80, barH = 40;
 
   let bars = '';
   sleeps.forEach(e => {
-    const start = dayMinutes(e.ts_start);
-    const left = start / 60 * px;
-    const w = Math.max((spanEndMinutes(e, nowMin) - start) / 60 * px, 4);
+    const left = scale.at(dayMinutes(e.ts_start));
+    const w = Math.max(scale.at(spanEndMinutes(e, nowMin)) - left, 4);
     bars += `<div style="position:absolute;left:${left}px;top:20px;width:${w}px;height:${barH}px;background:var(--sleep-soft);border:1.5px solid var(--sleep);border-radius:8px;cursor:pointer;" onclick="openEditModal(${e.id})"></div>`;
   });
   walks.forEach(e => {
-    const start = dayMinutes(e.ts_start);
-    const left = start / 60 * px;
-    const w = Math.max((spanEndMinutes(e, nowMin) - start) / 60 * px, 4);
+    const left = scale.at(dayMinutes(e.ts_start));
+    const w = Math.max(scale.at(spanEndMinutes(e, nowMin)) - left, 4);
     bars += `<div style="position:absolute;left:${left}px;top:${rowH+20}px;width:${w}px;height:${barH}px;background:var(--walk-soft);border:1.5px solid var(--walk);border-radius:8px;cursor:pointer;" onclick="openEditModal(${e.id})"></div>`;
   });
 
   let lines = '';
   feeds.forEach(e => {
-    const center = dayMinutes(e.ts_start) / 60 * px;
+    const center = scale.at(dayMinutes(e.ts_start));
     lines += `<div style="position:absolute;left:${center-8}px;top:0;width:16px;height:${rowH*2}px;cursor:pointer;" onclick="openEditModal(${e.id})">
       <div style="position:absolute;left:6px;top:0;width:4px;height:100%;background:rgba(160,90,114,0.35);border-left:1px solid var(--feed);border-right:1px solid var(--feed);"></div>
     </div>`;
   });
   diapers.forEach(e => {
-    const center = dayMinutes(e.ts_start) / 60 * px;
+    const center = scale.at(dayMinutes(e.ts_start));
     lines += `<div style="position:absolute;left:${center-8}px;top:0;width:16px;height:${rowH*2}px;cursor:pointer;" onclick="openEditModal(${e.id})">
       <div style="position:absolute;left:6px;top:0;width:4px;height:100%;background:rgba(184,134,58,0.35);border-left:1px solid var(--accent);border-right:1px solid var(--accent);"></div>
     </div>`;
@@ -710,21 +791,35 @@ function renderTimelineWide(sleeps, walks, feeds, diapers, moods, nowMin) {
 
   let moodMarks = '';
   moods.forEach(e => {
-    const center = dayMinutes(e.ts_start) / 60 * px;
+    const center = scale.at(dayMinutes(e.ts_start));
     const emoji = MOOD_EMOJI[e.meta?.mood] || MOOD_EMOJI.neutral;
     moodMarks += `<div style="position:absolute;left:${center-10}px;top:0;width:20px;height:20px;display:flex;align-items:center;justify-content:center;font-size:15px;line-height:1;cursor:pointer;" onclick="openEditModal(${e.id})">${emoji}</div>`;
   });
 
+  let bands = '';
+  if (scale.head > 0) {
+    bands += `<div class="tl-squeezed" style="left:0;top:0;width:${scale.at(scale.head)}px;height:${rowH*2}px;"></div>`;
+  }
+  if (scale.tail < 1440) {
+    const left = scale.at(scale.tail);
+    bands += `<div class="tl-squeezed" style="left:${left}px;top:0;width:${scale.size - left}px;height:${rowH*2}px;"></div>`;
+  }
+
   let hours = '';
-  for (let h = 0; h <= 24; h += 3) {
-    const left = h * px;
-    hours += `<div style="position:absolute;left:${left}px;top:0;width:1px;height:${rowH*2}px;background:var(--border);"></div>`;
-    hours += `<span style="position:absolute;left:${left}px;top:-22px;font-family:var(--tl-mono);font-size:10px;color:var(--ink2);">${pad(h)}</span>`;
+  for (let h = 0; h <= 24; h++) {
+    const min = h * 60;
+    const left = scale.at(min);
+    const squeezed = scale.isSqueezed(min);
+    const edge = min === scale.head || min === scale.tail;
+    if ((!squeezed && h % 3 === 0) || edge || h === 0 || h === 24) {
+      hours += `<div style="position:absolute;left:${left}px;top:0;width:1px;height:${rowH*2}px;background:var(--border);"></div>`;
+      hours += `<span style="position:absolute;left:${left}px;top:-22px;font-family:var(--tl-mono);font-size:10px;color:var(--ink2);">${pad(h)}</span>`;
+    }
   }
 
   let nowLine = '';
   if (nowMin != null) {
-    const left = nowMin / 60 * px;
+    const left = scale.at(nowMin);
     nowLine = `
       <div style="position:absolute;left:${left}px;top:-4px;width:0;height:${rowH*2+8}px;border-left:1.5px dashed var(--accent-ink);z-index:5;"></div>
       <div style="position:absolute;left:${left-19}px;top:-18px;background:var(--accent-ink);color:#fff;font-family:var(--tl-mono);font-size:8px;letter-spacing:0.05em;padding:2px 4px;border-radius:4px;z-index:5;">${t('tl_now')}</div>`;
@@ -735,6 +830,7 @@ function renderTimelineWide(sleeps, walks, feeds, diapers, moods, nowMin) {
       <div style="position:relative;margin-left:70px;">
         <div style="position:relative;height:18px;margin-bottom:8px;">${hours}</div>
         <div style="position:relative;width:${trackW}px;height:${rowH*2}px;">
+          ${bands}
           <div style="position:absolute;left:0;top:${rowH}px;width:${trackW}px;height:1px;background:var(--border);"></div>
           <div style="position:absolute;left:-70px;top:0;width:62px;height:${rowH}px;display:flex;align-items:center;gap:5px;color:var(--sleep);">${icon('sleep')}<span class="lbl" style="font-size:10px;">${t('types').sleep}</span></div>
           <div style="position:absolute;left:-70px;top:${rowH}px;width:62px;height:${rowH}px;display:flex;align-items:center;gap:5px;color:var(--walk);">${icon('walk')}<span class="lbl" style="font-size:10px;">${t('types').walk}</span></div>
