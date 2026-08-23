@@ -936,10 +936,10 @@ async function loadSettings() {
       <input type="text" id="baby-name-input" value="${esc(babyInfo.name || '')}" placeholder="${t('baby_name_placeholder')}">
     </div>
     <div class="field"><label>${t('lbl_birthday')}</label>
-      <div class="birthday-row">
-        <input type="date" id="birthday-input" value="${esc(babyInfo.birthday || '')}">
-        <button class="btn-small" onclick="saveBaby()">${t('btn_save')}</button>
-      </div>
+      <input type="date" id="birthday-input" value="${esc(babyInfo.birthday || '')}">
+    </div>
+    <div class="baby-actions">
+      <button class="btn-small" onclick="saveBaby()">${t('btn_save')}</button>
     </div>
   `;
 
