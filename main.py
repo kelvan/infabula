@@ -14,7 +14,15 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import delete, distinct, func, select
 
-from db import Entry, IpName, Session, Setting, sqlite_file
+from db import (
+    DEFAULT_BABY_ID,
+    DEFAULT_USER_ID,
+    Entry,
+    IpName,
+    Session,
+    Setting,
+    sqlite_file,
+)
 from migrate import run_migrations
 
 app = FastAPI()
@@ -24,6 +32,15 @@ ASSET_VERSION = str(int(time.time()))
 # the date part across SQLite, PostgreSQL and MariaDB.
 DAY_START = func.substr(Entry.ts_start, 1, 10)
 DAY_END = func.substr(Entry.ts_end, 1, 10)
+
+
+def entries_of(baby_id: int = DEFAULT_BABY_ID):
+    """Base query scoped to one baby's log.
+
+    There is no sign-in yet, so everything runs against the default baby;
+    once users exist this is the single place that has to learn which one.
+    """
+    return select(Entry).where(Entry.baby_id == baby_id)
 
 # ── SSE pub-sub ──
 subscribers: set[asyncio.Queue] = set()
@@ -121,6 +138,8 @@ async def create_entry(request: Request):
         note=body.get("note", ""),
         meta=body.get("meta", {}),
         ip=get_client_ip(request),
+        baby_id=DEFAULT_BABY_ID,
+        user_id=DEFAULT_USER_ID,
     )
     async with Session.begin() as session:
         session.add(entry)
@@ -145,7 +164,7 @@ async def patch_entry(entry_id: int, request: Request):
 @app.get("/api/entries")
 async def get_entries(date: str = None, limit: int = 300):
     async with Session() as session:
-        stmt = select(Entry).order_by(Entry.ts_start.desc())
+        stmt = entries_of().order_by(Entry.ts_start.desc())
         if date:
             stmt = stmt.where((DAY_START == date) | (DAY_END == date))
         else:
@@ -160,7 +179,10 @@ async def get_dates():
     async with Session() as session:
         rows = (
             await session.scalars(
-                select(distinct(DAY_START)).order_by(DAY_START.desc()).limit(90)
+                select(distinct(DAY_START))
+                .where(Entry.baby_id == DEFAULT_BABY_ID)
+                .order_by(DAY_START.desc())
+                .limit(90)
             )
         ).all()
     return list(rows)
@@ -221,7 +243,7 @@ async def get_known_ips():
         ips = (
             await session.scalars(
                 select(distinct(Entry.ip))
-                .where(Entry.ip.is_not(None))
+                .where(Entry.ip.is_not(None), Entry.baby_id == DEFAULT_BABY_ID)
                 .order_by(Entry.ip)
             )
         ).all()
@@ -234,7 +256,7 @@ async def _open_entry(entry_type: str):
     """Most recent entry of this type without an end time, if any."""
     async with Session() as session:
         entry = await session.scalar(
-            select(Entry)
+            entries_of()
             .where(Entry.type == entry_type, Entry.ts_end.is_(None))
             .order_by(Entry.ts_start.desc())
             .limit(1)
@@ -266,12 +288,12 @@ async def get_stats(date: str = None):
     async with Session() as session:
         rows = (
             await session.scalars(
-                select(Entry).order_by(Entry.ts_start.desc()).limit(500)
+                entries_of().order_by(Entry.ts_start.desc()).limit(500)
             )
         ).all()
         day_rows = (
             await session.scalars(
-                select(Entry).where(DAY_START == day).order_by(Entry.ts_start.asc())
+                entries_of().where(DAY_START == day).order_by(Entry.ts_start.asc())
             )
         ).all()
     entries = [row_to_dict(r) for r in rows]
@@ -326,7 +348,7 @@ async def fetch_entries_range(start: str, end: str):
     async with Session() as session:
         rows = (
             await session.scalars(
-                select(Entry)
+                entries_of()
                 .where(DAY_START.between(start, end))
                 .order_by(Entry.ts_start.asc())
             )

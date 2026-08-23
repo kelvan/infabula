@@ -49,6 +49,8 @@ DB_URL=mysql://user:pass@host/infabula        # needs: uv sync --extra mysql
 
 Defaults to SQLite; the older `DB_PATH` var still works and maps to a SQLite file. The schema is managed by Alembic and migrated automatically on startup — a database from before Alembic was introduced is adopted as-is, not re-created. On SQLite a timestamped backup is written to a `backups/` folder next to the database on every startup.
 
+Entries belong to a baby and record who created them, and `baby_access` grants users an `owner`/`editor`/`viewer` role on a baby's log so several people can share one. None of that is exposed yet: there is no sign-in, and the app works against a single placeholder user and baby.
+
 ## Podman/Docker (optional)
 
 ```bash

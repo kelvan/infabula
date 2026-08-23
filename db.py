@@ -14,7 +14,7 @@ Sync-style URLs are rewritten to their async driver automatically. The legacy
 import os
 from datetime import datetime
 
-from sqlalchemy import JSON, String, Text
+from sqlalchemy import JSON, ForeignKey, String, Text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
@@ -70,10 +70,71 @@ class Base(DeclarativeBase):
     pass
 
 
+# Rows the app falls back to until users and babies are actually wired up.
+DEFAULT_USER_ID = 1
+DEFAULT_BABY_ID = 1
+
+# Access levels a user can hold on a baby's log.
+ROLE_OWNER = "owner"
+ROLE_EDITOR = "editor"
+ROLE_VIEWER = "viewer"
+
+
+class User(Base):
+    __tablename__ = "users"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    name: Mapped[str] = mapped_column(String(128), nullable=False)
+    email: Mapped[str | None] = mapped_column(String(255), unique=True)
+    created_at: Mapped[str | None] = mapped_column(
+        String(32), default=lambda: datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    )
+
+
+class Baby(Base):
+    __tablename__ = "babies"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    name: Mapped[str] = mapped_column(String(128), nullable=False)
+    birthday: Mapped[str | None] = mapped_column(String(10))
+    created_at: Mapped[str | None] = mapped_column(
+        String(32), default=lambda: datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    )
+
+
+class BabyAccess(Base):
+    """Which users may see or edit a given baby's log, and at what level."""
+
+    __tablename__ = "baby_access"
+
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
+    )
+    baby_id: Mapped[int] = mapped_column(
+        ForeignKey("babies.id", ondelete="CASCADE"), primary_key=True
+    )
+    role: Mapped[str] = mapped_column(String(16), nullable=False, default=ROLE_OWNER)
+    created_at: Mapped[str | None] = mapped_column(
+        String(32), default=lambda: datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    )
+
+    @property
+    def can_edit(self) -> bool:
+        return self.role in (ROLE_OWNER, ROLE_EDITOR)
+
+
 class Entry(Base):
     __tablename__ = "entries"
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    baby_id: Mapped[int] = mapped_column(
+        ForeignKey("babies.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+        default=DEFAULT_BABY_ID,
+    )
+    # Who logged it. Nullable: entries predating users have no known author.
+    user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), index=True)
     type: Mapped[str] = mapped_column(String(32), nullable=False)
     # Timestamps stay as 'YYYY-MM-DDTHH:MM' local-time strings: the app is a
     # single-household journal where wall-clock time is what matters.
@@ -89,6 +150,8 @@ class Entry(Base):
     def as_dict(self) -> dict:
         return {
             "id": self.id,
+            "baby_id": self.baby_id,
+            "user_id": self.user_id,
             "type": self.type,
             "ts_start": self.ts_start,
             "ts_end": self.ts_end,
