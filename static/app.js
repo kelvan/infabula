@@ -35,7 +35,7 @@ const I18N = {
     bd_months_old: a=>`${a.name} ist heute ${a.n} Monate alt`,
     bd_years_old: a=>`${a.name} ist heute ${a.n} ${a.n === 1 ? 'Jahr' : 'Jahre'} alt`,
     export_title:'Export', range_today:'Heute', range_week:'Diese Woche', range_month:'Diesen Monat', range_custom:'Frei wählen',
-    view_list:'Liste', view_timeline:'Zeitstrahl', tl_now:'JETZT',
+    view_list:'Liste', view_timeline:'Zeitleiste', tl_now:'JETZT',
     btn_open_report:'Bericht öffnen', btn_download_csv:'CSV herunterladen',
     today:'Heute', yesterday:'Gestern',
     just_now:'gerade eben',
