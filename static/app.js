@@ -45,6 +45,7 @@ const I18N = {
     ago_min: n=>`vor ${n} min`, ago_hour: n=>`vor ${n} h`, ago_day: n=>`vor ${n} d`,
     confirm_delete:'Eintrag löschen?',
     toast_no_time:'Bitte Zeitpunkt angeben', toast_deleted:'Gelöscht',
+    toast_no_measurement:'Bitte Gewicht oder Größe angeben',
     toast_error:'Fehler beim Speichern', toast_saved:'✓ Gespeichert',
     toast_wakeup: dur=>`Aufgewacht – ${dur} Schlaf`,
     toast_walk_end: dur=>`Zurück – ${dur} Spaziergang`,
@@ -98,6 +99,7 @@ const I18N = {
     ago_min: n=>`${n} min ago`, ago_hour: n=>`${n} h ago`, ago_day: n=>`${n} d ago`,
     confirm_delete:'Delete entry?',
     toast_no_time:'Please enter a time', toast_deleted:'Deleted',
+    toast_no_measurement:'Please enter weight or height',
     toast_error:'Error saving', toast_saved:'✓ Saved',
     toast_wakeup: dur=>`Woke up – ${dur} sleep`,
     toast_walk_end: dur=>`Back – ${dur} walk`,
@@ -1394,6 +1396,7 @@ async function submitEntry() {
   if (selectedType === 'weight') {
     meta.weight = document.getElementById('f-weight')?.value;
     meta.height = document.getElementById('f-height')?.value;
+    if (!meta.weight && !meta.height) { toast(t('toast_no_measurement')); return; }
   }
   if (selectedType === 'mood') meta.mood = document.getElementById('f-mood')?.value;
 
@@ -1560,6 +1563,7 @@ async function submitEditEntry() {
   if (entry.type === 'weight') {
     meta.weight = document.getElementById('f-weight')?.value;
     meta.height = document.getElementById('f-height')?.value;
+    if (!meta.weight && !meta.height) { toast(t('toast_no_measurement')); return; }
   }
   if (entry.type === 'mood') meta.mood = document.getElementById('f-mood')?.value;
 
