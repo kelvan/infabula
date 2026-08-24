@@ -385,6 +385,13 @@ header .logo-svg { height: 38px; width: auto; }
 .sleep-dur { font-family: ui-monospace, 'Cascadia Code', 'Source Code Pro', monospace; font-size: 0.7rem; color: var(--ink2); width: 46px; text-align: right; }
 .sleep-time { font-family: ui-monospace, 'Cascadia Code', 'Source Code Pro', monospace; font-size: 0.68rem; color: var(--ink2); width: 88px; }
 
+.growth-chart { margin-bottom: 18px; }
+.growth-chart-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 4px; }
+.growth-chart-label { font-family: ui-monospace, 'Cascadia Code', 'Source Code Pro', monospace; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.08em; }
+.growth-chart-val { font-size: 1.1rem; font-weight: 600; color: var(--accent-ink); }
+.growth-svg { width: 100%; height: 80px; display: block; }
+.growth-chart-range { display: flex; justify-content: space-between; font-family: ui-monospace, 'Cascadia Code', 'Source Code Pro', monospace; font-size: 0.68rem; color: var(--ink2); margin-top: 2px; }
+
 /* ── FAB ── */
 .fab {
   position: fixed;

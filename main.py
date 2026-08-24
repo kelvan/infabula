@@ -322,8 +322,20 @@ async def get_stats(date: str = None):
                 entries_of().where(DAY_START == day).order_by(Entry.ts_start.asc())
             )
         ).all()
+        growth_rows = (
+            await session.scalars(
+                entries_of()
+                .where(Entry.type == "weight")
+                .order_by(Entry.ts_start.asc())
+            )
+        ).all()
     entries = [row_to_dict(r) for r in rows]
     day_entries = [row_to_dict(r) for r in day_rows]
+    growth = [
+        {"time": e["ts_start"], "weight": m.get("weight"), "height": m.get("height")}
+        for e in (row_to_dict(r) for r in growth_rows)
+        if (m := e["meta"] or {}) and (m.get("weight") or m.get("height"))
+    ]
 
     last = {}
     for e in entries:
@@ -364,6 +376,7 @@ async def get_stats(date: str = None):
         "last": last,
         "sleep_durations": sleep_durations,
         "intervals": intervals,
+        "growth": growth,
     }
 
 

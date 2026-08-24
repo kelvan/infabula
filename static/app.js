@@ -9,7 +9,7 @@ const I18N = {
     tile_walk:'Spaziergang', tile_clothing:'Kleidung wechseln', tile_walk_end:'Zurück', tile_mood:'Stimmung',
     fab_title:'Neuer Eintrag',
     lbl_time:'Zeitpunkt', lbl_note:'Notiz', lbl_type:'Art', lbl_amount:'Menge (ml)',
-    lbl_content:'Inhalt', lbl_side:'Seite', lbl_start:'Beginn', lbl_end:'Ende', lbl_weight_g:'Gewicht (g)', lbl_mood:'Stimmung',
+    lbl_content:'Inhalt', lbl_side:'Seite', lbl_start:'Beginn', lbl_end:'Ende', lbl_weight_g:'Gewicht (g)', lbl_height_cm:'Größe (cm)', lbl_mood:'Stimmung',
     opt_wet:'Nass', opt_dirty:'Schmutzig', opt_both:'Beides',
     opt_left:'Links', opt_right:'Rechts', opt_both_sides:'Beide',
     opt_pumped:'Abgepumpte Milch', opt_formula:'Formulamilch',
@@ -20,11 +20,12 @@ const I18N = {
     still_sleeping:'noch schläft', still_walking:'läuft noch',
     no_entries:'Keine Einträge für diesen Tag',
     section_last:'Letztes Ereignis', section_intervals:'Abstände',
-    section_sleep:'Schlafdauer (letzte 10)',
+    section_sleep:'Schlafdauer (letzte 10)', section_growth:'Wachstum',
     stat_interval:'Abstand', stat_avg:'Ø diesen Tag',
     stat_awake_since:'Wach seit', stat_back_since:'Zurück seit',
     stat_asleep_since:'Schläft seit', stat_walking_since:'Läuft seit',
     no_data:'Keine Daten', not_enough_data:'Zu wenig Daten', no_sleep_data:'Noch keine Schlafdaten',
+    no_growth_data:'Noch keine Gewichts-/Größendaten', growth_weight:'Gewicht', growth_height:'Größe',
     settings_ip_names_title:'Geräte', settings_name_placeholder:'Name eingeben', settings_no_ips:'Noch keine Geräte bekannt',
     settings_baby_title:'Baby',
     lbl_baby_name:'Name', lbl_birthday:'Geburtstag', baby_name_placeholder:'Name des Babys',
@@ -59,7 +60,7 @@ const I18N = {
     tile_walk:'Walk', tile_clothing:'Clothing change', tile_walk_end:'Back', tile_mood:'Mood',
     fab_title:'New Entry',
     lbl_time:'Time', lbl_note:'Note', lbl_type:'Type', lbl_amount:'Amount (ml)',
-    lbl_content:'Content', lbl_side:'Side', lbl_start:'Start', lbl_end:'End', lbl_weight_g:'Weight (g)', lbl_mood:'Mood',
+    lbl_content:'Content', lbl_side:'Side', lbl_start:'Start', lbl_end:'End', lbl_weight_g:'Weight (g)', lbl_height_cm:'Height (cm)', lbl_mood:'Mood',
     opt_wet:'Wet', opt_dirty:'Dirty', opt_both:'Both',
     opt_left:'Left', opt_right:'Right', opt_both_sides:'Both',
     opt_pumped:'Pumped milk', opt_formula:'Formula',
@@ -70,11 +71,12 @@ const I18N = {
     still_sleeping:'still sleeping', still_walking:'still walking',
     no_entries:'No entries for this day',
     section_last:'Last event', section_intervals:'Intervals',
-    section_sleep:'Sleep duration (last 10)',
+    section_sleep:'Sleep duration (last 10)', section_growth:'Growth',
     stat_interval:'Interval', stat_avg:'avg this day',
     stat_awake_since:'Awake since', stat_back_since:'Back since',
     stat_asleep_since:'Asleep since', stat_walking_since:'Walking since',
     no_data:'No data', not_enough_data:'Not enough data', no_sleep_data:'No sleep data yet',
+    no_growth_data:'No weight/height data yet', growth_weight:'Weight', growth_height:'Height',
     settings_ip_names_title:'Devices', settings_name_placeholder:'Enter name', settings_no_ips:'No devices seen yet',
     settings_baby_title:'Baby',
     lbl_baby_name:'Name', lbl_birthday:'Birthday', baby_name_placeholder:"Baby's name",
@@ -520,7 +522,12 @@ async function loadLog() {
       if (m.side) metaStr = tMeta(m.side);
     }
     if (e.type === 'bottle' && m.amount) metaStr = `${m.amount} ml`;
-    if (e.type === 'weight' && m.weight) metaStr = `${m.weight} g`;
+    if (e.type === 'weight') {
+      const parts = [];
+      if (m.weight) parts.push(`${m.weight} g`);
+      if (m.height) parts.push(`${m.height} cm`);
+      if (parts.length) metaStr = parts.join(' · ');
+    }
     if (e.type === 'mood' && m.mood) metaStr = tMeta(m.mood);
     if (e.type === 'walk') {
       if (e.ts_end) {
@@ -850,6 +857,37 @@ function renderTimelineWide(sleeps, walks, feeds, diapers, moods, nowMin, scale)
   `;
 }
 
+function growthChart(points, label, unit, colorKey) {
+  const W = 100, H = 40, pad = 3;
+  const xs = points.map(p => new Date(p.x).getTime());
+  const ys = points.map(p => p.y);
+  const minX = Math.min(...xs), maxX = Math.max(...xs), spanX = (maxX - minX) || 1;
+  const minY = Math.min(...ys), maxY = Math.max(...ys);
+  const yMargin = (maxY - minY) * 0.15 || 1;
+  const yMin = minY - yMargin, yMax = maxY + yMargin, spanY = yMax - yMin;
+
+  const px = x => pad + ((x - minX) / spanX) * (W - pad * 2);
+  const py = y => H - pad - ((y - yMin) / spanY) * (H - pad * 2);
+
+  const pathD = points.map((p, i) => `${i === 0 ? 'M' : 'L'}${px(new Date(p.x).getTime()).toFixed(1)},${py(p.y).toFixed(1)}`).join(' ');
+  const dots = points.map(p => `<circle cx="${px(new Date(p.x).getTime()).toFixed(1)}" cy="${py(p.y).toFixed(1)}" r="1.6" fill="var(--${colorKey})"/>`).join('');
+  const first = points[0], last = points[points.length - 1];
+  const shortDate = iso => `${iso.slice(8,10)}.${iso.slice(5,7)}.`;
+
+  return `
+    <div class="growth-chart">
+      <div class="growth-chart-head">
+        <span class="growth-chart-label" style="color:var(--${colorKey})">${label}</span>
+        <span class="growth-chart-val">${last.y} ${unit}</span>
+      </div>
+      <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" class="growth-svg">
+        <path d="${pathD}" fill="none" stroke="var(--${colorKey})" stroke-width="1.4" vector-effect="non-scaling-stroke"/>
+        ${dots}
+      </svg>
+      <div class="growth-chart-range"><span>${shortDate(first.x)}</span><span>${shortDate(last.x)}</span></div>
+    </div>`;
+}
+
 // ── Stats ──
 async function loadStats() {
   const res = await fetch('/api/stats?date=' + currentDate);
@@ -880,7 +918,13 @@ async function loadStats() {
         valStr = `${t('stat_walking_since')} ${fmtDur(Math.round(durMin(e.ts_start, new Date().toISOString())))}`;
       }
     }
-    if (key === 'weight' && e.meta?.weight) { valStr = e.meta.weight + ' g'; sub = fmtAgo(e.ts_start); }
+    if (key === 'weight' && (e.meta?.weight || e.meta?.height)) {
+      const parts = [];
+      if (e.meta.weight) parts.push(e.meta.weight + ' g');
+      if (e.meta.height) parts.push(e.meta.height + ' cm');
+      valStr = parts.join(' · ');
+      sub = fmtAgo(e.ts_start);
+    }
     const active = (key === 'sleep' || key === 'walk') && !e.ts_end;
     lastCards += `
       <div class="stat-card${active ? ' tint-'+key : ''}">
@@ -914,11 +958,22 @@ async function loadStats() {
       </div>`).join('');
   }
 
+  const weightPoints = data.growth.filter(g => g.weight).map(g => ({ x: g.time, y: parseFloat(g.weight) }));
+  const heightPoints = data.growth.filter(g => g.height).map(g => ({ x: g.time, y: parseFloat(g.height) }));
+  let growthCharts = `<div class="empty">${t('no_growth_data')}</div>`;
+  if (weightPoints.length || heightPoints.length) {
+    growthCharts = '';
+    if (weightPoints.length) growthCharts += growthChart(weightPoints, t('growth_weight'), 'g', 'accent');
+    if (heightPoints.length) growthCharts += growthChart(heightPoints, t('growth_height'), 'cm', 'sleep');
+  }
+
   el.innerHTML = `
     <div class="section-title">${t('section_last')}</div>
     <div class="stats-grid">${lastCards||`<div class="empty">${t('no_data')}</div>`}</div>
     <div class="section-title">${t('section_intervals')}</div>
     <div class="stats-grid">${ivCards||`<div class="empty">${t('not_enough_data')}</div>`}</div>
+    <div class="section-title">${t('section_growth')}</div>
+    ${growthCharts}
     <div class="section-title">${t('section_sleep')}</div>
     ${sleepBars}
   `;
@@ -1119,6 +1174,7 @@ function selectType(type) {
     fields.innerHTML = `
       ${dtField('f-start', t('lbl_time'), now)}
       <div class="field"><label>${t('lbl_weight_g')}</label><input type="number" id="f-weight" min="0" step="10" placeholder="3450"></div>
+      <div class="field"><label>${t('lbl_height_cm')}</label><input type="number" id="f-height" min="0" step="0.5" placeholder="52"></div>
       <div class="field"><label>${t('lbl_note')}</label><textarea id="f-note" rows="2"></textarea></div>
       <button class="btn" onclick="submitEntry()">${t('btn_save')}</button>
     `;
@@ -1171,7 +1227,10 @@ async function submitEntry() {
     meta.amount = document.getElementById('f-amount')?.value;
     meta.content = document.getElementById('f-content')?.value;
   }
-  if (selectedType === 'weight') meta.weight = document.getElementById('f-weight')?.value;
+  if (selectedType === 'weight') {
+    meta.weight = document.getElementById('f-weight')?.value;
+    meta.height = document.getElementById('f-height')?.value;
+  }
   if (selectedType === 'mood') meta.mood = document.getElementById('f-mood')?.value;
 
   const apiType = selectedType === 'sleep_start' ? 'sleep' : selectedType;
@@ -1286,6 +1345,7 @@ function editFieldsHtml(entry) {
     return `
       ${dtField('f-start', t('lbl_time'), start)}
       <div class="field"><label>${t('lbl_weight_g')}</label><input type="number" id="f-weight" min="0" step="10" value="${m.weight || ''}"></div>
+      <div class="field"><label>${t('lbl_height_cm')}</label><input type="number" id="f-height" min="0" step="0.5" value="${m.height || ''}"></div>
       <div class="field"><label>${t('lbl_note')}</label><textarea id="f-note" rows="2">${note}</textarea></div>
       <button class="btn" onclick="submitEditEntry()">${t('btn_save')}</button>
     `;
@@ -1333,7 +1393,10 @@ async function submitEditEntry() {
     meta.amount = document.getElementById('f-amount')?.value;
     meta.content = document.getElementById('f-content')?.value;
   }
-  if (entry.type === 'weight') meta.weight = document.getElementById('f-weight')?.value;
+  if (entry.type === 'weight') {
+    meta.weight = document.getElementById('f-weight')?.value;
+    meta.height = document.getElementById('f-height')?.value;
+  }
   if (entry.type === 'mood') meta.mood = document.getElementById('f-mood')?.value;
 
   const body = {
