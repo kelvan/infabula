@@ -22,20 +22,6 @@
   <input type="date" id="date-picker" class="date-picker-hidden" onchange="jumpToDate(this.value)">
 </div>
 
-<div class="tab-bar">
-  <button class="tab-btn active" id="tab-btn-log" onclick="switchTab('log', this)">
-    <svg viewBox="0 0 24 24" class="tab-ic"><path d="M5 6h14M5 12h14M5 18h9"/></svg>
-    <span class="tab-lbl">Verlauf</span>
-  </button>
-  <button class="tab-btn" id="tab-btn-stats" onclick="switchTab('stats', this)">
-    <svg viewBox="0 0 24 24" class="tab-ic"><path d="M5 19V10M12 19V5M19 19v-6"/></svg>
-    <span class="tab-lbl">Auswertung</span>
-  </button>
-  <button class="tab-btn" id="tab-btn-settings" onclick="switchTab('settings', this)">
-    <svg viewBox="0 0 24 24" class="tab-ic"><circle cx="12" cy="12" r="2.6"/><path d="M12 4.5v2M12 17.5v2M19.5 12h-2M6.5 12h-2M17.4 6.6l-1.4 1.4M8 16l-1.4 1.4M17.4 17.4L16 16M8 8 6.6 6.6"/></svg>
-    <span class="tab-lbl">Einstellungen</span>
-  </button>
-</div>
 
 <div class="main">
   <div class="tab-page active" id="tab-log">
@@ -100,6 +86,21 @@
   }
 })();
 </script>
+
+<div class="tab-bar">
+  <button class="tab-btn active" id="tab-btn-log" onclick="switchTab('log', this)">
+    <svg viewBox="0 0 24 24" class="tab-ic"><path d="M5 6h14M5 12h14M5 18h9"/></svg>
+    <span class="tab-lbl">Verlauf</span>
+  </button>
+  <button class="tab-btn" id="tab-btn-stats" onclick="switchTab('stats', this)">
+    <svg viewBox="0 0 24 24" class="tab-ic"><path d="M5 19V10M12 19V5M19 19v-6"/></svg>
+    <span class="tab-lbl">Auswertung</span>
+  </button>
+  <button class="tab-btn" id="tab-btn-settings" onclick="switchTab('settings', this)">
+    <svg viewBox="0 0 24 24" class="tab-ic"><circle cx="12" cy="12" r="2.6"/><path d="M12 4.5v2M12 17.5v2M19.5 12h-2M6.5 12h-2M17.4 6.6l-1.4 1.4M8 16l-1.4 1.4M17.4 17.4L16 16M8 8 6.6 6.6"/></svg>
+    <span class="tab-lbl">Einstellungen</span>
+  </button>
+</div>
 
 <button class="fab" id="fab" onclick="openModal()" title="Neuer Eintrag">
   <svg viewBox="0 0 24 24" class="ic"><path d="M12 5v14M5 12h14"/></svg>

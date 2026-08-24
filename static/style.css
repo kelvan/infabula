@@ -101,8 +101,15 @@ header .logo-svg { height: 38px; width: auto; }
 /* ── Tab bar ── */
 .tab-bar {
   display: flex;
-  border-bottom: 1.5px solid var(--border);
+  border-top: 1.5px solid var(--border);
   background: var(--surface);
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 200;
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  box-shadow: 0 -2px 12px rgba(58,46,34,0.07);
 }
 .tab-btn {
   flex: 1;
@@ -115,15 +122,15 @@ header .logo-svg { height: 38px; width: auto; }
   gap: 4px;
   color: var(--ink2);
   cursor: pointer;
-  border-bottom: 2.5px solid transparent;
+  border-top: 2.5px solid transparent;
   transition: all 0.15s;
 }
 .tab-btn .tab-ic { width: 17px; height: 17px; stroke: currentColor; fill: none; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
 .tab-btn .tab-lbl { font-family: ui-monospace, 'Cascadia Code', 'Source Code Pro', monospace; font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.07em; }
-.tab-btn.active { color: var(--accent-ink); border-bottom-color: var(--accent); }
+.tab-btn.active { color: var(--accent-ink); border-top-color: var(--accent); }
 
 /* ── Main layout ── */
-.main { max-width: 700px; margin: 0 auto; padding: 0 0 100px; }
+.main { max-width: 700px; margin: 0 auto; padding: 0 0 calc(150px + env(safe-area-inset-bottom, 0px)); }
 .tab-page { display: none; }
 .tab-page.active { display: block; }
 
@@ -379,7 +386,7 @@ header .logo-svg { height: 38px; width: auto; }
 /* ── FAB ── */
 .fab {
   position: fixed;
-  bottom: 28px;
+  bottom: calc(74px + env(safe-area-inset-bottom, 0px));
   right: 24px;
   width: 58px;
   height: 58px;
@@ -501,7 +508,7 @@ header .logo-svg { height: 38px; width: auto; }
 /* Toast */
 .toast {
   position: fixed;
-  bottom: 100px;
+  bottom: calc(146px + env(safe-area-inset-bottom, 0px));
   left: 50%;
   transform: translateX(-50%) translateY(30px);
   background: var(--ink);
