@@ -821,7 +821,7 @@ function renderTimelineWide(sleeps, walks, feeds, diapers, moods, nowMin, scale)
     const edge = min === scale.head || min === scale.tail;
     if ((!squeezed && h % 3 === 0) || edge || h === 0 || h === 24) {
       hours += `<div style="position:absolute;left:${left}px;top:0;width:1px;height:${rowH*2}px;background:var(--border);"></div>`;
-      hours += `<span style="position:absolute;left:${left}px;top:-22px;font-family:var(--tl-mono);font-size:10px;color:var(--ink2);">${pad(h)}</span>`;
+      hours += `<span style="position:absolute;left:${left}px;top:0;font-family:var(--tl-mono);font-size:10px;color:var(--ink2);">${pad(h)}</span>`;
     }
   }
 
