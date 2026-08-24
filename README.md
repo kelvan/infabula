@@ -21,9 +21,10 @@ From other devices on LAN: `http://<server-ip>:8080`
 - **Walk** – started/back → automatic duration, blocked from starting twice
 - **Clothing change** – time + note
 - **Weight** – time + grams
+- **Mood** – happy/neutral/fussy/crying, shown as an emoji marker
 - **Note** – free text
 
-Click any entry in the log to edit it. Multiple devices/tabs stay in sync live (SSE) — no reload needed.
+Click any entry in the log to edit it. Multiple devices/tabs stay in sync live (SSE) — no reload needed. The log can be viewed as a list or as a day timeline (sleep/walk as bars, feeding/diaper as lines, mood as emoji), with the view choice remembered across reloads.
 
 ## Stats
 
@@ -32,10 +33,13 @@ Click any entry in the log to edit it. Multiple devices/tabs stay in sync live (
 - Intervals between diapers / feedings (last + average)
 - Sleep duration bar chart (last 10 sleeps)
 - IP colors: each device on the network gets its own color automatically; name them in Settings
+- Export a report or CSV for today / this week / this month / a custom range
 
 ## Settings
 
 Assign a name to each device's IP address — the log legend and colors group by name instead of raw IP once set. Hover an entry's color dot to see which IP made it.
+
+Set the baby's name and birthday; a banner marks the birthday and month-days once set.
 
 ## Data
 
