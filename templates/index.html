@@ -8,7 +8,7 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,500&display=swap">
 <link rel="stylesheet" href="/static/style.css?v={{ v }}">
 </head>
-<body>
+<body class="log-active">
 
 <header>
   <img class="logo-svg" src="/static/logo.svg" alt="infabula">
@@ -76,6 +76,7 @@
     document.getElementById('tab-btn-log').classList.remove('active');
     document.getElementById('tab-' + h).classList.add('active');
     document.getElementById('tab-btn-' + h).classList.add('active');
+    document.body.classList.remove('log-active');
   }
   var v = localStorage.getItem('logView');
   if (v === 'timeline') {
@@ -103,6 +104,8 @@
   </button>
 </div>
 
+<div class="quick-actions" id="quick-actions-wrap"></div>
+
 <button class="fab" id="fab" onclick="openModal()" title="Neuer Eintrag">
   <svg viewBox="0 0 24 24" class="ic"><path d="M12 5v14M5 12h14"/></svg>
 </button>
@@ -126,6 +129,16 @@
     </div>
 
     <div class="form-fields" id="form-fields"></div>
+  </div>
+</div>
+
+<div class="modal-overlay quick-overlay" id="quick-overlay" onclick="quickOverlayClick(event)">
+  <div class="modal quick-modal">
+    <div class="modal-header">
+      <h2 id="quick-title"></h2>
+      <button class="close-btn" onclick="closeQuickPopup()"><svg viewBox="0 0 24 24" class="ic"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    </div>
+    <div id="quick-body"></div>
   </div>
 </div>
 

@@ -406,6 +406,7 @@ header .logo-svg { height: 38px; width: auto; }
 .growth-chart-range { display: flex; justify-content: space-between; font-family: ui-monospace, 'Cascadia Code', 'Source Code Pro', monospace; font-size: 0.68rem; color: var(--ink2); margin-top: 2px; }
 
 /* ── FAB ── */
+body:not(.log-active) .fab, body:not(.log-active) .quick-actions { display: none; }
 .fab {
   position: fixed;
   bottom: calc(74px + env(safe-area-inset-bottom, 0px));
@@ -512,6 +513,71 @@ header .logo-svg { height: 38px; width: auto; }
   margin-top: 4px;
 }
 .btn:hover { background: var(--accent-ink); }
+
+/* ── Quick actions ── */
+.quick-actions {
+  position: fixed;
+  right: 96px;
+  bottom: calc(74px + env(safe-area-inset-bottom, 0px));
+  display: flex;
+  flex-direction: row-reverse;
+  flex-wrap: wrap-reverse;
+  align-content: flex-end;
+  gap: 10px;
+  max-width: calc(100vw - 106px);
+  z-index: 100;
+}
+.quick-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 46px;
+  height: 46px;
+  background: var(--surface);
+  border: 1.5px solid var(--border);
+  border-radius: 50%;
+  cursor: pointer;
+  box-shadow: 0 3px 10px rgba(42,31,20,0.15);
+  transition: all 0.15s;
+}
+.quick-btn:hover { border-color: var(--accent2); transform: translateY(-1px); }
+.quick-btn .ic { width: 19px; height: 19px; stroke: var(--ink2); fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.quick-btn.tint-sleep { background: var(--sleep-soft); border-color: var(--sleep); }
+.quick-btn.tint-sleep .ic { stroke: var(--sleep); }
+.quick-btn.tint-walk { background: var(--walk-soft); border-color: var(--walk); }
+.quick-btn.tint-walk .ic { stroke: var(--walk); }
+
+.quick-overlay { align-items: center; }
+.quick-modal { max-width: 380px; border-radius: 20px; align-self: center; }
+.quick-opt-row { display: flex; gap: 10px; flex-wrap: wrap; }
+.quick-opt-btn {
+  flex: 1;
+  min-width: 90px;
+  background: var(--surface);
+  border: 1.5px solid var(--border);
+  border-radius: 10px;
+  padding: 14px 8px;
+  cursor: pointer;
+  text-align: center;
+  font-family: ui-monospace, 'Cascadia Code', 'Source Code Pro', monospace;
+  font-size: 0.78rem;
+  color: var(--ink);
+  transition: all 0.15s;
+}
+.quick-opt-btn:hover { border-color: var(--accent2); background: var(--accent-soft); }
+.quick-emoji-btn {
+  flex: 1;
+  background: var(--surface);
+  border: 1.5px solid var(--border);
+  border-radius: 12px;
+  padding: 12px 4px;
+  cursor: pointer;
+  text-align: center;
+  font-size: 1.7rem;
+  line-height: 1;
+  transition: all 0.15s;
+}
+.quick-emoji-btn:hover { border-color: var(--accent2); background: var(--accent-soft); }
 
 /* IP legend */
 .ip-legend { display: flex; flex-wrap: wrap; gap: 8px; padding: 10px 20px 0; }

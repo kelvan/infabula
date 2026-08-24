@@ -28,6 +28,7 @@ const I18N = {
     no_growth_data:'Noch keine Gewichts-/Größendaten', growth_weight:'Gewicht', growth_height:'Größe',
     btn_add_measurement:'+ Eintrag',
     settings_ip_names_title:'Geräte', settings_name_placeholder:'Name eingeben', settings_no_ips:'Noch keine Geräte bekannt',
+    settings_quick_title:'Schnellzugriff (max. 5)', quick_max_toast:'Maximal 5 Schnellzugriffe',
     settings_baby_title:'Baby',
     lbl_baby_name:'Name', lbl_birthday:'Geburtstag', baby_name_placeholder:'Name des Babys',
     baby_fallback:'Baby',
@@ -80,6 +81,7 @@ const I18N = {
     no_growth_data:'No weight/height data yet', growth_weight:'Weight', growth_height:'Height',
     btn_add_measurement:'+ Entry',
     settings_ip_names_title:'Devices', settings_name_placeholder:'Enter name', settings_no_ips:'No devices seen yet',
+    settings_quick_title:'Quick actions (max 5)', quick_max_toast:'Max 5 quick actions',
     settings_baby_title:'Baby',
     lbl_baby_name:'Name', lbl_birthday:'Birthday', baby_name_placeholder:"Baby's name",
     baby_fallback:'Baby',
@@ -309,6 +311,7 @@ function switchTab(name, btn) {
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
   document.getElementById('tab-'+name).classList.add('active');
   (btn || document.getElementById('tab-btn-'+name)).classList.add('active');
+  document.body.classList.toggle('log-active', name === 'log');
   location.hash = name;
   if (name === 'stats') loadStats();
   if (name === 'settings') loadSettings();
@@ -462,10 +465,136 @@ async function endWalk() {
   loadLog();
 }
 
+// ── Quick actions ──
+const QUICK_TYPE_KEYS = ['diaper', 'nursing', 'bottle', 'sleep', 'walk', 'clothing', 'note', 'mood'];
+
+function getQuickActions() {
+  try {
+    const saved = JSON.parse(localStorage.getItem('quickActions'));
+    if (Array.isArray(saved) && saved.length) {
+      return saved.filter(k => QUICK_TYPE_KEYS.includes(k)).slice(0, 5);
+    }
+  } catch {}
+  return ['sleep', 'mood'];
+}
+function setQuickActions(actions) {
+  localStorage.setItem('quickActions', JSON.stringify(actions.slice(0, 5)));
+  renderQuickActions();
+}
+
+function renderQuickActions() {
+  const wrap = document.getElementById('quick-actions-wrap');
+  if (!wrap) return;
+  wrap.innerHTML = getQuickActions().map(key => {
+    let label, iconName, tint = '';
+    if (key === 'sleep') {
+      label = openSleepEntry ? t('banner_wakeup') : t('tile_sleep_start');
+      iconName = 'zzz';
+      tint = openSleepEntry ? 'tint-sleep' : '';
+    } else if (key === 'walk') {
+      label = openWalkEntry ? t('tile_walk_end') : t('tile_walk');
+      iconName = 'walk';
+      tint = openWalkEntry ? 'tint-walk' : '';
+    } else {
+      const tp = getType(key);
+      label = tp.label;
+      iconName = tp.icon;
+    }
+    return `<button class="quick-btn ${tint}" onclick="quickTap('${key}')" title="${esc(label)}">${icon(iconName)}</button>`;
+  }).join('');
+}
+
+function quickTap(type) {
+  if (type === 'sleep') { openSleepEntry ? wakeUp() : quickStartOpen('sleep'); return; }
+  if (type === 'walk') { openWalkEntry ? endWalk() : quickStartOpen('walk'); return; }
+  if (type === 'clothing') { quickSubmit('clothing'); return; }
+  openQuickPopup(type);
+}
+
+async function quickStartOpen(type) {
+  const now = nowLocal();
+  const res = await fetch('/api/entries', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ type, ts_start: now, ts_end: null, note: '', meta: {} }),
+  });
+  if (res.ok) {
+    const saved = await res.json();
+    if (type === 'sleep') openSleepEntry = saved;
+    if (type === 'walk') openWalkEntry = saved;
+    toast(t('toast_saved'));
+    loadLog();
+  } else {
+    toast(t('toast_error'));
+  }
+}
+
+async function quickSubmit(type, meta = {}, note = '') {
+  const now = nowLocal();
+  const res = await fetch('/api/entries', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ type, ts_start: now, ts_end: null, note, meta }),
+  });
+  if (res.ok) {
+    toast(t('toast_saved'));
+    closeQuickPopup();
+    loadLog();
+  } else {
+    toast(t('toast_error'));
+  }
+}
+
+function openQuickPopup(type) {
+  document.getElementById('quick-title').textContent = getType(type).label;
+  const body = document.getElementById('quick-body');
+  if (type === 'mood') {
+    body.innerHTML = `<div class="quick-opt-row">${['happy', 'neutral', 'fussy', 'crying'].map(m =>
+      `<button class="quick-emoji-btn" onclick="quickSubmit('mood',{mood:'${m}'})">${MOOD_EMOJI[m]}</button>`
+    ).join('')}</div>`;
+  } else if (type === 'diaper') {
+    body.innerHTML = `<div class="quick-opt-row">
+      <button class="quick-opt-btn" onclick="quickSubmit('diaper',{diaper_type:'nass'})">${t('opt_wet')}</button>
+      <button class="quick-opt-btn" onclick="quickSubmit('diaper',{diaper_type:'schmutzig'})">${t('opt_dirty')}</button>
+      <button class="quick-opt-btn" onclick="quickSubmit('diaper',{diaper_type:'beides'})">${t('opt_both')}</button>
+    </div>`;
+  } else if (type === 'nursing') {
+    body.innerHTML = `<div class="quick-opt-row">
+      <button class="quick-opt-btn" onclick="quickSubmit('nursing',{side:'links'})">${t('opt_left')}</button>
+      <button class="quick-opt-btn" onclick="quickSubmit('nursing',{side:'rechts'})">${t('opt_right')}</button>
+      <button class="quick-opt-btn" onclick="quickSubmit('nursing',{side:'beide'})">${t('opt_both_sides')}</button>
+    </div>`;
+  } else if (type === 'bottle') {
+    body.innerHTML = `
+      <div class="field"><label>${t('lbl_amount')}</label><input type="number" id="q-amount" min="0" step="5" placeholder="120"></div>
+      <div class="field"><label>${t('lbl_content')}</label>
+        <select id="q-content">
+          <option value="abgepumpt">${t('opt_pumped')}</option>
+          <option value="formula">${t('opt_formula')}</option>
+        </select>
+      </div>
+      <button class="btn" onclick="quickSubmit('bottle',{amount:document.getElementById('q-amount').value,content:document.getElementById('q-content').value})">${t('btn_save')}</button>
+    `;
+  } else if (type === 'note') {
+    body.innerHTML = `
+      <div class="field"><textarea id="q-note" rows="3" placeholder="${t('lbl_note')}"></textarea></div>
+      <button class="btn" onclick="quickSubmit('note',{},document.getElementById('q-note').value)">${t('btn_save')}</button>
+    `;
+  }
+  document.getElementById('quick-overlay').classList.add('open');
+}
+function closeQuickPopup() {
+  document.getElementById('quick-overlay').classList.remove('open');
+}
+function quickOverlayClick(e) {
+  if (e.target === document.getElementById('quick-overlay')) closeQuickPopup();
+}
+
 // ── Log ──
 async function loadLog() {
   await checkOpenSleep();
   await checkOpenWalk();
+  renderQuickActions();
   const namesRes = await fetch('/api/ip-names');
   ipNameMap = await namesRes.json();
   const allRes = await fetch('/api/entries?limit=500');
@@ -1003,6 +1132,16 @@ async function loadSettings() {
     </div>
   `;
 
+  html += `<div class="section-title">${t('settings_quick_title')}</div>
+    <div class="type-grid">
+      ${QUICK_TYPE_KEYS.map(key => {
+        const tp = getType(key);
+        const selected = getQuickActions().includes(key);
+        return `<div class="type-tile${selected ? ' selected' : ''}" onclick="toggleQuickAction('${key}')"><div class="t-icon">${icon(tp.icon)}</div><div class="t-label">${tp.label}</div></div>`;
+      }).join('')}
+    </div>
+  `;
+
   html += `<div class="section-title">${t('settings_ip_names_title')}</div>`;
   html += !ips.length
     ? `<div class="empty">${t('settings_no_ips')}</div>`
@@ -1020,6 +1159,18 @@ async function loadSettings() {
     `).join('');
 
   el.innerHTML = html;
+}
+
+function toggleQuickAction(key) {
+  let actions = getQuickActions();
+  if (actions.includes(key)) {
+    actions = actions.filter(k => k !== key);
+  } else {
+    if (actions.length >= 5) { toast(t('quick_max_toast')); return; }
+    actions.push(key);
+  }
+  setQuickActions(actions);
+  loadSettings();
 }
 
 async function saveBaby() {
