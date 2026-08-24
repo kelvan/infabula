@@ -26,6 +26,7 @@ const I18N = {
     stat_asleep_since:'Schläft seit', stat_walking_since:'Läuft seit',
     no_data:'Keine Daten', not_enough_data:'Zu wenig Daten', no_sleep_data:'Noch keine Schlafdaten',
     no_growth_data:'Noch keine Gewichts-/Größendaten', growth_weight:'Gewicht', growth_height:'Größe',
+    btn_add_measurement:'+ Eintrag',
     settings_ip_names_title:'Geräte', settings_name_placeholder:'Name eingeben', settings_no_ips:'Noch keine Geräte bekannt',
     settings_baby_title:'Baby',
     lbl_baby_name:'Name', lbl_birthday:'Geburtstag', baby_name_placeholder:'Name des Babys',
@@ -77,6 +78,7 @@ const I18N = {
     stat_asleep_since:'Asleep since', stat_walking_since:'Walking since',
     no_data:'No data', not_enough_data:'Not enough data', no_sleep_data:'No sleep data yet',
     no_growth_data:'No weight/height data yet', growth_weight:'Weight', growth_height:'Height',
+    btn_add_measurement:'+ Entry',
     settings_ip_names_title:'Devices', settings_name_placeholder:'Enter name', settings_no_ips:'No devices seen yet',
     settings_baby_title:'Baby',
     lbl_baby_name:'Name', lbl_birthday:'Birthday', baby_name_placeholder:"Baby's name",
@@ -972,7 +974,7 @@ async function loadStats() {
     <div class="stats-grid">${lastCards||`<div class="empty">${t('no_data')}</div>`}</div>
     <div class="section-title">${t('section_intervals')}</div>
     <div class="stats-grid">${ivCards||`<div class="empty">${t('not_enough_data')}</div>`}</div>
-    <div class="section-title">${t('section_growth')}</div>
+    <div class="section-title with-action"><span>${t('section_growth')}</span><button class="btn-tiny" onclick="openMeasurementModal()">${t('btn_add_measurement')}</button></div>
     ${growthCharts}
     <div class="section-title">${t('section_sleep')}</div>
     ${sleepBars}
@@ -1094,6 +1096,17 @@ function closeModal() {
 }
 function overlayClick(e) {
   if (e.target === document.getElementById('modal-overlay')) closeModal();
+}
+
+/** Weight/height is measured rarely, so it's reached from Stats instead of the FAB's everyday type grid. */
+function openMeasurementModal() {
+  editEntryId = null;
+  selectedType = null;
+  document.getElementById('form-fields').innerHTML = '';
+  document.getElementById('form-fields').classList.remove('visible');
+  document.getElementById('type-grid').style.display = 'none';
+  document.getElementById('modal-overlay').classList.add('open');
+  selectType('weight');
 }
 
 function wakeUpFromModal() {

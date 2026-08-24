@@ -359,6 +359,19 @@ header .logo-svg { height: 38px; width: auto; }
   padding-bottom: 6px;
 }
 .section-title:first-child { margin-top: 0; }
+.section-title.with-action { display: flex; align-items: center; justify-content: space-between; }
+.btn-tiny {
+  background: none;
+  border: 1px solid var(--accent);
+  color: var(--accent-ink);
+  padding: 3px 9px;
+  border-radius: 12px;
+  font-family: inherit;
+  font-size: 0.65rem;
+  letter-spacing: 0.03em;
+  text-transform: none;
+  cursor: pointer;
+}
 .stats-grid {
   display: grid;
   gap: 10px;
