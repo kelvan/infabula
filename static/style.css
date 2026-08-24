@@ -317,7 +317,9 @@ header .logo-svg { height: 38px; width: auto; }
 }
 .btn-small.secondary { background: var(--surface2); color: var(--ink); border: 1.5px solid var(--border); }
 .range-pills { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
-.view-toggle { display: flex; gap: 8px; padding: 14px 20px 0; }
+.view-toggle { display: flex; align-items: center; gap: 8px; padding: 14px 20px 0; }
+.tl-legend-slot { display: flex; flex-wrap: wrap; gap: 10px; margin-left: auto; justify-content: flex-end; }
+.tl-legend-slot:empty { display: none; }
 .timeline-wrap { padding: 16px 20px 20px; }
 .tl-legend { display: flex; gap: 16px; margin-bottom: 10px; }
 .tl-legend-item { display: flex; align-items: center; gap: 5px; }

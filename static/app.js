@@ -153,6 +153,7 @@ function switchLang() {
   initUI();
   loadLog();
   renderBirthdayBanner();
+  renderTimelineLegend(logView === 'timeline');
   if (document.getElementById('tab-stats').classList.contains('active')) loadStats();
   if (document.getElementById('tab-settings').classList.contains('active')) loadSettings();
 }
@@ -563,6 +564,7 @@ function setLogView(view) {
   document.querySelectorAll('#log-view-toggle .range-pill').forEach(b => b.classList.toggle('active', b.dataset.view === view));
   document.getElementById('log-list-view').style.display = view === 'list' ? '' : 'none';
   document.getElementById('timeline-view').style.display = view === 'timeline' ? '' : 'none';
+  renderTimelineLegend(view === 'timeline');
   if (view === 'timeline') renderTimeline();
 }
 
@@ -648,9 +650,20 @@ function makeTimeScale(entries, pxPerHour, nowMin) {
   };
 }
 
+/** Feed/diaper/mood key, shown beside the view toggle while the timeline is up. */
+function renderTimelineLegend(show) {
+  const slot = document.getElementById('tl-legend-slot');
+  if (!slot) return;
+  slot.innerHTML = show ? `
+    <div class="tl-legend-item"><span class="tl-legend-swatch" style="background:var(--feed);"></span><span class="lbl" style="font-size:9px;color:var(--feed);">${t('types').feeding}</span></div>
+    <div class="tl-legend-item"><span class="tl-legend-swatch" style="background:var(--accent);"></span><span class="lbl" style="font-size:9px;color:var(--accent-ink);">${t('types').diaper}</span></div>
+    <div class="tl-legend-item"><span style="font-size:12px;line-height:1;">${MOOD_EMOJI.happy}</span><span class="lbl" style="font-size:9px;color:var(--mood);">${t('types').mood}</span></div>` : '';
+}
+
 function renderTimeline() {
   const wrap = document.getElementById('timeline-view');
   if (!wrap) return;
+  renderTimelineLegend(true);
   const entries = currentEntries;
   const sleeps = entries.filter(e => e.type === 'sleep');
   const walks = entries.filter(e => e.type === 'walk');
@@ -745,11 +758,6 @@ function renderTimelineNarrow(sleeps, walks, feeds, diapers, moods, nowMin, grid
           <div class="tl-lane-header" style="width:${laneW}px;color:var(--sleep);">${icon('sleep')}<span class="lbl" style="font-size:10px;">${t('types').sleep}</span></div>
           <div class="tl-lane-header" style="width:${laneW}px;color:var(--walk);">${icon('walk')}<span class="lbl" style="font-size:10px;">${t('types').walk}</span></div>
         </div>
-        <div class="tl-legend" style="margin-left:30px;">
-          <div class="tl-legend-item"><span class="tl-legend-swatch" style="background:var(--feed);"></span><span class="lbl" style="font-size:9px;color:var(--feed);">${t('types').feeding}</span></div>
-          <div class="tl-legend-item"><span class="tl-legend-swatch" style="background:var(--accent);"></span><span class="lbl" style="font-size:9px;color:var(--accent-ink);">${t('types').diaper}</span></div>
-          <div class="tl-legend-item"><span style="font-size:12px;line-height:1;">${MOOD_EMOJI.happy}</span><span class="lbl" style="font-size:9px;color:var(--mood);">${t('types').mood}</span></div>
-        </div>
         <div style="position:relative;height:${gridH}px;margin-left:30px;">
           <div style="position:absolute;left:${laneW}px;top:0;width:1px;height:${gridH}px;background:var(--border);"></div>
           ${moodColW ? `<div style="position:absolute;left:${laneW*2}px;top:0;width:1px;height:${gridH}px;background:var(--border);"></div>` : ''}
@@ -837,11 +845,6 @@ function renderTimelineWide(sleeps, walks, feeds, diapers, moods, nowMin, scale)
           ${lines}${bars}${nowLine}
         </div>
         <div style="position:relative;width:${trackW}px;height:20px;margin-top:2px;">${moodMarks}</div>
-        <div class="tl-legend" style="margin-top:10px;">
-          <div class="tl-legend-item"><span class="tl-legend-swatch" style="background:var(--feed);"></span><span class="lbl" style="font-size:9px;color:var(--feed);">${t('types').feeding}</span></div>
-          <div class="tl-legend-item"><span class="tl-legend-swatch" style="background:var(--accent);"></span><span class="lbl" style="font-size:9px;color:var(--accent-ink);">${t('types').diaper}</span></div>
-          <div class="tl-legend-item"><span style="font-size:12px;line-height:1;">${MOOD_EMOJI.happy}</span><span class="lbl" style="font-size:9px;color:var(--mood);">${t('types').mood}</span></div>
-        </div>
       </div>
     </div>
   `;
