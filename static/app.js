@@ -57,6 +57,13 @@ const I18N = {
     settings_passkeys_title:'Passkeys', no_passkeys:'Noch keine Passkeys',
     btn_add_passkey:'Passkey hinzufügen',
     prompt_password_to_disable:'Passwort zum Deaktivieren eingeben',
+    settings_tokens_title:'API-Tokens', no_tokens:'Noch keine Tokens',
+    tokens_hint:'Für Skripte oder externe Tools. Ein Token gewährt vollen Zugriff auf dein Konto.',
+    last_used:'Zuletzt genutzt', never_used:'Nie', btn_add_token:'Token erstellen',
+    prompt_token_name:'Name für dieses Token', lbl_new_token:'Neues Token',
+    token_name_placeholder:'z. B. Laptop-Skript',
+    token_shown_once:'Dieses Token wird nur jetzt angezeigt — kopiere es, bevor du diese Seite verlässt.',
+    confirm_delete_token:'Dieses Token widerrufen?',
     prompt_passkey_name:'Name für diesen Passkey',
     role_owner:'Besitzer', role_editor:'Bearbeiter', role_viewer:'Betrachter',
     btn_manage_access:'Zugriff verwalten', btn_remove:'Entfernen', btn_invite:'Einladen',
@@ -132,6 +139,13 @@ const I18N = {
     btn_add_passkey:'Add passkey',
     prompt_password_to_disable:'Enter your password to disable',
     prompt_passkey_name:'Name for this passkey',
+    settings_tokens_title:'API tokens', no_tokens:'No tokens yet',
+    tokens_hint:'For scripts or external tools. A token grants full access to your account.',
+    last_used:'Last used', never_used:'Never', btn_add_token:'Create token',
+    prompt_token_name:'Name for this token', lbl_new_token:'New token',
+    token_name_placeholder:'e.g. Laptop script',
+    token_shown_once:"This token is shown only now — copy it before leaving this page.",
+    confirm_delete_token:'Revoke this token?',
     role_owner:'Owner', role_editor:'Editor', role_viewer:'Viewer',
     btn_manage_access:'Manage access', btn_remove:'Remove', btn_invite:'Invite',
     lbl_shared_with:'Shared with', lbl_profile:'Profile', lbl_selected:'selected',
@@ -191,6 +205,7 @@ const ICONS = {
   person: '<circle cx="12" cy="8.5" r="3.5"/><path d="M5 20c0-4 3-6.5 7-6.5s7 2.5 7 6.5"/>',
   shield: '<path d="M12 3l7 3v6c0 4.8-3 8.5-7 9.5C8 20.5 5 16.8 5 12V6l7-3Z"/>',
   key: '<circle cx="8" cy="15" r="3.2"/><path d="M10.3 12.7 18 5M15 8l2 2M17.5 5.5l2 2"/>',
+  code: '<path d="M9 8 4 12l5 4M15 8l5 4-5 4"/>',
 };
 function icon(name) { return `<svg viewBox="0 0 24 24" class="ic">${ICONS[name] || ''}</svg>`; }
 function typeIcon(name) { return name === 'sleep' ? icon('zzz') : icon(name); }
@@ -384,6 +399,7 @@ let baby = { name: '', birthday: '' };
 let settingsTab = localStorage.getItem('settingsTab') || 'baby';
 let settingsMe = {};
 let settingsPasskeys = [];
+let settingsTokens = [];
 
 function currentBaby() {
   return babies.find(b => b.id === currentBabyId) || { name: '', birthday: '' };
@@ -1248,12 +1264,14 @@ async function loadStats() {
 
 // ── Settings ──
 async function loadSettings() {
-  const [meRes, passkeysRes] = await Promise.all([
+  const [meRes, passkeysRes, tokensRes] = await Promise.all([
     fetch('/api/auth/me'),
     fetch('/api/auth/passkeys'),
+    fetch('/api/auth/tokens'),
   ]);
   settingsMe = await meRes.json();
   settingsPasskeys = await passkeysRes.json();
+  settingsTokens = await tokensRes.json();
   renderSettingsTabs();
   renderSettingsTab();
 }
@@ -1408,6 +1426,28 @@ function renderAccountTab() {
         </button>
       </div>
     </div>
+
+    <div class="settings-card">
+      <div class="settings-card-title">${icon('code')}${t('settings_tokens_title')}</div>
+      <div style="font-size:0.78rem;color:var(--ink2);margin-bottom:14px;line-height:1.4;">${t('tokens_hint')}</div>
+  `;
+  html += !settingsTokens.length
+    ? `<div class="empty" style="padding:16px 0;">${t('no_tokens')}</div>`
+    : settingsTokens.map(tok => `
+      <div class="security-row">
+        <div><div class="s-name">${esc(tok.name)}</div><div class="s-sub">${esc(tok.prefix)}… · ${t('last_used')} ${tok.last_used_at ? esc(tok.last_used_at.slice(0, 16).replace('T', ' ')) : t('never_used')}</div></div>
+        <button class="btn-small secondary" onclick="deleteToken(${tok.id})">${t('btn_delete')}</button>
+      </div>
+    `).join('');
+  html += `
+      <div style="margin-top:12px;">
+        <button class="ghost-add" onclick="createToken()">
+          <svg viewBox="0 0 24 24" class="ic" style="width:14px;height:14px;"><path d="M12 5v14M5 12h14"/></svg>
+          ${t('btn_add_token')}
+        </button>
+      </div>
+    </div>
+    <div id="new-token-wrap"></div>
   `;
   el.innerHTML = html;
   if (window.PublicKeyCredential) document.getElementById('add-passkey-btn').style.display = '';
@@ -1541,6 +1581,50 @@ async function addPasskey() {
 async function deletePasskey(id) {
   if (!confirm(t('confirm_delete'))) return;
   await fetch(`/api/auth/passkeys/${id}`, { method: 'DELETE' });
+  toast(t('toast_deleted'));
+  loadSettings();
+}
+
+function createToken() {
+  document.getElementById('new-token-wrap').innerHTML = `
+    <div class="settings-card">
+      <div class="field" style="margin-bottom:0;"><label>${t('prompt_token_name')}</label>
+        <input type="text" id="new-token-name-input" placeholder="${t('token_name_placeholder')}">
+      </div>
+      <div class="baby-actions" style="margin-bottom:0;margin-top:12px;">
+        <button class="btn-small" onclick="submitCreateToken()">${t('btn_add_token')}</button>
+      </div>
+    </div>
+  `;
+  document.getElementById('new-token-name-input').focus();
+}
+
+async function submitCreateToken() {
+  const name = document.getElementById('new-token-name-input').value.trim();
+  if (!name) { toast(t('toast_no_name')); return; }
+  const res = await fetch('/api/auth/tokens', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name }),
+  });
+  if (!res.ok) { toast(t('toast_error')); return; }
+  const data = await res.json();
+  settingsTokens = await (await fetch('/api/auth/tokens')).json();
+  renderAccountTab();
+  document.getElementById('new-token-wrap').innerHTML = `
+    <div class="settings-card">
+      <div class="settings-card-title">${t('lbl_new_token')}</div>
+      <div style="font-size:0.78rem;color:var(--ink2);margin-bottom:10px;line-height:1.4;">${t('token_shown_once')}</div>
+      <div class="field" style="margin-bottom:0;">
+        <input type="text" readonly value="${esc(data.token)}" onclick="this.select()" style="font-family:ui-monospace,'Cascadia Code','Source Code Pro',monospace;font-size:0.8rem;">
+      </div>
+    </div>
+  `;
+}
+
+async function deleteToken(id) {
+  if (!confirm(t('confirm_delete_token'))) return;
+  await fetch(`/api/auth/tokens/${id}`, { method: 'DELETE' });
   toast(t('toast_deleted'));
   loadSettings();
 }

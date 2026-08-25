@@ -7,6 +7,7 @@ the database: it's gone in minutes either way, and losing it on a restart
 just means the user retries.
 """
 
+import hashlib
 import io
 import re
 import secrets
@@ -18,12 +19,14 @@ import pyotp
 import qrcode
 import qrcode.image.svg
 from fastapi import Request, Response
+from sqlalchemy import select
 
-from db import Session, User, UserSession
+from db import ApiToken, Session, User, UserSession
 
 SESSION_COOKIE = "session_token"
 SESSION_TTL_DAYS = 30
 PENDING_TTL_SECONDS = 300
+API_TOKEN_PREFIX = "ib_"
 
 EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
@@ -72,6 +75,10 @@ async def create_session(user_id: int) -> str:
 
 
 async def get_session_user(request: Request) -> User | None:
+    auth_header = request.headers.get("Authorization", "")
+    if auth_header.startswith("Bearer "):
+        return await get_api_token_user(auth_header.removeprefix("Bearer ").strip())
+
     token = request.cookies.get(SESSION_COOKIE)
     if not token:
         return None
@@ -102,6 +109,33 @@ def set_session_cookie(response: Response, token: str) -> None:
 
 def clear_session_cookie(response: Response) -> None:
     response.delete_cookie(SESSION_COOKIE, path="/")
+
+
+# ── API tokens ──
+def hash_token(raw_token: str) -> str:
+    return hashlib.sha256(raw_token.encode()).hexdigest()
+
+
+def generate_api_token() -> tuple[str, str, str]:
+    """Returns (raw_token, token_hash, prefix). The raw token is only ever
+    seen here and by the caller who hands it to the user once."""
+    raw_token = API_TOKEN_PREFIX + secrets.token_urlsafe(32)
+    return raw_token, hash_token(raw_token), raw_token[: len(API_TOKEN_PREFIX) + 8]
+
+
+async def get_api_token_user(raw_token: str) -> User | None:
+    if not raw_token:
+        return None
+    token_hash = hash_token(raw_token)
+    async with Session.begin() as session:
+        row = await session.scalar(
+            select(ApiToken).where(ApiToken.token_hash == token_hash)
+        )
+        if row is None:
+            return None
+        row.last_used_at = now_str()
+        user = await session.get(User, row.user_id)
+    return user
 
 
 # ── ephemeral ceremony state (pending TOTP logins, WebAuthn challenges) ──

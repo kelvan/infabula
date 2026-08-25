@@ -136,6 +136,31 @@ class UserSession(Base):
     expires_at: Mapped[str] = mapped_column(String(32), nullable=False)
 
 
+class ApiToken(Base):
+    """A personal access token for scripted access to the API.
+
+    Only the sha256 hash is stored — the raw token is shown once, at
+    creation, the same way a password would be. ``prefix`` is the
+    first few characters of the raw token, kept in the clear so a
+    listed token can be told apart from the others without exposing
+    enough of it to be useful on its own.
+    """
+
+    __tablename__ = "api_tokens"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    name: Mapped[str] = mapped_column(String(128), nullable=False)
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
+    prefix: Mapped[str] = mapped_column(String(16), nullable=False)
+    created_at: Mapped[str | None] = mapped_column(
+        String(32), default=lambda: datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    )
+    last_used_at: Mapped[str | None] = mapped_column(String(32))
+
+
 class Baby(Base):
     __tablename__ = "babies"
 

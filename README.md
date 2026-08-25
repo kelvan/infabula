@@ -57,12 +57,19 @@ Entries belong to a baby and record who created them, and multiple babies can be
 
 ## Accounts
 
-Signing up is open — anyone who can reach the app creates their own username/password. Optional two-factor login is available per account:
+Signing up is open — anyone who can reach the app registers with an email and password. Optional two-factor login is available per account, from Settings → Account:
 
-- **TOTP** — enable from Settings → Security, scan the QR code into an authenticator app, confirm with a code.
-- **Passkeys (WebAuthn)** — add one or more from the same section. Passkeys need a secure context: they work on `localhost`, but over plain HTTP on a LAN IP most browsers will refuse the ceremony. Put a reverse proxy with TLS (e.g. Caddy) in front for passkeys to actually work outside of localhost.
+- **TOTP** — scan the QR code into an authenticator app, confirm with a code.
+- **Passkeys (WebAuthn)** — add one or more from the same tab. Passkeys need a secure context: they work on `localhost`, but over plain HTTP on a LAN IP most browsers will refuse the ceremony. Put a reverse proxy with TLS (e.g. Caddy) in front for passkeys to actually work outside of localhost.
 
 Sessions are httponly cookies, valid 30 days, stored server-side so they can be revoked by logging out.
+
+## API
+
+Every route documented at `/docs` (Swagger UI) or `/redoc`, both behind login like the rest of the app. Two ways to authenticate:
+
+- **Session cookie** — what the browser uses; also works for scripting if you keep the cookie jar from a login request.
+- **API tokens** — create one from Settings → Account → API tokens. Send it as `Authorization: Bearer <token>`; it grants the same access as the account that created it. The raw token is shown once, at creation, and can be revoked at any time.
 
 ## Podman/Docker (optional)
 

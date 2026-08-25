@@ -9,6 +9,7 @@ from datetime import datetime
 from itertools import groupby
 
 from fastapi import FastAPI, Request
+from fastapi.openapi.utils import get_openapi
 from fastapi.responses import (
     HTMLResponse,
     JSONResponse,
@@ -35,6 +36,7 @@ from db import (
     ROLE_EDITOR,
     ROLE_OWNER,
     ROLE_VIEWER,
+    ApiToken,
     Baby,
     BabyAccess,
     Entry,
@@ -46,8 +48,36 @@ from db import (
 )
 from migrate import run_migrations
 
-app = FastAPI()
+app = FastAPI(
+    title="infabula API",
+    description=(
+        "Local-network baby journal. Every request needs a logged-in "
+        "session cookie or an `Authorization: Bearer <token>` — mint a "
+        "token from Settings → Account → API tokens."
+    ),
+    version="1.0.0",
+)
 ASSET_VERSION = str(int(time.time()))
+
+
+def custom_openapi():
+    if app.openapi_schema:
+        return app.openapi_schema
+    schema = get_openapi(
+        title=app.title,
+        version=app.version,
+        description=app.description,
+        routes=app.routes,
+    )
+    schema["components"]["securitySchemes"] = {
+        "bearerAuth": {"type": "http", "scheme": "bearer"}
+    }
+    schema["security"] = [{"bearerAuth": []}]
+    app.openapi_schema = schema
+    return app.openapi_schema
+
+
+app.openapi = custom_openapi
 
 # ts_start/ts_end hold 'YYYY-MM-DDTHH:MM'; substr is the portable way to get
 # the date part across SQLite, PostgreSQL and MariaDB.
@@ -86,7 +116,7 @@ async def broadcast_event(event_type: str):
         q.put_nowait(event_type)
 
 
-@app.get("/api/events")
+@app.get("/api/events", tags=["Live sync"])
 async def sse_events():
     queue: asyncio.Queue = asyncio.Queue()
     subscribers.add(queue)
@@ -215,7 +245,7 @@ def user_to_dict(user: User) -> dict:
     }
 
 
-@app.post("/api/auth/register")
+@app.post("/api/auth/register", tags=["Auth"])
 async def register(request: Request, response: Response):
     body = await request.json()
     email = (body.get("email") or "").strip().lower()
@@ -244,7 +274,7 @@ async def register(request: Request, response: Response):
     return {"ok": True}
 
 
-@app.post("/api/auth/login")
+@app.post("/api/auth/login", tags=["Auth"])
 async def login(request: Request, response: Response):
     body = await request.json()
     email = (body.get("email") or "").strip().lower()
@@ -263,7 +293,7 @@ async def login(request: Request, response: Response):
     return {"ok": True}
 
 
-@app.post("/api/auth/totp/verify")
+@app.post("/api/auth/totp/verify", tags=["Auth"])
 async def totp_verify_login(request: Request, response: Response):
     body = await request.json()
     pending_token = body.get("pending_token") or ""
@@ -281,7 +311,7 @@ async def totp_verify_login(request: Request, response: Response):
     return {"ok": True}
 
 
-@app.post("/api/auth/logout")
+@app.post("/api/auth/logout", tags=["Auth"])
 async def logout(request: Request, response: Response):
     token = request.cookies.get(auth.SESSION_COOKIE)
     if token:
@@ -290,12 +320,12 @@ async def logout(request: Request, response: Response):
     return {"ok": True}
 
 
-@app.get("/api/auth/me")
+@app.get("/api/auth/me", tags=["Auth"])
 async def me(request: Request):
     return user_to_dict(request.state.user)
 
 
-@app.put("/api/auth/me")
+@app.put("/api/auth/me", tags=["Auth"])
 async def update_me(request: Request):
     body = await request.json()
     name = (body.get("name") or "").strip()
@@ -307,7 +337,7 @@ async def update_me(request: Request):
     return {"ok": True}
 
 
-@app.post("/api/auth/totp/setup")
+@app.post("/api/auth/totp/setup", tags=["Auth"])
 async def totp_setup(request: Request):
     secret = auth.new_totp_secret()
     async with Session.begin() as session:
@@ -319,7 +349,7 @@ async def totp_setup(request: Request):
     return {"secret": secret, "qr_svg": auth.totp_qr_svg(uri)}
 
 
-@app.post("/api/auth/totp/confirm")
+@app.post("/api/auth/totp/confirm", tags=["Auth"])
 async def totp_confirm(request: Request):
     body = await request.json()
     async with Session.begin() as session:
@@ -332,7 +362,7 @@ async def totp_confirm(request: Request):
     return {"ok": True}
 
 
-@app.post("/api/auth/totp/disable")
+@app.post("/api/auth/totp/disable", tags=["Auth"])
 async def totp_disable(request: Request):
     body = await request.json()
     async with Session.begin() as session:
@@ -345,7 +375,64 @@ async def totp_disable(request: Request):
     return {"ok": True}
 
 
-@app.get("/api/auth/passkeys")
+@app.get("/api/auth/tokens", tags=["API tokens"], summary="List your API tokens")
+async def list_tokens(request: Request):
+    """Personal access tokens for this account. The raw token itself is
+    never returned here — only what was shown once at creation time."""
+    async with Session() as session:
+        rows = (
+            await session.scalars(
+                select(ApiToken)
+                .where(ApiToken.user_id == request.state.user.id)
+                .order_by(ApiToken.created_at.desc())
+            )
+        ).all()
+    return [
+        {
+            "id": tok.id,
+            "name": tok.name,
+            "prefix": tok.prefix,
+            "created_at": tok.created_at,
+            "last_used_at": tok.last_used_at,
+        }
+        for tok in rows
+    ]
+
+
+@app.post("/api/auth/tokens", tags=["API tokens"], summary="Create an API token")
+async def create_token(request: Request):
+    """Mints a new bearer token for this account and returns it in full —
+    the only time it is ever visible. Send it as `Authorization: Bearer
+    <token>` on later requests; it grants the same access as the account
+    that created it."""
+    body = await request.json()
+    name = (body.get("name") or "").strip() or "Token"
+    raw_token, token_hash, prefix = auth.generate_api_token()
+    async with Session.begin() as session:
+        row = ApiToken(
+            user_id=request.state.user.id,
+            name=name[:128],
+            token_hash=token_hash,
+            prefix=prefix,
+        )
+        session.add(row)
+        await session.flush()
+        token_id = row.id
+    return {"id": token_id, "name": name, "token": raw_token}
+
+
+@app.delete(
+    "/api/auth/tokens/{token_id}", tags=["API tokens"], summary="Revoke an API token"
+)
+async def delete_token(token_id: int, request: Request):
+    async with Session.begin() as session:
+        row = await session.get(ApiToken, token_id)
+        if row is not None and row.user_id == request.state.user.id:
+            await session.delete(row)
+    return {"ok": True}
+
+
+@app.get("/api/auth/passkeys", tags=["Passkeys"])
 async def list_passkeys(request: Request):
     async with Session() as session:
         rows = (
@@ -361,7 +448,7 @@ async def list_passkeys(request: Request):
     ]
 
 
-@app.delete("/api/auth/passkeys/{cred_id}")
+@app.delete("/api/auth/passkeys/{cred_id}", tags=["Passkeys"])
 async def delete_passkey(cred_id: int, request: Request):
     async with Session.begin() as session:
         cred = await session.get(WebauthnCredential, cred_id)
@@ -370,7 +457,7 @@ async def delete_passkey(cred_id: int, request: Request):
     return {"ok": True}
 
 
-@app.post("/api/auth/passkey/register/options")
+@app.post("/api/auth/passkey/register/options", tags=["Passkeys"])
 async def passkey_register_options(request: Request):
     async with Session() as session:
         existing = (
@@ -400,7 +487,7 @@ async def passkey_register_options(request: Request):
     }
 
 
-@app.post("/api/auth/passkey/register/verify")
+@app.post("/api/auth/passkey/register/verify", tags=["Passkeys"])
 async def passkey_register_verify(request: Request):
     body = await request.json()
     pending = auth.pop_pending(body.get("challenge_token") or "", "passkey_register")
@@ -428,7 +515,7 @@ async def passkey_register_verify(request: Request):
     return {"ok": True}
 
 
-@app.post("/api/auth/passkey/login/options")
+@app.post("/api/auth/passkey/login/options", tags=["Passkeys"])
 async def passkey_login_options(request: Request):
     body = await request.json() if await request.body() else {}
     email = (body.get("email") or "").strip().lower()
@@ -463,7 +550,7 @@ async def passkey_login_options(request: Request):
     }
 
 
-@app.post("/api/auth/passkey/login/verify")
+@app.post("/api/auth/passkey/login/verify", tags=["Passkeys"])
 async def passkey_login_verify(request: Request, response: Response):
     body = await request.json()
     pending = auth.pop_pending(body.get("challenge_token") or "", "passkey_login")
@@ -499,7 +586,7 @@ async def passkey_login_verify(request: Request, response: Response):
     return {"ok": True}
 
 
-@app.post("/api/entries")
+@app.post("/api/entries", tags=["Entries"])
 async def create_entry(request: Request, baby_id: int = DEFAULT_BABY_ID):
     if (denied := await require_access(request, baby_id, ROLE_EDITOR)) is not None:
         return denied
@@ -520,7 +607,7 @@ async def create_entry(request: Request, baby_id: int = DEFAULT_BABY_ID):
     return row_to_dict(entry)
 
 
-@app.patch("/api/entries/{entry_id}")
+@app.patch("/api/entries/{entry_id}", tags=["Entries"])
 async def patch_entry(entry_id: int, request: Request):
     async with Session() as session:
         existing = await session.get(Entry, entry_id)
@@ -540,7 +627,7 @@ async def patch_entry(entry_id: int, request: Request):
     return row_to_dict(entry)
 
 
-@app.get("/api/entries")
+@app.get("/api/entries", tags=["Entries"])
 async def get_entries(
     request: Request, date: str = None, limit: int = 300, baby_id: int = DEFAULT_BABY_ID
 ):
@@ -561,7 +648,7 @@ async def get_entries(
     return [{**row_to_dict(e), "username": username} for e, username in rows]
 
 
-@app.get("/api/entries/dates")
+@app.get("/api/entries/dates", tags=["Entries"])
 async def get_dates(request: Request, baby_id: int = DEFAULT_BABY_ID):
     """Return list of distinct dates that have entries."""
     if (denied := await require_access(request, baby_id, ROLE_VIEWER)) is not None:
@@ -578,14 +665,14 @@ async def get_dates(request: Request, baby_id: int = DEFAULT_BABY_ID):
     return list(rows)
 
 
-@app.get("/api/settings")
+@app.get("/api/settings", tags=["Settings"])
 async def get_settings():
     async with Session() as session:
         rows = (await session.scalars(select(Setting))).all()
     return {r.key: r.value for r in rows}
 
 
-@app.put("/api/settings/{key}")
+@app.put("/api/settings/{key}", tags=["Settings"])
 async def set_setting(key: str, request: Request):
     body = await request.json()
     value = (body.get("value") or "").strip()
@@ -606,7 +693,7 @@ def baby_to_dict(baby: Baby) -> dict:
     return {"id": baby.id, "name": baby.name, "birthday": baby.birthday or ""}
 
 
-@app.get("/api/babies")
+@app.get("/api/babies", tags=["Babies"])
 async def list_babies(request: Request):
     async with Session() as session:
         rows = (
@@ -620,7 +707,7 @@ async def list_babies(request: Request):
     return [{**baby_to_dict(b), "role": role} for b, role in rows]
 
 
-@app.post("/api/babies")
+@app.post("/api/babies", tags=["Babies"])
 async def create_baby(request: Request):
     body = await request.json()
     name = (body.get("name") or "").strip() or "Baby"
@@ -637,7 +724,7 @@ async def create_baby(request: Request):
     return result
 
 
-@app.put("/api/babies/{baby_id}")
+@app.put("/api/babies/{baby_id}", tags=["Babies"])
 async def update_baby(baby_id: int, request: Request):
     if (denied := await require_access(request, baby_id, ROLE_EDITOR)) is not None:
         return denied
@@ -654,7 +741,7 @@ async def update_baby(baby_id: int, request: Request):
     return {"ok": True}
 
 
-@app.delete("/api/babies/{baby_id}")
+@app.delete("/api/babies/{baby_id}", tags=["Babies"])
 async def delete_baby(baby_id: int, request: Request):
     if (denied := await require_access(request, baby_id, ROLE_OWNER)) is not None:
         return denied
@@ -666,7 +753,7 @@ async def delete_baby(baby_id: int, request: Request):
     return {"ok": True}
 
 
-@app.get("/api/babies/{baby_id}/access")
+@app.get("/api/babies/{baby_id}/access", tags=["Baby access"])
 async def list_baby_access(baby_id: int, request: Request):
     if (denied := await require_access(request, baby_id, ROLE_OWNER)) is not None:
         return denied
@@ -682,7 +769,7 @@ async def list_baby_access(baby_id: int, request: Request):
     return [{"user_id": r[0], "role": r[1], "email": r[2]} for r in rows]
 
 
-@app.post("/api/babies/{baby_id}/access")
+@app.post("/api/babies/{baby_id}/access", tags=["Baby access"])
 async def grant_baby_access(baby_id: int, request: Request):
     if (denied := await require_access(request, baby_id, ROLE_OWNER)) is not None:
         return denied
@@ -703,7 +790,7 @@ async def grant_baby_access(baby_id: int, request: Request):
     return {"ok": True}
 
 
-@app.delete("/api/babies/{baby_id}/access/{user_id}")
+@app.delete("/api/babies/{baby_id}/access/{user_id}", tags=["Baby access"])
 async def revoke_baby_access(baby_id: int, user_id: int, request: Request):
     if (denied := await require_access(request, baby_id, ROLE_OWNER)) is not None:
         return denied
@@ -739,21 +826,21 @@ async def _open_entry(entry_type: str, baby_id: int):
     return row_to_dict(entry) if entry else None
 
 
-@app.get("/api/sleep/open")
+@app.get("/api/sleep/open", tags=["Entries"])
 async def get_open_sleep(request: Request, baby_id: int = DEFAULT_BABY_ID):
     if (denied := await require_access(request, baby_id, ROLE_VIEWER)) is not None:
         return denied
     return await _open_entry("sleep", baby_id)
 
 
-@app.get("/api/walk/open")
+@app.get("/api/walk/open", tags=["Entries"])
 async def get_open_walk(request: Request, baby_id: int = DEFAULT_BABY_ID):
     if (denied := await require_access(request, baby_id, ROLE_VIEWER)) is not None:
         return denied
     return await _open_entry("walk", baby_id)
 
 
-@app.delete("/api/entries/{entry_id}")
+@app.delete("/api/entries/{entry_id}", tags=["Entries"])
 async def delete_entry(entry_id: int, request: Request):
     async with Session() as session:
         existing = await session.get(Entry, entry_id)
@@ -769,7 +856,7 @@ async def delete_entry(entry_id: int, request: Request):
     return {"ok": True}
 
 
-@app.get("/api/stats")
+@app.get("/api/stats", tags=["Stats"])
 async def get_stats(request: Request, date: str = None, baby_id: int = DEFAULT_BABY_ID):
     if (denied := await require_access(request, baby_id, ROLE_VIEWER)) is not None:
         return denied
@@ -952,7 +1039,7 @@ async def report(
     )
 
 
-@app.get("/api/export.csv")
+@app.get("/api/export.csv", tags=["Export"])
 async def export_csv(
     request: Request, start: str, end: str, baby_id: int = DEFAULT_BABY_ID
 ):
