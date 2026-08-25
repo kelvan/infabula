@@ -29,9 +29,11 @@ const I18N = {
     btn_add_measurement:'+ Eintrag',
     settings_ip_names_title:'Geräte', settings_name_placeholder:'Name eingeben', settings_no_ips:'Noch keine Geräte bekannt',
     settings_quick_title:'Schnellzugriff (max. 5)', quick_max_toast:'Maximal 5 Schnellzugriffe',
-    settings_baby_title:'Baby',
+    settings_baby_title:'Babys',
     lbl_baby_name:'Name', lbl_birthday:'Geburtstag', baby_name_placeholder:'Name des Babys',
-    baby_fallback:'Baby',
+    baby_fallback:'Baby', btn_add_baby:'Baby hinzufügen', btn_delete:'Löschen',
+    confirm_delete_baby:'Dieses Baby und alle seine Einträge unwiderruflich löschen?',
+    toast_no_name:'Bitte Namen angeben',
     bd_welcome:'Willkommen', bd_happy:'🎉 Alles Gute',
     bd_born_today: name=>`${name} ist heute geboren`,
     bd_month_label: n=>`${n}-Monats-Tag`,
@@ -83,9 +85,11 @@ const I18N = {
     btn_add_measurement:'+ Entry',
     settings_ip_names_title:'Devices', settings_name_placeholder:'Enter name', settings_no_ips:'No devices seen yet',
     settings_quick_title:'Quick actions (max 5)', quick_max_toast:'Max 5 quick actions',
-    settings_baby_title:'Baby',
+    settings_baby_title:'Babies',
     lbl_baby_name:'Name', lbl_birthday:'Birthday', baby_name_placeholder:"Baby's name",
-    baby_fallback:'Baby',
+    baby_fallback:'Baby', btn_add_baby:'Add baby', btn_delete:'Delete',
+    confirm_delete_baby:'Permanently delete this baby and all its entries?',
+    toast_no_name:'Please enter a name',
     bd_welcome:'Welcome', bd_happy:'🎉 Happy birthday',
     bd_born_today: name=>`${name} was born today`,
     bd_month_label: n=>`Happy ${n}-month day`,
@@ -161,6 +165,7 @@ function switchLang() {
   initUI();
   loadLog();
   renderBirthdayBanner();
+  renderBabySwitcherLabel();
   renderTimelineLegend(logView === 'timeline');
   if (document.getElementById('tab-stats').classList.contains('active')) loadStats();
   if (document.getElementById('tab-settings').classList.contains('active')) loadSettings();
@@ -319,17 +324,79 @@ function switchTab(name, btn) {
   if (name === 'settings') loadSettings();
 }
 
-// ── Birthday banner ──
+// ── Babies ──
+let babies = [];
+let currentBabyId = null;
 let baby = { name: '', birthday: '' };
 
-async function loadBaby() {
+function currentBaby() {
+  return babies.find(b => b.id === currentBabyId) || { name: '', birthday: '' };
+}
+
+async function loadBabies() {
   try {
-    const res = await fetch('/api/baby');
-    baby = res.ok ? await res.json() : { name: '', birthday: '' };
+    const res = await fetch('/api/babies');
+    babies = res.ok ? await res.json() : [];
   } catch {
-    baby = { name: '', birthday: '' };
+    babies = [];
   }
+  const saved = parseInt(localStorage.getItem('babyId'), 10);
+  currentBabyId = babies.some(b => b.id === saved) ? saved : (babies[0]?.id ?? null);
+  if (currentBabyId != null) localStorage.setItem('babyId', currentBabyId);
+  baby = currentBaby();
+  renderBabySwitcherLabel();
+}
+
+function renderBabySwitcherLabel() {
+  const el = document.getElementById('baby-switcher-btn');
+  if (el) el.textContent = currentBaby().name || t('baby_fallback');
+}
+
+function switchBaby(id) {
+  currentBabyId = id;
+  localStorage.setItem('babyId', id);
+  baby = currentBaby();
+  renderBabySwitcherLabel();
+  closeBabySwitcher();
   renderBirthdayBanner();
+  loadLog();
+  if (document.getElementById('tab-stats').classList.contains('active')) loadStats();
+  if (document.getElementById('tab-settings').classList.contains('active')) loadSettings();
+}
+
+function openBabySwitcher() {
+  document.getElementById('baby-switcher-title').textContent = t('settings_baby_title');
+  const list = document.getElementById('baby-switcher-list');
+  list.innerHTML = babies.map(b => `
+    <div class="quick-opt-btn baby-switch-row${b.id === currentBabyId ? ' selected' : ''}" onclick="switchBaby(${b.id})">${esc(b.name || t('baby_fallback'))}</div>
+  `).join('') + `
+    <div class="field" style="margin-top:14px;"><input type="text" id="new-baby-name" placeholder="${t('baby_name_placeholder')}"></div>
+    <button class="btn" onclick="quickAddBaby()">${t('btn_add_baby')}</button>
+  `;
+  document.getElementById('baby-overlay').classList.add('open');
+}
+function closeBabySwitcher() {
+  document.getElementById('baby-overlay').classList.remove('open');
+}
+function babyOverlayClick(e) {
+  if (e.target === document.getElementById('baby-overlay')) closeBabySwitcher();
+}
+async function quickAddBaby() {
+  const name = document.getElementById('new-baby-name').value.trim();
+  if (!name) return;
+  const res = await fetch('/api/babies', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name }),
+  });
+  if (res.ok) {
+    const created = await res.json();
+    await loadBabies();
+    switchBaby(created.id);
+    toast(t('toast_saved'));
+  } else {
+    toast(t('toast_error'));
+  }
 }
 
 function daysInMonth(year, month) {
@@ -393,7 +460,7 @@ function renderBirthdayBanner() {
 
 // ── Sleep banner ──
 async function checkOpenSleep() {
-  const res = await fetch('/api/sleep/open');
+  const res = await fetch('/api/sleep/open?baby_id=' + currentBabyId);
   openSleepEntry = res.ok ? await res.json() : null;
   renderSleepBanner();
 }
@@ -431,7 +498,7 @@ async function wakeUp() {
 
 // ── Walk banner ──
 async function checkOpenWalk() {
-  const res = await fetch('/api/walk/open');
+  const res = await fetch('/api/walk/open?baby_id=' + currentBabyId);
   openWalkEntry = res.ok ? await res.json() : null;
   renderWalkBanner();
 }
@@ -515,7 +582,7 @@ function quickTap(type) {
 
 async function quickStartOpen(type) {
   const now = nowLocal();
-  const res = await fetch('/api/entries', {
+  const res = await fetch('/api/entries?baby_id=' + currentBabyId, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ type, ts_start: now, ts_end: null, note: '', meta: {} }),
@@ -533,7 +600,7 @@ async function quickStartOpen(type) {
 
 async function quickSubmit(type, meta = {}, note = '') {
   const now = nowLocal();
-  const res = await fetch('/api/entries', {
+  const res = await fetch('/api/entries?baby_id=' + currentBabyId, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ type, ts_start: now, ts_end: null, note, meta }),
@@ -599,12 +666,12 @@ async function loadLog() {
   renderQuickActions();
   const namesRes = await fetch('/api/ip-names');
   ipNameMap = await namesRes.json();
-  const allRes = await fetch('/api/entries?limit=500');
+  const allRes = await fetch(`/api/entries?limit=500&baby_id=${currentBabyId}`);
   const allEntries = await allRes.json();
   ipColorMap = {}; colorIndex = 0;
   allEntries.forEach(e => getIpColor(displayKey(e.ip)));
 
-  const res = await fetch(`/api/entries?date=${currentDate}`);
+  const res = await fetch(`/api/entries?date=${currentDate}&baby_id=${currentBabyId}`);
   const entries = await res.json();
   currentEntries = entries;
 
@@ -1023,7 +1090,7 @@ function growthChart(points, label, unit, colorKey) {
 
 // ── Stats ──
 async function loadStats() {
-  const res = await fetch('/api/stats?date=' + currentDate);
+  const res = await fetch(`/api/stats?date=${currentDate}&baby_id=${currentBabyId}`);
   const data = await res.json();
   const el = document.getElementById('stats-content');
 
@@ -1116,21 +1183,36 @@ async function loadStats() {
 
 // ── Settings ──
 async function loadSettings() {
-  const [ipsRes, babyRes] = await Promise.all([fetch('/api/ips'), fetch('/api/baby')]);
+  const ipsRes = await fetch(`/api/ips?baby_id=${currentBabyId}`);
   const ips = await ipsRes.json();
-  const babyInfo = await babyRes.json();
   const el = document.getElementById('settings-content');
 
-  let html = `
-    <div class="section-title">${t('settings_baby_title')}</div>
-    <div class="field"><label>${t('lbl_baby_name')}</label>
-      <input type="text" id="baby-name-input" value="${esc(babyInfo.name || '')}" placeholder="${t('baby_name_placeholder')}">
+  let html = `<div class="section-title">${t('settings_baby_title')}</div>`;
+  html += babies.map(b => `
+    <div class="baby-row" data-id="${b.id}">
+      <div class="field"><label>${t('lbl_baby_name')}</label>
+        <input type="text" class="baby-name-input" value="${esc(b.name)}" placeholder="${t('baby_name_placeholder')}">
+      </div>
+      <div class="field"><label>${t('lbl_birthday')}</label>
+        <input type="date" class="baby-birthday-input" value="${esc(b.birthday)}">
+      </div>
+      <div class="baby-actions">
+        ${babies.length > 1 ? `<button class="btn-small secondary" onclick="deleteBabyRow(${b.id})">${t('btn_delete')}</button>` : ''}
+        <button class="btn-small" onclick="saveBabyRow(${b.id})">${t('btn_save')}</button>
+      </div>
     </div>
-    <div class="field"><label>${t('lbl_birthday')}</label>
-      <input type="date" id="birthday-input" value="${esc(babyInfo.birthday || '')}">
-    </div>
-    <div class="baby-actions">
-      <button class="btn-small" onclick="saveBaby()">${t('btn_save')}</button>
+  `).join('');
+  html += `
+    <div class="baby-row">
+      <div class="field"><label>${t('lbl_baby_name')}</label>
+        <input type="text" id="new-baby-name-input" placeholder="${t('baby_name_placeholder')}">
+      </div>
+      <div class="field"><label>${t('lbl_birthday')}</label>
+        <input type="date" id="new-baby-birthday-input">
+      </div>
+      <div class="baby-actions">
+        <button class="btn-small" onclick="addBabyRow()">${t('btn_add_baby')}</button>
+      </div>
     </div>
   `;
 
@@ -1175,17 +1257,48 @@ function toggleQuickAction(key) {
   loadSettings();
 }
 
-async function saveBaby() {
-  const name = document.getElementById('baby-name-input').value;
-  const birthday = document.getElementById('birthday-input').value;
-  await fetch('/api/baby', {
+async function saveBabyRow(id) {
+  const row = document.querySelector(`.baby-row[data-id="${id}"]`);
+  const name = row.querySelector('.baby-name-input').value;
+  const birthday = row.querySelector('.baby-birthday-input').value;
+  await fetch(`/api/babies/${id}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ name, birthday }),
   });
-  baby = { name: name.trim(), birthday };
+  await loadBabies();
   toast(t('toast_saved'));
   renderBirthdayBanner();
+}
+
+async function deleteBabyRow(id) {
+  if (!confirm(t('confirm_delete_baby'))) return;
+  await fetch(`/api/babies/${id}`, { method: 'DELETE' });
+  await loadBabies();
+  toast(t('toast_deleted'));
+  renderBirthdayBanner();
+  loadLog();
+  loadSettings();
+}
+
+async function addBabyRow() {
+  const name = document.getElementById('new-baby-name-input').value.trim();
+  const birthday = document.getElementById('new-baby-birthday-input').value;
+  if (!name) { toast(t('toast_no_name')); return; }
+  const res = await fetch('/api/babies', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name, birthday }),
+  });
+  if (res.ok) {
+    const created = await res.json();
+    await loadBabies();
+    switchBaby(created.id);
+    toast(t('toast_saved'));
+    loadSettings();
+  } else {
+    toast(t('toast_error'));
+  }
 }
 
 async function saveIpName(btn) {
@@ -1373,7 +1486,7 @@ async function submitEntry() {
     meta,
   };
 
-  const res = await fetch('/api/entries', {
+  const res = await fetch('/api/entries?baby_id=' + currentBabyId, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
@@ -1614,11 +1727,11 @@ function exportDates() {
 }
 function openReport() {
   const { start, end } = exportDates();
-  window.open(`/report?start=${start}&end=${end}`, '_blank');
+  window.open(`/report?start=${start}&end=${end}&baby_id=${currentBabyId}`, '_blank');
 }
 function downloadCsv() {
   const { start, end } = exportDates();
-  window.location.href = `/api/export.csv?start=${start}&end=${end}`;
+  window.location.href = `/api/export.csv?start=${start}&end=${end}&baby_id=${currentBabyId}`;
 }
 
 // ── Live sync (SSE) ──
@@ -1633,16 +1746,19 @@ function initEvents() {
 
 // ── Init ──
 initUI();
-loadBaby();
 updateDayNav();
 setLogView(logView);
-loadLog();
 initEvents();
 initSwipe();
 document.getElementById('export-start').value = todayStr();
 document.getElementById('export-end').value = todayStr();
-const initialTab = TAB_ORDER.includes(location.hash.slice(1)) ? location.hash.slice(1) : 'log';
-if (initialTab !== 'log') switchTab(initialTab);
+(async () => {
+  await loadBabies();
+  renderBirthdayBanner();
+  loadLog();
+  const initialTab = TAB_ORDER.includes(location.hash.slice(1)) ? location.hash.slice(1) : 'log';
+  if (initialTab !== 'log') switchTab(initialTab);
+})();
 
 let tlResizeTimer;
 window.addEventListener('resize', () => {

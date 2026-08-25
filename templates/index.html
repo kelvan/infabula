@@ -12,7 +12,10 @@
 
 <header>
   <img class="logo-svg" src="/static/logo.svg" alt="infabula">
-  <button class="lang-btn" id="lang-btn" onclick="switchLang()">EN</button>
+  <div class="header-actions">
+    <button class="baby-switcher-btn" id="baby-switcher-btn" onclick="openBabySwitcher()"></button>
+    <button class="lang-btn" id="lang-btn" onclick="switchLang()">EN</button>
+  </div>
 </header>
 
 <div class="day-nav">
@@ -139,6 +142,16 @@
       <button class="close-btn" onclick="closeQuickPopup()"><svg viewBox="0 0 24 24" class="ic"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
     </div>
     <div id="quick-body"></div>
+  </div>
+</div>
+
+<div class="modal-overlay quick-overlay" id="baby-overlay" onclick="babyOverlayClick(event)">
+  <div class="modal quick-modal">
+    <div class="modal-header">
+      <h2 id="baby-switcher-title"></h2>
+      <button class="close-btn" onclick="closeBabySwitcher()"><svg viewBox="0 0 24 24" class="ic"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    </div>
+    <div id="baby-switcher-list"></div>
   </div>
 </div>
 

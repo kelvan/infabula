@@ -17,7 +17,9 @@ from sqlalchemy import delete, distinct, func, select
 from db import (
     DEFAULT_BABY_ID,
     DEFAULT_USER_ID,
+    ROLE_OWNER,
     Baby,
+    BabyAccess,
     Entry,
     IpName,
     Session,
@@ -130,7 +132,7 @@ async def index(request: Request):
 
 
 @app.post("/api/entries")
-async def create_entry(request: Request):
+async def create_entry(request: Request, baby_id: int = DEFAULT_BABY_ID):
     body = await request.json()
     entry = Entry(
         type=body["type"],
@@ -139,7 +141,7 @@ async def create_entry(request: Request):
         note=body.get("note", ""),
         meta=body.get("meta", {}),
         ip=get_client_ip(request),
-        baby_id=DEFAULT_BABY_ID,
+        baby_id=baby_id,
         user_id=DEFAULT_USER_ID,
     )
     async with Session.begin() as session:
@@ -163,9 +165,11 @@ async def patch_entry(entry_id: int, request: Request):
 
 
 @app.get("/api/entries")
-async def get_entries(date: str = None, limit: int = 300):
+async def get_entries(
+    date: str = None, limit: int = 300, baby_id: int = DEFAULT_BABY_ID
+):
     async with Session() as session:
-        stmt = entries_of().order_by(Entry.ts_start.desc())
+        stmt = entries_of(baby_id).order_by(Entry.ts_start.desc())
         if date:
             stmt = stmt.where((DAY_START == date) | (DAY_END == date))
         else:
@@ -175,13 +179,13 @@ async def get_entries(date: str = None, limit: int = 300):
 
 
 @app.get("/api/entries/dates")
-async def get_dates():
+async def get_dates(baby_id: int = DEFAULT_BABY_ID):
     """Return list of distinct dates that have entries."""
     async with Session() as session:
         rows = (
             await session.scalars(
                 select(distinct(DAY_START))
-                .where(Entry.baby_id == DEFAULT_BABY_ID)
+                .where(Entry.baby_id == baby_id)
                 .order_by(DAY_START.desc())
                 .limit(90)
             )
@@ -237,39 +241,67 @@ async def set_setting(key: str, request: Request):
     return {"ok": True}
 
 
-@app.get("/api/baby")
-async def get_baby():
+def baby_to_dict(baby: Baby) -> dict:
+    return {"id": baby.id, "name": baby.name, "birthday": baby.birthday or ""}
+
+
+@app.get("/api/babies")
+async def list_babies():
     async with Session() as session:
-        baby = await session.get(Baby, DEFAULT_BABY_ID)
-    if baby is None:
-        return {"name": "", "birthday": ""}
-    return {"name": baby.name, "birthday": baby.birthday or ""}
+        rows = (await session.scalars(select(Baby).order_by(Baby.id))).all()
+    return [baby_to_dict(b) for b in rows]
 
 
-@app.put("/api/baby")
-async def set_baby(request: Request):
+@app.post("/api/babies")
+async def create_baby(request: Request):
+    body = await request.json()
+    name = (body.get("name") or "").strip() or "Baby"
+    birthday = (body.get("birthday") or "").strip() or None
+    async with Session.begin() as session:
+        baby = Baby(name=name, birthday=birthday)
+        session.add(baby)
+        await session.flush()
+        session.add(
+            BabyAccess(user_id=DEFAULT_USER_ID, baby_id=baby.id, role=ROLE_OWNER)
+        )
+        result = baby_to_dict(baby)
+    await broadcast_event("entries_changed")
+    return result
+
+
+@app.put("/api/babies/{baby_id}")
+async def update_baby(baby_id: int, request: Request):
     body = await request.json()
     async with Session.begin() as session:
-        baby = await session.get(Baby, DEFAULT_BABY_ID)
+        baby = await session.get(Baby, baby_id)
         if baby is None:
-            baby = Baby(id=DEFAULT_BABY_ID, name="")
-            session.add(baby)
+            return {"ok": False}
         if "name" in body:
-            baby.name = (body.get("name") or "").strip()
+            baby.name = (body.get("name") or "").strip() or baby.name
         if "birthday" in body:
             baby.birthday = (body.get("birthday") or "").strip() or None
     await broadcast_event("entries_changed")
     return {"ok": True}
 
 
+@app.delete("/api/babies/{baby_id}")
+async def delete_baby(baby_id: int):
+    async with Session.begin() as session:
+        await session.execute(delete(Entry).where(Entry.baby_id == baby_id))
+        await session.execute(delete(BabyAccess).where(BabyAccess.baby_id == baby_id))
+        await session.execute(delete(Baby).where(Baby.id == baby_id))
+    await broadcast_event("entries_changed")
+    return {"ok": True}
+
+
 @app.get("/api/ips")
-async def get_known_ips():
+async def get_known_ips(baby_id: int = DEFAULT_BABY_ID):
     """Distinct IPs seen in entries, with their assigned name (if any)."""
     async with Session() as session:
         ips = (
             await session.scalars(
                 select(distinct(Entry.ip))
-                .where(Entry.ip.is_not(None), Entry.baby_id == DEFAULT_BABY_ID)
+                .where(Entry.ip.is_not(None), Entry.baby_id == baby_id)
                 .order_by(Entry.ip)
             )
         ).all()
@@ -278,11 +310,11 @@ async def get_known_ips():
     return [{"ip": ip, "name": names.get(ip, "")} for ip in ips]
 
 
-async def _open_entry(entry_type: str):
+async def _open_entry(entry_type: str, baby_id: int):
     """Most recent entry of this type without an end time, if any."""
     async with Session() as session:
         entry = await session.scalar(
-            entries_of()
+            entries_of(baby_id)
             .where(Entry.type == entry_type, Entry.ts_end.is_(None))
             .order_by(Entry.ts_start.desc())
             .limit(1)
@@ -291,13 +323,13 @@ async def _open_entry(entry_type: str):
 
 
 @app.get("/api/sleep/open")
-async def get_open_sleep():
-    return await _open_entry("sleep")
+async def get_open_sleep(baby_id: int = DEFAULT_BABY_ID):
+    return await _open_entry("sleep", baby_id)
 
 
 @app.get("/api/walk/open")
-async def get_open_walk():
-    return await _open_entry("walk")
+async def get_open_walk(baby_id: int = DEFAULT_BABY_ID):
+    return await _open_entry("walk", baby_id)
 
 
 @app.delete("/api/entries/{entry_id}")
@@ -309,22 +341,24 @@ async def delete_entry(entry_id: int):
 
 
 @app.get("/api/stats")
-async def get_stats(date: str = None):
+async def get_stats(date: str = None, baby_id: int = DEFAULT_BABY_ID):
     day = date or datetime.now().strftime("%Y-%m-%d")
     async with Session() as session:
         rows = (
             await session.scalars(
-                entries_of().order_by(Entry.ts_start.desc()).limit(500)
+                entries_of(baby_id).order_by(Entry.ts_start.desc()).limit(500)
             )
         ).all()
         day_rows = (
             await session.scalars(
-                entries_of().where(DAY_START == day).order_by(Entry.ts_start.asc())
+                entries_of(baby_id)
+                .where(DAY_START == day)
+                .order_by(Entry.ts_start.asc())
             )
         ).all()
         growth_rows = (
             await session.scalars(
-                entries_of()
+                entries_of(baby_id)
                 .where(Entry.type == "weight")
                 .order_by(Entry.ts_start.asc())
             )
@@ -381,13 +415,13 @@ async def get_stats(date: str = None):
 
 
 # ── Export report ──
-async def fetch_entries_range(start: str, end: str):
+async def fetch_entries_range(start: str, end: str, baby_id: int = DEFAULT_BABY_ID):
     if start > end:
         start, end = end, start
     async with Session() as session:
         rows = (
             await session.scalars(
-                entries_of()
+                entries_of(baby_id)
                 .where(DAY_START.between(start, end))
                 .order_by(Entry.ts_start.asc())
             )
@@ -475,8 +509,10 @@ def build_report(entries: list[dict], start: str, end: str) -> dict:
 
 
 @app.get("/report", response_class=HTMLResponse)
-async def report(request: Request, start: str, end: str):
-    entries, start, end = await fetch_entries_range(start, end)
+async def report(
+    request: Request, start: str, end: str, baby_id: int = DEFAULT_BABY_ID
+):
+    entries, start, end = await fetch_entries_range(start, end, baby_id)
     data = build_report(entries, start, end)
     return templates.TemplateResponse(
         "report.html", {"request": request, "v": ASSET_VERSION, **data}
@@ -484,8 +520,8 @@ async def report(request: Request, start: str, end: str):
 
 
 @app.get("/api/export.csv")
-async def export_csv(start: str, end: str):
-    entries, start, end = await fetch_entries_range(start, end)
+async def export_csv(start: str, end: str, baby_id: int = DEFAULT_BABY_ID):
+    entries, start, end = await fetch_entries_range(start, end, baby_id)
     buf = io.StringIO()
     w = csv.writer(buf)
     w.writerow(["id", "type", "start", "end", "note", "meta", "ip"])

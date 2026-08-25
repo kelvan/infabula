@@ -38,8 +38,8 @@ header {
   box-shadow: 0 2px 12px rgba(58,46,34,0.07);
 }
 header .logo-svg { height: 38px; width: auto; }
-.lang-btn {
-  margin-left: auto;
+.header-actions { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+.baby-switcher-btn, .lang-btn {
   background: var(--surface2);
   border: 1.5px solid var(--border);
   border-radius: 6px;
@@ -51,8 +51,12 @@ header .logo-svg { height: 38px; width: auto; }
   letter-spacing: 0.08em;
   text-transform: uppercase;
   transition: all 0.15s;
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
-.lang-btn:hover { background: var(--border); color: var(--ink); }
+.baby-switcher-btn:hover, .lang-btn:hover { background: var(--border); color: var(--ink); }
 
 /* ── Day nav ── */
 .day-nav {
@@ -279,7 +283,9 @@ header .logo-svg { height: 38px; width: auto; }
 /* ── Stats ── */
 .stats-wrap { padding: 16px 20px 0; }
 .settings-wrap { padding: 16px 20px 0; }
-.baby-actions { display: flex; justify-content: flex-end; margin-bottom: 18px; }
+.baby-actions { display: flex; justify-content: flex-end; gap: 8px; margin-bottom: 18px; }
+.baby-row { padding-bottom: 10px; margin-bottom: 10px; border-bottom: 1px dashed var(--border); }
+.baby-row:last-child { border-bottom: none; }
 .ip-name-row { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 14px; }
 .ip-avatar {
   width: 34px; height: 34px; border-radius: 50%; flex-shrink: 0; margin-top: 1px;
@@ -565,6 +571,8 @@ body:not(.log-active) .fab, body:not(.log-active) .quick-actions { display: none
   transition: all 0.15s;
 }
 .quick-opt-btn:hover { border-color: var(--accent2); background: var(--accent-soft); }
+.baby-switch-row { margin-bottom: 8px; text-align: left; }
+.baby-switch-row.selected { border-color: var(--accent); background: var(--accent-soft); color: var(--accent-ink); font-weight: 600; }
 .quick-emoji-btn {
   flex: 1;
   background: var(--surface);
