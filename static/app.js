@@ -46,6 +46,7 @@ const I18N = {
     lbl_baby_name:'Name', lbl_birthday:'Geburtstag', baby_name_placeholder:'Name des Babys',
     baby_fallback:'Baby', btn_add_baby:'Baby hinzufügen', btn_delete:'Löschen',
     confirm_delete_baby:'Dieses Baby und alle seine Einträge unwiderruflich löschen?',
+    confirm_remove_access:'Zugriff für diese Person entfernen?',
     toast_no_name:'Bitte Namen angeben',
     settings_security_title:'Sicherheit', btn_logout:'Abmelden',
     member_since:'Dabei seit', last_login:'Letzte Anmeldung',
@@ -116,6 +117,7 @@ const I18N = {
     lbl_baby_name:'Name', lbl_birthday:'Birthday', baby_name_placeholder:"Baby's name",
     baby_fallback:'Baby', btn_add_baby:'Add baby', btn_delete:'Delete',
     confirm_delete_baby:'Permanently delete this baby and all its entries?',
+    confirm_remove_access:'Remove this person\'s access?',
     toast_no_name:'Please enter a name',
     settings_security_title:'Security', btn_logout:'Log out',
     member_since:'Member since', last_login:'Last login',
@@ -1563,6 +1565,7 @@ async function grantBabyAccess(babyId) {
 }
 
 async function revokeBabyAccess(babyId, userId) {
+  if (!confirm(t('confirm_remove_access'))) return;
   const res = await fetch(`/api/babies/${babyId}/access/${userId}`, { method: 'DELETE' });
   const data = await res.json().catch(() => ({}));
   if (res.ok) {
