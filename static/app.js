@@ -17,7 +17,7 @@ const I18N = {
     btn_save_sleep:'Eingeschlafen speichern', btn_save:'Speichern',
     banner_since:'Schläft seit', banner_so_far:'Schlaf bisher', banner_wakeup:'Aufgewacht',
     banner_walk_since:'Spaziergang seit', banner_walk_so_far:'Spaziergang bisher',
-    still_sleeping:'noch schläft', still_walking:'läuft noch',
+    still_sleeping:'schläft noch', still_walking:'läuft noch',
     no_entries:'Keine Einträge für diesen Tag',
     section_last:'Letztes Ereignis', section_intervals:'Abstände',
     section_sleep:'Schlafdauer (letzte 10)', section_growth:'Wachstum',
