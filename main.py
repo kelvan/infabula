@@ -295,6 +295,18 @@ async def me(request: Request):
     return user_to_dict(request.state.user)
 
 
+@app.put("/api/auth/me")
+async def update_me(request: Request):
+    body = await request.json()
+    name = (body.get("name") or "").strip()
+    if not name:
+        return JSONResponse({"error": "name cannot be empty"}, status_code=400)
+    async with Session.begin() as session:
+        user = await session.get(User, request.state.user.id)
+        user.name = name[:128]
+    return {"ok": True}
+
+
 @app.post("/api/auth/totp/setup")
 async def totp_setup(request: Request):
     secret = auth.new_totp_secret()
@@ -536,7 +548,7 @@ async def get_entries(
         return denied
     async with Session() as session:
         stmt = (
-            select(Entry, User.username)
+            select(Entry, User.name)
             .outerjoin(User, User.id == Entry.user_id)
             .where(Entry.baby_id == baby_id)
             .order_by(Entry.ts_start.desc())

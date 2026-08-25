@@ -47,7 +47,7 @@ const I18N = {
     confirm_delete_baby:'Dieses Baby und alle seine Einträge unwiderruflich löschen?',
     confirm_remove_access:'Zugriff für diese Person entfernen?',
     toast_no_name:'Bitte Namen angeben',
-    settings_security_title:'Sicherheit', btn_logout:'Abmelden',
+    settings_security_title:'Sicherheit', btn_logout:'Abmelden', lbl_display_name:'Anzeigename',
     member_since:'Dabei seit', last_login:'Letzte Anmeldung',
     settings_totp_title:'Zwei-Faktor-Authentifizierung (TOTP)',
     totp_enabled_sub:'Aktiviert', totp_disabled_sub:'Nicht aktiviert',
@@ -117,7 +117,7 @@ const I18N = {
     confirm_delete_baby:'Permanently delete this baby and all its entries?',
     confirm_remove_access:'Remove this person\'s access?',
     toast_no_name:'Please enter a name',
-    settings_security_title:'Security', btn_logout:'Log out',
+    settings_security_title:'Security', btn_logout:'Log out', lbl_display_name:'Display name',
     member_since:'Member since', last_login:'Last login',
     settings_totp_title:'Two-factor authentication (TOTP)',
     totp_enabled_sub:'Enabled', totp_disabled_sub:'Not enabled',
@@ -1286,6 +1286,12 @@ async function loadSettings() {
   `;
 
   html += `<div class="section-title">${t('settings_security_title')}</div>
+    <div class="field"><label>${t('lbl_display_name')}</label>
+      <input type="text" id="display-name-input" value="${esc(me.name || '')}" placeholder="${t('lbl_display_name')}">
+    </div>
+    <div class="baby-actions" style="margin-bottom:14px;">
+      <button class="btn-small" onclick="saveDisplayName()">${t('btn_save')}</button>
+    </div>
     <div class="security-row">
       <div><div class="s-name">${esc(me.email || '')}</div><div class="s-sub">${t('member_since')} ${esc((me.created_at || '').slice(0, 10))} · ${t('last_login')} ${esc((me.last_login_at || '').slice(0, 16).replace('T', ' ')) || '—'}</div></div>
       <button class="btn-small secondary" onclick="doLogout()">${t('btn_logout')}</button>
@@ -1317,7 +1323,23 @@ async function loadSettings() {
   if (window.PublicKeyCredential) document.getElementById('add-passkey-btn').style.display = '';
 }
 
-// ── Security: logout, TOTP, passkeys ──
+// ── Security: display name, logout, TOTP, passkeys ──
+async function saveDisplayName() {
+  const name = document.getElementById('display-name-input').value.trim();
+  if (!name) { toast(t('toast_no_name')); return; }
+  const res = await fetch('/api/auth/me', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name }),
+  });
+  if (res.ok) {
+    toast(t('toast_saved'));
+    loadLog();
+  } else {
+    toast(t('toast_error'));
+  }
+}
+
 async function doLogout() {
   await fetch('/api/auth/logout', { method: 'POST' });
   location.href = '/login';
