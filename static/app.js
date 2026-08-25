@@ -31,6 +31,7 @@ const I18N = {
     banner_walk_since:'Spaziergang seit', banner_walk_so_far:'Spaziergang bisher',
     still_sleeping:'schläft noch', still_walking:'läuft noch',
     no_entries:'Keine Einträge für diesen Tag',
+    no_baby_yet:'Noch kein Baby — füge eines in den Einstellungen hinzu, oder lass dich von jemandem einladen.',
     section_last:'Letztes Ereignis', section_intervals:'Abstände',
     section_sleep:'Schlafdauer (letzte 10)', section_growth:'Wachstum',
     stat_interval:'Abstand', stat_avg:'Ø diesen Tag',
@@ -55,6 +56,9 @@ const I18N = {
     btn_add_passkey:'Passkey hinzufügen',
     prompt_password_to_disable:'Passwort zum Deaktivieren eingeben',
     prompt_passkey_name:'Name für diesen Passkey',
+    lbl_your_role:'Deine Rolle', role_owner:'Besitzer', role_editor:'Bearbeiter', role_viewer:'Betrachter',
+    btn_manage_access:'Zugriff verwalten', btn_remove:'Entfernen', btn_invite:'Einladen',
+    lbl_invite_username:'Benutzername', lbl_role:'Rolle',
     bd_welcome:'Willkommen', bd_happy:'🎉 Alles Gute',
     bd_born_today: name=>`${name} ist heute geboren`,
     bd_month_label: n=>`${n}-Monats-Tag`,
@@ -96,6 +100,7 @@ const I18N = {
     banner_walk_since:'Walking since', banner_walk_so_far:'walk so far',
     still_sleeping:'still sleeping', still_walking:'still walking',
     no_entries:'No entries for this day',
+    no_baby_yet:'No baby yet — add one in Settings, or get invited by someone who has one.',
     section_last:'Last event', section_intervals:'Intervals',
     section_sleep:'Sleep duration (last 10)', section_growth:'Growth',
     stat_interval:'Interval', stat_avg:'avg this day',
@@ -120,6 +125,9 @@ const I18N = {
     btn_add_passkey:'Add passkey',
     prompt_password_to_disable:'Enter your password to disable',
     prompt_passkey_name:'Name for this passkey',
+    lbl_your_role:'Your role', role_owner:'Owner', role_editor:'Editor', role_viewer:'Viewer',
+    btn_manage_access:'Manage access', btn_remove:'Remove', btn_invite:'Invite',
+    lbl_invite_username:'Username', lbl_role:'Role',
     bd_welcome:'Welcome', bd_happy:'🎉 Happy birthday',
     bd_born_today: name=>`${name} was born today`,
     bd_month_label: n=>`Happy ${n}-month day`,
@@ -691,6 +699,13 @@ function quickOverlayClick(e) {
 
 // ── Log ──
 async function loadLog() {
+  if (currentBabyId == null) {
+    document.getElementById('sleep-banner-wrap').innerHTML = '';
+    document.getElementById('walk-banner-wrap').innerHTML = '';
+    document.getElementById('quick-actions-wrap').innerHTML = '';
+    document.getElementById('entry-list').innerHTML = `<div class="empty">${t('no_baby_yet')}</div>`;
+    return;
+  }
   await checkOpenSleep();
   await checkOpenWalk();
   renderQuickActions();
@@ -1120,6 +1135,10 @@ function growthChart(points, label, unit, colorKey) {
 
 // ── Stats ──
 async function loadStats() {
+  if (currentBabyId == null) {
+    document.getElementById('stats-content').innerHTML = `<div class="empty">${t('no_baby_yet')}</div>`;
+    return;
+  }
   const res = await fetch(`/api/stats?date=${currentDate}&baby_id=${currentBabyId}`);
   const data = await res.json();
   const el = document.getElementById('stats-content');
@@ -1214,30 +1233,37 @@ async function loadStats() {
 // ── Settings ──
 async function loadSettings() {
   const [ipsRes, meRes, passkeysRes] = await Promise.all([
-    fetch(`/api/ips?baby_id=${currentBabyId}`),
+    currentBabyId == null ? Promise.resolve(null) : fetch(`/api/ips?baby_id=${currentBabyId}`),
     fetch('/api/auth/me'),
     fetch('/api/auth/passkeys'),
   ]);
-  const ips = await ipsRes.json();
+  const ips = ipsRes ? await ipsRes.json() : [];
   const me = await meRes.json();
   const passkeys = await passkeysRes.json();
   const el = document.getElementById('settings-content');
 
   let html = `<div class="section-title">${t('settings_baby_title')}</div>`;
-  html += babies.map(b => `
+  html += babies.map(b => {
+    const canEdit = b.role === 'owner' || b.role === 'editor';
+    const isOwner = b.role === 'owner';
+    return `
     <div class="baby-row" data-id="${b.id}">
       <div class="field"><label>${t('lbl_baby_name')}</label>
-        <input type="text" class="baby-name-input" value="${esc(b.name)}" placeholder="${t('baby_name_placeholder')}">
+        <input type="text" class="baby-name-input" value="${esc(b.name)}" placeholder="${t('baby_name_placeholder')}" ${canEdit ? '' : 'disabled'}>
       </div>
       <div class="field"><label>${t('lbl_birthday')}</label>
-        <input type="date" class="baby-birthday-input" value="${esc(b.birthday)}">
+        <input type="date" class="baby-birthday-input" value="${esc(b.birthday)}" ${canEdit ? '' : 'disabled'}>
       </div>
+      <div class="s-sub" style="margin-bottom:8px;">${t('lbl_your_role')}: ${t('role_' + b.role)}</div>
       <div class="baby-actions">
-        ${babies.length > 1 ? `<button class="btn-small secondary" onclick="deleteBabyRow(${b.id})">${t('btn_delete')}</button>` : ''}
-        <button class="btn-small" onclick="saveBabyRow(${b.id})">${t('btn_save')}</button>
+        ${isOwner ? `<button class="btn-small secondary" onclick="toggleBabyAccess(${b.id})">${t('btn_manage_access')}</button>` : ''}
+        ${isOwner ? `<button class="btn-small secondary" onclick="deleteBabyRow(${b.id})">${t('btn_delete')}</button>` : ''}
+        ${canEdit ? `<button class="btn-small" onclick="saveBabyRow(${b.id})">${t('btn_save')}</button>` : ''}
       </div>
+      <div class="access-wrap" id="access-wrap-${b.id}" style="display:none;"></div>
     </div>
-  `).join('');
+  `;
+  }).join('');
   html += `
     <div class="baby-row">
       <div class="field"><label>${t('lbl_baby_name')}</label>
@@ -1479,6 +1505,69 @@ async function addBabyRow() {
     loadSettings();
   } else {
     toast(t('toast_error'));
+  }
+}
+
+async function toggleBabyAccess(babyId) {
+  const wrap = document.getElementById(`access-wrap-${babyId}`);
+  const open = wrap.style.display !== 'none';
+  wrap.style.display = open ? 'none' : '';
+  if (!open) await loadBabyAccess(babyId);
+}
+
+async function loadBabyAccess(babyId) {
+  const wrap = document.getElementById(`access-wrap-${babyId}`);
+  const res = await fetch(`/api/babies/${babyId}/access`);
+  const members = res.ok ? await res.json() : [];
+  wrap.innerHTML = `
+    ${members.map(m => `
+      <div class="security-row">
+        <div><div class="s-name">${esc(m.username)}</div><div class="s-sub">${t('role_' + m.role)}</div></div>
+        <button class="btn-small secondary" onclick="revokeBabyAccess(${babyId},${m.user_id})">${t('btn_remove')}</button>
+      </div>
+    `).join('')}
+    <div class="field"><label>${t('lbl_invite_username')}</label>
+      <input type="text" id="invite-username-${babyId}" placeholder="${t('baby_name_placeholder')}">
+    </div>
+    <div class="field"><label>${t('lbl_role')}</label>
+      <select id="invite-role-${babyId}">
+        <option value="viewer">${t('role_viewer')}</option>
+        <option value="editor" selected>${t('role_editor')}</option>
+        <option value="owner">${t('role_owner')}</option>
+      </select>
+    </div>
+    <div class="baby-actions">
+      <button class="btn-small" onclick="grantBabyAccess(${babyId})">${t('btn_invite')}</button>
+    </div>
+  `;
+}
+
+async function grantBabyAccess(babyId) {
+  const username = document.getElementById(`invite-username-${babyId}`).value.trim();
+  const role = document.getElementById(`invite-role-${babyId}`).value;
+  if (!username) { toast(t('toast_no_name')); return; }
+  const res = await fetch(`/api/babies/${babyId}/access`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username, role }),
+  });
+  const data = await res.json();
+  if (res.ok) {
+    toast(t('toast_saved'));
+    loadBabyAccess(babyId);
+  } else {
+    toast(data.error || t('toast_error'));
+  }
+}
+
+async function revokeBabyAccess(babyId, userId) {
+  const res = await fetch(`/api/babies/${babyId}/access/${userId}`, { method: 'DELETE' });
+  const data = await res.json().catch(() => ({}));
+  if (res.ok) {
+    toast(t('toast_deleted'));
+    loadBabyAccess(babyId);
+  } else {
+    toast(data.error || t('toast_error'));
   }
 }
 

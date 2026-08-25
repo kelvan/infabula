@@ -32,7 +32,9 @@ from webauthn.helpers.structs import PublicKeyCredentialDescriptor
 import auth
 from db import (
     DEFAULT_BABY_ID,
+    ROLE_EDITOR,
     ROLE_OWNER,
+    ROLE_VIEWER,
     Baby,
     BabyAccess,
     Entry,
@@ -53,15 +55,28 @@ ASSET_VERSION = str(int(time.time()))
 DAY_START = func.substr(Entry.ts_start, 1, 10)
 DAY_END = func.substr(Entry.ts_end, 1, 10)
 
+ROLE_RANK = {ROLE_VIEWER: 0, ROLE_EDITOR: 1, ROLE_OWNER: 2}
+
 
 def entries_of(baby_id: int = DEFAULT_BABY_ID):
-    """Base query scoped to one baby's log.
-
-    baby_id comes from the caller's own query param, not from who's logged
-    in — every account can see and edit every baby, there's no per-baby
-    access check yet despite baby_access existing in the schema.
-    """
+    """Base query scoped to one baby's log."""
     return select(Entry).where(Entry.baby_id == baby_id)
+
+
+async def role_for(user_id: int, baby_id: int) -> str | None:
+    async with Session() as session:
+        access = await session.get(BabyAccess, (user_id, baby_id))
+    return access.role if access else None
+
+
+async def require_access(
+    request: Request, baby_id: int, min_role: str = ROLE_VIEWER
+) -> JSONResponse | None:
+    """None if the current user meets min_role on baby_id, else a 403 to return."""
+    role = await role_for(request.state.user.id, baby_id)
+    if role is None or ROLE_RANK[role] < ROLE_RANK[min_role]:
+        return JSONResponse({"error": "forbidden"}, status_code=403)
+    return None
 
 # ── SSE pub-sub ──
 subscribers: set[asyncio.Queue] = set()
@@ -466,6 +481,8 @@ async def passkey_login_verify(request: Request, response: Response):
 
 @app.post("/api/entries")
 async def create_entry(request: Request, baby_id: int = DEFAULT_BABY_ID):
+    if (denied := await require_access(request, baby_id, ROLE_EDITOR)) is not None:
+        return denied
     body = await request.json()
     entry = Entry(
         type=body["type"],
@@ -485,11 +502,17 @@ async def create_entry(request: Request, baby_id: int = DEFAULT_BABY_ID):
 
 @app.patch("/api/entries/{entry_id}")
 async def patch_entry(entry_id: int, request: Request):
+    async with Session() as session:
+        existing = await session.get(Entry, entry_id)
+    if existing is None:
+        return None
+    if (
+        denied := await require_access(request, existing.baby_id, ROLE_EDITOR)
+    ) is not None:
+        return denied
     body = await request.json()
     async with Session.begin() as session:
         entry = await session.get(Entry, entry_id)
-        if entry is None:
-            return None
         for field in ("ts_start", "ts_end", "note", "meta"):
             if field in body:
                 setattr(entry, field, body[field])
@@ -499,8 +522,10 @@ async def patch_entry(entry_id: int, request: Request):
 
 @app.get("/api/entries")
 async def get_entries(
-    date: str = None, limit: int = 300, baby_id: int = DEFAULT_BABY_ID
+    request: Request, date: str = None, limit: int = 300, baby_id: int = DEFAULT_BABY_ID
 ):
+    if (denied := await require_access(request, baby_id, ROLE_VIEWER)) is not None:
+        return denied
     async with Session() as session:
         stmt = entries_of(baby_id).order_by(Entry.ts_start.desc())
         if date:
@@ -512,8 +537,10 @@ async def get_entries(
 
 
 @app.get("/api/entries/dates")
-async def get_dates(baby_id: int = DEFAULT_BABY_ID):
+async def get_dates(request: Request, baby_id: int = DEFAULT_BABY_ID):
     """Return list of distinct dates that have entries."""
+    if (denied := await require_access(request, baby_id, ROLE_VIEWER)) is not None:
+        return denied
     async with Session() as session:
         rows = (
             await session.scalars(
@@ -579,10 +606,17 @@ def baby_to_dict(baby: Baby) -> dict:
 
 
 @app.get("/api/babies")
-async def list_babies():
+async def list_babies(request: Request):
     async with Session() as session:
-        rows = (await session.scalars(select(Baby).order_by(Baby.id))).all()
-    return [baby_to_dict(b) for b in rows]
+        rows = (
+            await session.execute(
+                select(Baby, BabyAccess.role)
+                .join(BabyAccess, BabyAccess.baby_id == Baby.id)
+                .where(BabyAccess.user_id == request.state.user.id)
+                .order_by(Baby.id)
+            )
+        ).all()
+    return [{**baby_to_dict(b), "role": role} for b, role in rows]
 
 
 @app.post("/api/babies")
@@ -604,6 +638,8 @@ async def create_baby(request: Request):
 
 @app.put("/api/babies/{baby_id}")
 async def update_baby(baby_id: int, request: Request):
+    if (denied := await require_access(request, baby_id, ROLE_EDITOR)) is not None:
+        return denied
     body = await request.json()
     async with Session.begin() as session:
         baby = await session.get(Baby, baby_id)
@@ -618,7 +654,9 @@ async def update_baby(baby_id: int, request: Request):
 
 
 @app.delete("/api/babies/{baby_id}")
-async def delete_baby(baby_id: int):
+async def delete_baby(baby_id: int, request: Request):
+    if (denied := await require_access(request, baby_id, ROLE_OWNER)) is not None:
+        return denied
     async with Session.begin() as session:
         await session.execute(delete(Entry).where(Entry.baby_id == baby_id))
         await session.execute(delete(BabyAccess).where(BabyAccess.baby_id == baby_id))
@@ -627,9 +665,72 @@ async def delete_baby(baby_id: int):
     return {"ok": True}
 
 
+@app.get("/api/babies/{baby_id}/access")
+async def list_baby_access(baby_id: int, request: Request):
+    if (denied := await require_access(request, baby_id, ROLE_OWNER)) is not None:
+        return denied
+    async with Session() as session:
+        rows = (
+            await session.execute(
+                select(BabyAccess.user_id, BabyAccess.role, User.username)
+                .join(User, User.id == BabyAccess.user_id)
+                .where(BabyAccess.baby_id == baby_id)
+                .order_by(User.username)
+            )
+        ).all()
+    return [{"user_id": r[0], "role": r[1], "username": r[2]} for r in rows]
+
+
+@app.post("/api/babies/{baby_id}/access")
+async def grant_baby_access(baby_id: int, request: Request):
+    if (denied := await require_access(request, baby_id, ROLE_OWNER)) is not None:
+        return denied
+    body = await request.json()
+    username = (body.get("username") or "").strip()
+    role = body.get("role") or ROLE_VIEWER
+    if role not in ROLE_RANK:
+        return JSONResponse({"error": "invalid role"}, status_code=400)
+    async with Session.begin() as session:
+        user = await session.scalar(select(User).where(User.username == username))
+        if user is None:
+            return JSONResponse({"error": "no such user"}, status_code=404)
+        existing = await session.get(BabyAccess, (user.id, baby_id))
+        if existing is not None:
+            existing.role = role
+        else:
+            session.add(BabyAccess(user_id=user.id, baby_id=baby_id, role=role))
+    return {"ok": True}
+
+
+@app.delete("/api/babies/{baby_id}/access/{user_id}")
+async def revoke_baby_access(baby_id: int, user_id: int, request: Request):
+    if (denied := await require_access(request, baby_id, ROLE_OWNER)) is not None:
+        return denied
+    async with Session.begin() as session:
+        owners = (
+            await session.scalars(
+                select(BabyAccess).where(
+                    BabyAccess.baby_id == baby_id, BabyAccess.role == ROLE_OWNER
+                )
+            )
+        ).all()
+        if len(owners) <= 1 and any(o.user_id == user_id for o in owners):
+            return JSONResponse(
+                {"error": "a baby needs at least one owner"}, status_code=400
+            )
+        await session.execute(
+            delete(BabyAccess).where(
+                BabyAccess.baby_id == baby_id, BabyAccess.user_id == user_id
+            )
+        )
+    return {"ok": True}
+
+
 @app.get("/api/ips")
-async def get_known_ips(baby_id: int = DEFAULT_BABY_ID):
+async def get_known_ips(request: Request, baby_id: int = DEFAULT_BABY_ID):
     """Distinct IPs seen in entries, with their assigned name (if any)."""
+    if (denied := await require_access(request, baby_id, ROLE_VIEWER)) is not None:
+        return denied
     async with Session() as session:
         ips = (
             await session.scalars(
@@ -656,17 +757,29 @@ async def _open_entry(entry_type: str, baby_id: int):
 
 
 @app.get("/api/sleep/open")
-async def get_open_sleep(baby_id: int = DEFAULT_BABY_ID):
+async def get_open_sleep(request: Request, baby_id: int = DEFAULT_BABY_ID):
+    if (denied := await require_access(request, baby_id, ROLE_VIEWER)) is not None:
+        return denied
     return await _open_entry("sleep", baby_id)
 
 
 @app.get("/api/walk/open")
-async def get_open_walk(baby_id: int = DEFAULT_BABY_ID):
+async def get_open_walk(request: Request, baby_id: int = DEFAULT_BABY_ID):
+    if (denied := await require_access(request, baby_id, ROLE_VIEWER)) is not None:
+        return denied
     return await _open_entry("walk", baby_id)
 
 
 @app.delete("/api/entries/{entry_id}")
-async def delete_entry(entry_id: int):
+async def delete_entry(entry_id: int, request: Request):
+    async with Session() as session:
+        existing = await session.get(Entry, entry_id)
+    if existing is None:
+        return {"ok": True}
+    if (
+        denied := await require_access(request, existing.baby_id, ROLE_EDITOR)
+    ) is not None:
+        return denied
     async with Session.begin() as session:
         await session.execute(delete(Entry).where(Entry.id == entry_id))
     await broadcast_event("entries_changed")
@@ -674,7 +787,9 @@ async def delete_entry(entry_id: int):
 
 
 @app.get("/api/stats")
-async def get_stats(date: str = None, baby_id: int = DEFAULT_BABY_ID):
+async def get_stats(request: Request, date: str = None, baby_id: int = DEFAULT_BABY_ID):
+    if (denied := await require_access(request, baby_id, ROLE_VIEWER)) is not None:
+        return denied
     day = date or datetime.now().strftime("%Y-%m-%d")
     async with Session() as session:
         rows = (
@@ -845,6 +960,8 @@ def build_report(entries: list[dict], start: str, end: str) -> dict:
 async def report(
     request: Request, start: str, end: str, baby_id: int = DEFAULT_BABY_ID
 ):
+    if await require_access(request, baby_id, ROLE_VIEWER) is not None:
+        return HTMLResponse("Forbidden", status_code=403)
     entries, start, end = await fetch_entries_range(start, end, baby_id)
     data = build_report(entries, start, end)
     return templates.TemplateResponse(
@@ -853,7 +970,11 @@ async def report(
 
 
 @app.get("/api/export.csv")
-async def export_csv(start: str, end: str, baby_id: int = DEFAULT_BABY_ID):
+async def export_csv(
+    request: Request, start: str, end: str, baby_id: int = DEFAULT_BABY_ID
+):
+    if (denied := await require_access(request, baby_id, ROLE_VIEWER)) is not None:
+        return denied
     entries, start, end = await fetch_entries_range(start, end, baby_id)
     buf = io.StringIO()
     w = csv.writer(buf)
