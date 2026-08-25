@@ -14,7 +14,7 @@ Sync-style URLs are rewritten to their async driver automatically. The legacy
 import os
 from datetime import datetime
 
-from sqlalchemy import JSON, ForeignKey, String, Text
+from sqlalchemy import JSON, Boolean, ForeignKey, Integer, String, Text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
@@ -93,9 +93,46 @@ class User(Base):
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     name: Mapped[str] = mapped_column(String(128), nullable=False)
     email: Mapped[str | None] = mapped_column(String(255), unique=True)
+    username: Mapped[str | None] = mapped_column(String(64), unique=True)
+    password_hash: Mapped[str | None] = mapped_column(String(255))
+    totp_secret: Mapped[str | None] = mapped_column(String(64))
+    totp_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     created_at: Mapped[str | None] = mapped_column(
         String(32), default=lambda: datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     )
+
+
+class WebauthnCredential(Base):
+    """A registered passkey for a user. One user may have several."""
+
+    __tablename__ = "webauthn_credentials"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    credential_id: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
+    public_key: Mapped[str] = mapped_column(Text, nullable=False)
+    sign_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    name: Mapped[str | None] = mapped_column(String(128))
+    created_at: Mapped[str | None] = mapped_column(
+        String(32), default=lambda: datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    )
+
+
+class UserSession(Base):
+    """A logged-in session, keyed by the random token stored in the session cookie."""
+
+    __tablename__ = "sessions"
+
+    token: Mapped[str] = mapped_column(String(64), primary_key=True)
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    created_at: Mapped[str | None] = mapped_column(
+        String(32), default=lambda: datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    )
+    expires_at: Mapped[str] = mapped_column(String(32), nullable=False)
 
 
 class Baby(Base):

@@ -1,3 +1,15 @@
+// A session can expire while the app is open (cookie lapses, or gets
+// revoked from another tab). Any fetch() hitting a 401 bounces to /login
+// rather than letting the SPA carry on against calls that will all fail.
+(() => {
+  const nativeFetch = window.fetch;
+  window.fetch = async (...args) => {
+    const res = await nativeFetch(...args);
+    if (res.status === 401) location.href = '/login';
+    return res;
+  };
+})();
+
 // ── i18n ──
 const I18N = {
   de: {
@@ -34,6 +46,15 @@ const I18N = {
     baby_fallback:'Baby', btn_add_baby:'Baby hinzufügen', btn_delete:'Löschen',
     confirm_delete_baby:'Dieses Baby und alle seine Einträge unwiderruflich löschen?',
     toast_no_name:'Bitte Namen angeben',
+    settings_security_title:'Sicherheit', lbl_username:'Benutzername', btn_logout:'Abmelden',
+    settings_totp_title:'Zwei-Faktor-Authentifizierung (TOTP)',
+    totp_enabled_sub:'Aktiviert', totp_disabled_sub:'Nicht aktiviert',
+    btn_disable:'Deaktivieren', btn_enable:'Aktivieren', btn_confirm:'Bestätigen',
+    totp_code_placeholder:'6-stelliger Code',
+    settings_passkeys_title:'Passkeys', no_passkeys:'Noch keine Passkeys',
+    btn_add_passkey:'Passkey hinzufügen',
+    prompt_password_to_disable:'Passwort zum Deaktivieren eingeben',
+    prompt_passkey_name:'Name für diesen Passkey',
     bd_welcome:'Willkommen', bd_happy:'🎉 Alles Gute',
     bd_born_today: name=>`${name} ist heute geboren`,
     bd_month_label: n=>`${n}-Monats-Tag`,
@@ -90,6 +111,15 @@ const I18N = {
     baby_fallback:'Baby', btn_add_baby:'Add baby', btn_delete:'Delete',
     confirm_delete_baby:'Permanently delete this baby and all its entries?',
     toast_no_name:'Please enter a name',
+    settings_security_title:'Security', lbl_username:'Username', btn_logout:'Log out',
+    settings_totp_title:'Two-factor authentication (TOTP)',
+    totp_enabled_sub:'Enabled', totp_disabled_sub:'Not enabled',
+    btn_disable:'Disable', btn_enable:'Enable', btn_confirm:'Confirm',
+    totp_code_placeholder:'6-digit code',
+    settings_passkeys_title:'Passkeys', no_passkeys:'No passkeys yet',
+    btn_add_passkey:'Add passkey',
+    prompt_password_to_disable:'Enter your password to disable',
+    prompt_passkey_name:'Name for this passkey',
     bd_welcome:'Welcome', bd_happy:'🎉 Happy birthday',
     bd_born_today: name=>`${name} was born today`,
     bd_month_label: n=>`Happy ${n}-month day`,
@@ -1183,8 +1213,14 @@ async function loadStats() {
 
 // ── Settings ──
 async function loadSettings() {
-  const ipsRes = await fetch(`/api/ips?baby_id=${currentBabyId}`);
+  const [ipsRes, meRes, passkeysRes] = await Promise.all([
+    fetch(`/api/ips?baby_id=${currentBabyId}`),
+    fetch('/api/auth/me'),
+    fetch('/api/auth/passkeys'),
+  ]);
   const ips = await ipsRes.json();
+  const me = await meRes.json();
+  const passkeys = await passkeysRes.json();
   const el = document.getElementById('settings-content');
 
   let html = `<div class="section-title">${t('settings_baby_title')}</div>`;
@@ -1242,7 +1278,152 @@ async function loadSettings() {
       </div>
     `).join('');
 
+  html += `<div class="section-title">${t('settings_security_title')}</div>
+    <div class="security-row">
+      <div><div class="s-name">${esc(me.username || '')}</div><div class="s-sub">${t('lbl_username')}</div></div>
+      <button class="btn-small secondary" onclick="doLogout()">${t('btn_logout')}</button>
+    </div>
+    <div class="security-row">
+      <div><div class="s-name">${t('settings_totp_title')}</div><div class="s-sub">${me.totp_enabled ? t('totp_enabled_sub') : t('totp_disabled_sub')}</div></div>
+      ${me.totp_enabled
+        ? `<button class="btn-small secondary" onclick="disableTotp()">${t('btn_disable')}</button>`
+        : `<button class="btn-small" onclick="startTotpSetup()">${t('btn_enable')}</button>`}
+    </div>
+    <div id="totp-setup-wrap"></div>
+    <div class="section-title" style="border:none;margin-bottom:0;">${t('settings_passkeys_title')}</div>
+  `;
+  html += !passkeys.length
+    ? `<div class="empty">${t('no_passkeys')}</div>`
+    : passkeys.map(p => `
+      <div class="security-row">
+        <div><div class="s-name">${esc(p.name)}</div><div class="s-sub">${esc((p.created_at || '').slice(0, 10))}</div></div>
+        <button class="btn-small secondary" onclick="deletePasskey(${p.id})">${t('btn_delete')}</button>
+      </div>
+    `).join('');
+  html += `
+    <div class="baby-actions" style="margin-top:14px;">
+      <button class="btn-small" id="add-passkey-btn" onclick="addPasskey()" style="display:none;">${t('btn_add_passkey')}</button>
+    </div>
+  `;
+
   el.innerHTML = html;
+  if (window.PublicKeyCredential) document.getElementById('add-passkey-btn').style.display = '';
+}
+
+// ── Security: logout, TOTP, passkeys ──
+async function doLogout() {
+  await fetch('/api/auth/logout', { method: 'POST' });
+  location.href = '/login';
+}
+
+async function startTotpSetup() {
+  const res = await fetch('/api/auth/totp/setup', { method: 'POST' });
+  const data = await res.json();
+  document.getElementById('totp-setup-wrap').innerHTML = `
+    <div class="totp-qr">${data.qr_svg}</div>
+    <div class="totp-secret">${esc(data.secret)}</div>
+    <div class="field"><input type="text" id="totp-confirm-code" inputmode="numeric" maxlength="6" placeholder="${t('totp_code_placeholder')}"></div>
+    <button class="btn" onclick="confirmTotpSetup()">${t('btn_confirm')}</button>
+  `;
+}
+
+async function confirmTotpSetup() {
+  const code = document.getElementById('totp-confirm-code').value.trim();
+  const res = await fetch('/api/auth/totp/confirm', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ code }),
+  });
+  if (res.ok) {
+    toast(t('toast_saved'));
+    loadSettings();
+  } else {
+    toast(t('toast_error'));
+  }
+}
+
+async function disableTotp() {
+  const password = prompt(t('prompt_password_to_disable'));
+  if (!password) return;
+  const res = await fetch('/api/auth/totp/disable', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ password }),
+  });
+  if (res.ok) {
+    toast(t('toast_saved'));
+    loadSettings();
+  } else {
+    toast(t('toast_error'));
+  }
+}
+
+// base64url <-> ArrayBuffer, for talking to navigator.credentials
+function b64urlToBuf(s) {
+  s = s.replace(/-/g, '+').replace(/_/g, '/');
+  while (s.length % 4) s += '=';
+  const bin = atob(s);
+  const buf = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) buf[i] = bin.charCodeAt(i);
+  return buf.buffer;
+}
+function bufToB64url(buf) {
+  const bytes = new Uint8Array(buf);
+  let bin = '';
+  for (const b of bytes) bin += String.fromCharCode(b);
+  return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+function credentialToJSON(cred) {
+  if (typeof cred.toJSON === 'function') return cred.toJSON();
+  return {
+    id: cred.id,
+    rawId: bufToB64url(cred.rawId),
+    type: cred.type,
+    clientExtensionResults: cred.getClientExtensionResults ? cred.getClientExtensionResults() : {},
+    response: {
+      clientDataJSON: bufToB64url(cred.response.clientDataJSON),
+      attestationObject: bufToB64url(cred.response.attestationObject),
+    },
+  };
+}
+
+async function addPasskey() {
+  const name = prompt(t('prompt_passkey_name')) || 'Passkey';
+  try {
+    const optRes = await fetch('/api/auth/passkey/register/options', { method: 'POST' });
+    const opt = await optRes.json();
+    const publicKey = {
+      ...opt.options,
+      challenge: b64urlToBuf(opt.options.challenge),
+      user: { ...opt.options.user, id: b64urlToBuf(opt.options.user.id) },
+      excludeCredentials: (opt.options.excludeCredentials || []).map(c => ({ ...c, id: b64urlToBuf(c.id) })),
+    };
+    const cred = await navigator.credentials.create({ publicKey });
+    const res = await fetch('/api/auth/passkey/register/verify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        challenge_token: opt.challenge_token,
+        credential: credentialToJSON(cred),
+        name,
+      }),
+    });
+    if (res.ok) {
+      toast(t('toast_saved'));
+      loadSettings();
+    } else {
+      toast(t('toast_error'));
+    }
+  } catch (err) {
+    toast(err.message || t('toast_error'));
+  }
+}
+
+async function deletePasskey(id) {
+  if (!confirm(t('confirm_delete'))) return;
+  await fetch(`/api/auth/passkeys/${id}`, { method: 'DELETE' });
+  toast(t('toast_deleted'));
+  loadSettings();
 }
 
 function toggleQuickAction(key) {

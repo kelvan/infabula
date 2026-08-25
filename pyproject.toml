@@ -11,6 +11,10 @@ dependencies = [
     "sqlalchemy[asyncio]>=2.0",
     "alembic>=1.13",
     "aiosqlite",
+    "bcrypt>=5.0.0",
+    "pyotp>=2.10.0",
+    "webauthn>=3.0.0",
+    "qrcode>=8.2",
 ]
 
 [project.optional-dependencies]

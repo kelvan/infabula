@@ -9,14 +9,29 @@ from datetime import datetime
 from itertools import groupby
 
 from fastapi import FastAPI, Request
-from fastapi.responses import HTMLResponse, Response, StreamingResponse
+from fastapi.responses import (
+    HTMLResponse,
+    JSONResponse,
+    RedirectResponse,
+    Response,
+    StreamingResponse,
+)
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import delete, distinct, func, select
+from webauthn import (
+    generate_authentication_options,
+    generate_registration_options,
+    options_to_json,
+    verify_authentication_response,
+    verify_registration_response,
+)
+from webauthn.helpers import base64url_to_bytes, bytes_to_base64url
+from webauthn.helpers.structs import PublicKeyCredentialDescriptor
 
+import auth
 from db import (
     DEFAULT_BABY_ID,
-    DEFAULT_USER_ID,
     ROLE_OWNER,
     Baby,
     BabyAccess,
@@ -24,6 +39,8 @@ from db import (
     IpName,
     Session,
     Setting,
+    User,
+    WebauthnCredential,
     sqlite_file,
 )
 from migrate import run_migrations
@@ -40,8 +57,9 @@ DAY_END = func.substr(Entry.ts_end, 1, 10)
 def entries_of(baby_id: int = DEFAULT_BABY_ID):
     """Base query scoped to one baby's log.
 
-    There is no sign-in yet, so everything runs against the default baby;
-    once users exist this is the single place that has to learn which one.
+    baby_id comes from the caller's own query param, not from who's logged
+    in — every account can see and edit every baby, there's no per-baby
+    access check yet despite baby_access existing in the schema.
     """
     return select(Entry).where(Entry.baby_id == baby_id)
 
@@ -124,11 +142,326 @@ def row_to_dict(entry: Entry) -> dict:
     return entry.as_dict()
 
 
+# ── Auth gate ──
+# Everything requires a session except the login page, static assets, and
+# the handful of auth endpoints a not-yet-logged-in browser needs to reach
+# (register/login/TOTP-verify/passkey-login). Auth endpoints that manage an
+# *existing* account's credentials — TOTP setup, passkey enrollment, logout —
+# stay behind the gate like any other API route. Unauthenticated HTML
+# requests bounce to /login; unauthenticated API requests get a plain 401.
+PUBLIC_PREFIXES = ("/static/",)
+PUBLIC_PATHS = (
+    "/login",
+    "/api/auth/register",
+    "/api/auth/login",
+    "/api/auth/totp/verify",
+    "/api/auth/passkey/login/options",
+    "/api/auth/passkey/login/verify",
+)
+
+
+@app.middleware("http")
+async def auth_gate(request: Request, call_next):
+    path = request.url.path
+    if path.startswith(PUBLIC_PREFIXES) or path in PUBLIC_PATHS:
+        return await call_next(request)
+    user = await auth.get_session_user(request)
+    if user is None:
+        if path.startswith("/api/"):
+            return JSONResponse({"error": "unauthorized"}, status_code=401)
+        return RedirectResponse("/login")
+    request.state.user = user
+    return await call_next(request)
+
+
 @app.get("/", response_class=HTMLResponse)
 async def index(request: Request):
     return templates.TemplateResponse(
         "index.html", {"request": request, "v": ASSET_VERSION}
     )
+
+
+@app.get("/login", response_class=HTMLResponse)
+async def login_page(request: Request):
+    if await auth.get_session_user(request) is not None:
+        return RedirectResponse("/")
+    return templates.TemplateResponse(
+        "login.html", {"request": request, "v": ASSET_VERSION}
+    )
+
+
+def user_to_dict(user: User) -> dict:
+    return {
+        "id": user.id,
+        "username": user.username,
+        "name": user.name,
+        "totp_enabled": user.totp_enabled,
+    }
+
+
+@app.post("/api/auth/register")
+async def register(request: Request, response: Response):
+    body = await request.json()
+    username = (body.get("username") or "").strip()
+    password = body.get("password") or ""
+    if not username or len(password) < 8:
+        return JSONResponse(
+            {"error": "username and an 8+ character password are required"},
+            status_code=400,
+        )
+    async with Session.begin() as session:
+        existing = await session.scalar(select(User).where(User.username == username))
+        if existing is not None:
+            return JSONResponse({"error": "username taken"}, status_code=409)
+        user = User(
+            name=username, username=username, password_hash=auth.hash_password(password)
+        )
+        session.add(user)
+        await session.flush()
+        user_id = user.id
+    token = await auth.create_session(user_id)
+    auth.set_session_cookie(response, token)
+    return {"ok": True}
+
+
+@app.post("/api/auth/login")
+async def login(request: Request, response: Response):
+    body = await request.json()
+    username = (body.get("username") or "").strip()
+    password = body.get("password") or ""
+    async with Session() as session:
+        user = await session.scalar(select(User).where(User.username == username))
+    password_ok = auth.verify_password(password, user.password_hash if user else None)
+    if user is None or not password_ok:
+        return JSONResponse({"error": "invalid credentials"}, status_code=401)
+    if user.totp_enabled:
+        pending_token = auth.store_pending("totp_login", {"user_id": user.id})
+        return {"totp_required": True, "pending_token": pending_token}
+    token = await auth.create_session(user.id)
+    auth.set_session_cookie(response, token)
+    return {"ok": True}
+
+
+@app.post("/api/auth/totp/verify")
+async def totp_verify_login(request: Request, response: Response):
+    body = await request.json()
+    pending_token = body.get("pending_token") or ""
+    pending = auth.peek_pending(pending_token, "totp_login")
+    if pending is None:
+        return JSONResponse({"error": "expired, log in again"}, status_code=400)
+    async with Session() as session:
+        user = await session.get(User, pending["user_id"])
+    if user is None or not auth.verify_totp(user.totp_secret, body.get("code") or ""):
+        return JSONResponse({"error": "invalid code"}, status_code=401)
+    auth.pop_pending(pending_token, "totp_login")
+    token = await auth.create_session(user.id)
+    auth.set_session_cookie(response, token)
+    return {"ok": True}
+
+
+@app.post("/api/auth/logout")
+async def logout(request: Request, response: Response):
+    token = request.cookies.get(auth.SESSION_COOKIE)
+    if token:
+        await auth.delete_session(token)
+    auth.clear_session_cookie(response)
+    return {"ok": True}
+
+
+@app.get("/api/auth/me")
+async def me(request: Request):
+    return user_to_dict(request.state.user)
+
+
+@app.post("/api/auth/totp/setup")
+async def totp_setup(request: Request):
+    secret = auth.new_totp_secret()
+    async with Session.begin() as session:
+        user = await session.get(User, request.state.user.id)
+        user.totp_secret = secret
+        user.totp_enabled = False
+        username = user.username
+    uri = auth.totp_uri(secret, username)
+    return {"secret": secret, "qr_svg": auth.totp_qr_svg(uri)}
+
+
+@app.post("/api/auth/totp/confirm")
+async def totp_confirm(request: Request):
+    body = await request.json()
+    async with Session.begin() as session:
+        user = await session.get(User, request.state.user.id)
+        if not user.totp_secret or not auth.verify_totp(
+            user.totp_secret, body.get("code") or ""
+        ):
+            return JSONResponse({"error": "invalid code"}, status_code=400)
+        user.totp_enabled = True
+    return {"ok": True}
+
+
+@app.post("/api/auth/totp/disable")
+async def totp_disable(request: Request):
+    body = await request.json()
+    async with Session.begin() as session:
+        user = await session.get(User, request.state.user.id)
+        ok = auth.verify_password(body.get("password") or "", user.password_hash or "")
+        if not ok:
+            return JSONResponse({"error": "wrong password"}, status_code=401)
+        user.totp_enabled = False
+        user.totp_secret = None
+    return {"ok": True}
+
+
+@app.get("/api/auth/passkeys")
+async def list_passkeys(request: Request):
+    async with Session() as session:
+        rows = (
+            await session.scalars(
+                select(WebauthnCredential).where(
+                    WebauthnCredential.user_id == request.state.user.id
+                )
+            )
+        ).all()
+    return [
+        {"id": c.id, "name": c.name or "Passkey", "created_at": c.created_at}
+        for c in rows
+    ]
+
+
+@app.delete("/api/auth/passkeys/{cred_id}")
+async def delete_passkey(cred_id: int, request: Request):
+    async with Session.begin() as session:
+        cred = await session.get(WebauthnCredential, cred_id)
+        if cred is not None and cred.user_id == request.state.user.id:
+            await session.delete(cred)
+    return {"ok": True}
+
+
+@app.post("/api/auth/passkey/register/options")
+async def passkey_register_options(request: Request):
+    async with Session() as session:
+        existing = (
+            await session.scalars(
+                select(WebauthnCredential).where(
+                    WebauthnCredential.user_id == request.state.user.id
+                )
+            )
+        ).all()
+    options = generate_registration_options(
+        rp_id=auth.rp_id_from_request(request),
+        rp_name="infabula",
+        user_id=str(request.state.user.id).encode(),
+        user_name=request.state.user.username,
+        exclude_credentials=[
+            PublicKeyCredentialDescriptor(id=base64url_to_bytes(c.credential_id))
+            for c in existing
+        ],
+    )
+    challenge_token = auth.store_pending(
+        "passkey_register",
+        {"user_id": request.state.user.id, "challenge": options.challenge},
+    )
+    return {
+        "options": json.loads(options_to_json(options)),
+        "challenge_token": challenge_token,
+    }
+
+
+@app.post("/api/auth/passkey/register/verify")
+async def passkey_register_verify(request: Request):
+    body = await request.json()
+    pending = auth.pop_pending(body.get("challenge_token") or "", "passkey_register")
+    if pending is None or pending["user_id"] != request.state.user.id:
+        return JSONResponse({"error": "expired, try again"}, status_code=400)
+    try:
+        verification = verify_registration_response(
+            credential=body["credential"],
+            expected_challenge=pending["challenge"],
+            expected_rp_id=auth.rp_id_from_request(request),
+            expected_origin=auth.origin_from_request(request),
+        )
+    except Exception:
+        return JSONResponse({"error": "registration failed"}, status_code=400)
+    async with Session.begin() as session:
+        session.add(
+            WebauthnCredential(
+                user_id=request.state.user.id,
+                credential_id=bytes_to_base64url(verification.credential_id),
+                public_key=bytes_to_base64url(verification.credential_public_key),
+                sign_count=verification.sign_count,
+                name=(body.get("name") or "Passkey").strip()[:128],
+            )
+        )
+    return {"ok": True}
+
+
+@app.post("/api/auth/passkey/login/options")
+async def passkey_login_options(request: Request):
+    body = await request.json() if await request.body() else {}
+    username = (body.get("username") or "").strip()
+    allow_credentials = None
+    if username:
+        async with Session() as session:
+            user = await session.scalar(select(User).where(User.username == username))
+            creds = (
+                (
+                    await session.scalars(
+                        select(WebauthnCredential).where(
+                            WebauthnCredential.user_id == user.id
+                        )
+                    )
+                ).all()
+                if user
+                else []
+            )
+        allow_credentials = [
+            PublicKeyCredentialDescriptor(id=base64url_to_bytes(c.credential_id))
+            for c in creds
+        ]
+    options = generate_authentication_options(
+        rp_id=auth.rp_id_from_request(request), allow_credentials=allow_credentials
+    )
+    challenge_token = auth.store_pending(
+        "passkey_login", {"challenge": options.challenge}
+    )
+    return {
+        "options": json.loads(options_to_json(options)),
+        "challenge_token": challenge_token,
+    }
+
+
+@app.post("/api/auth/passkey/login/verify")
+async def passkey_login_verify(request: Request, response: Response):
+    body = await request.json()
+    pending = auth.pop_pending(body.get("challenge_token") or "", "passkey_login")
+    if pending is None:
+        return JSONResponse({"error": "expired, try again"}, status_code=400)
+    credential = body["credential"]
+    cred_id = credential.get("id") or credential.get("rawId")
+    async with Session() as session:
+        stored = await session.scalar(
+            select(WebauthnCredential).where(
+                WebauthnCredential.credential_id == cred_id
+            )
+        )
+    if stored is None:
+        return JSONResponse({"error": "unknown passkey"}, status_code=401)
+    try:
+        verification = verify_authentication_response(
+            credential=credential,
+            expected_challenge=pending["challenge"],
+            expected_rp_id=auth.rp_id_from_request(request),
+            expected_origin=auth.origin_from_request(request),
+            credential_public_key=base64url_to_bytes(stored.public_key),
+            credential_current_sign_count=stored.sign_count,
+        )
+    except Exception:
+        return JSONResponse({"error": "verification failed"}, status_code=401)
+    async with Session.begin() as session:
+        row = await session.get(WebauthnCredential, stored.id)
+        row.sign_count = verification.new_sign_count
+    token = await auth.create_session(stored.user_id)
+    auth.set_session_cookie(response, token)
+    return {"ok": True}
 
 
 @app.post("/api/entries")
@@ -142,7 +475,7 @@ async def create_entry(request: Request, baby_id: int = DEFAULT_BABY_ID):
         meta=body.get("meta", {}),
         ip=get_client_ip(request),
         baby_id=baby_id,
-        user_id=DEFAULT_USER_ID,
+        user_id=request.state.user.id,
     )
     async with Session.begin() as session:
         session.add(entry)
@@ -262,7 +595,7 @@ async def create_baby(request: Request):
         session.add(baby)
         await session.flush()
         session.add(
-            BabyAccess(user_id=DEFAULT_USER_ID, baby_id=baby.id, role=ROLE_OWNER)
+            BabyAccess(user_id=request.state.user.id, baby_id=baby.id, role=ROLE_OWNER)
         )
         result = baby_to_dict(baby)
     await broadcast_event("entries_changed")
