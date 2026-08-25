@@ -5,7 +5,7 @@ const I18N = {
     tab_log:'Verlauf', tab_stats:'Auswertung', tab_settings:'Einstellungen',
     modal_new:'Neuer Eintrag',
     tile_diaper:'Windel', tile_nursing:'Stillen', tile_bottle:'Fläschchen',
-    tile_sleep_start:'Eingeschlafen', tile_weight:'Gewicht', tile_note:'Notiz', tile_wakeup:'Aufgewacht',
+    tile_sleep_start:'Eingeschlafen', tile_weight:'Gewicht', tile_note:'Notiz',
     tile_walk:'Spaziergang', tile_clothing:'Kleidung wechseln', tile_walk_end:'Zurück', tile_mood:'Stimmung',
     fab_title:'Neuer Eintrag',
     lbl_time:'Zeitpunkt', lbl_note:'Notiz', lbl_type:'Art', lbl_amount:'Menge (ml)',
@@ -59,7 +59,7 @@ const I18N = {
     tab_log:'Log', tab_stats:'Stats', tab_settings:'Settings',
     modal_new:'New Entry',
     tile_diaper:'Diaper', tile_nursing:'Nursing', tile_bottle:'Bottle',
-    tile_sleep_start:'Fell asleep', tile_weight:'Weight', tile_note:'Note', tile_wakeup:'Woke up',
+    tile_sleep_start:'Fell asleep', tile_weight:'Weight', tile_note:'Note',
     tile_walk:'Walk', tile_clothing:'Clothing change', tile_walk_end:'Back', tile_mood:'Mood',
     fab_title:'New Entry',
     lbl_time:'Time', lbl_note:'Note', lbl_type:'Type', lbl_amount:'Amount (ml)',
@@ -1213,34 +1213,7 @@ function openModal() {
   const grid = document.getElementById('type-grid');
   grid.style.display = '';
   document.getElementById('tile-sleep_start').style.display = openSleepEntry ? 'none' : '';
-  const existing = grid.querySelector('[data-type=sleep_end]');
-  if (openSleepEntry && !existing) {
-    const tile = document.createElement('div');
-    tile.className = 'type-tile';
-    tile.dataset.type = 'sleep_end';
-    tile.innerHTML = `<div class="t-icon">${icon('sun')}</div><div class="t-label">${t('tile_wakeup')}</div>`;
-    tile.onclick = () => wakeUpFromModal();
-    grid.appendChild(tile);
-  } else if (!openSleepEntry && existing) {
-    existing.remove();
-  } else if (openSleepEntry && existing) {
-    existing.querySelector('.t-label').textContent = t('tile_wakeup');
-  }
-
   document.getElementById('tile-walk').style.display = openWalkEntry ? 'none' : '';
-  const existingWalk = grid.querySelector('[data-type=walk_end]');
-  if (openWalkEntry && !existingWalk) {
-    const tile = document.createElement('div');
-    tile.className = 'type-tile';
-    tile.dataset.type = 'walk_end';
-    tile.innerHTML = `<div class="t-icon">${icon('home')}</div><div class="t-label">${t('tile_walk_end')}</div>`;
-    tile.onclick = () => endWalkFromModal();
-    grid.appendChild(tile);
-  } else if (!openWalkEntry && existingWalk) {
-    existingWalk.remove();
-  } else if (openWalkEntry && existingWalk) {
-    existingWalk.querySelector('.t-label').textContent = t('tile_walk_end');
-  }
 
   document.getElementById('modal-overlay').classList.add('open');
 }
@@ -1260,16 +1233,6 @@ function openMeasurementModal() {
   document.getElementById('type-grid').style.display = 'none';
   document.getElementById('modal-overlay').classList.add('open');
   selectType('weight');
-}
-
-function wakeUpFromModal() {
-  closeModal();
-  wakeUp();
-}
-
-function endWalkFromModal() {
-  closeModal();
-  endWalk();
 }
 
 function selectType(type) {
