@@ -286,28 +286,6 @@ header .logo-svg { height: 38px; width: auto; }
 .baby-actions { display: flex; justify-content: flex-end; gap: 8px; margin-bottom: 18px; }
 .baby-row { padding-bottom: 10px; margin-bottom: 10px; border-bottom: 1px dashed var(--border); }
 .baby-row:last-child { border-bottom: none; }
-.ip-name-row { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 14px; }
-.ip-avatar {
-  width: 34px; height: 34px; border-radius: 50%; flex-shrink: 0; margin-top: 1px;
-  display: flex; align-items: center; justify-content: center;
-  color: #fff; font-family: ui-monospace, 'Cascadia Code', 'Source Code Pro', monospace;
-  font-size: 0.7rem; text-transform: uppercase;
-}
-.ip-name-fields { flex: 1; min-width: 0; }
-.ip-name-inline { display: flex; gap: 8px; }
-.ip-name-ip { display: block; font-family: ui-monospace, 'Cascadia Code', 'Source Code Pro', monospace; font-size: 0.68rem; color: var(--ink2); margin-top: 4px; }
-.ip-name-input {
-  flex: 1;
-  min-width: 0;
-  padding: 8px 10px;
-  border: 1.5px solid var(--border);
-  border-radius: 8px;
-  font-family: inherit;
-  font-size: 0.85rem;
-  background: var(--surface);
-  color: var(--ink);
-}
-.ip-name-input:focus { outline: none; border-color: var(--accent); }
 .btn-small {
   background: var(--accent);
   color: white;

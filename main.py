@@ -38,7 +38,6 @@ from db import (
     Baby,
     BabyAccess,
     Entry,
-    IpName,
     Session,
     Setting,
     User,
@@ -536,13 +535,18 @@ async def get_entries(
     if (denied := await require_access(request, baby_id, ROLE_VIEWER)) is not None:
         return denied
     async with Session() as session:
-        stmt = entries_of(baby_id).order_by(Entry.ts_start.desc())
+        stmt = (
+            select(Entry, User.username)
+            .outerjoin(User, User.id == Entry.user_id)
+            .where(Entry.baby_id == baby_id)
+            .order_by(Entry.ts_start.desc())
+        )
         if date:
             stmt = stmt.where((DAY_START == date) | (DAY_END == date))
         else:
             stmt = stmt.limit(limit)
-        rows = (await session.scalars(stmt)).all()
-    return [row_to_dict(r) for r in rows]
+        rows = (await session.execute(stmt)).all()
+    return [{**row_to_dict(e), "username": username} for e, username in rows]
 
 
 @app.get("/api/entries/dates")
@@ -560,30 +564,6 @@ async def get_dates(request: Request, baby_id: int = DEFAULT_BABY_ID):
             )
         ).all()
     return list(rows)
-
-
-@app.get("/api/ip-names")
-async def get_ip_names():
-    async with Session() as session:
-        rows = (await session.scalars(select(IpName))).all()
-    return {r.ip: r.name for r in rows}
-
-
-@app.put("/api/ip-names/{ip}")
-async def set_ip_name(ip: str, request: Request):
-    body = await request.json()
-    name = (body.get("name") or "").strip()
-    async with Session.begin() as session:
-        row = await session.get(IpName, ip)
-        if not name:
-            if row is not None:
-                await session.delete(row)
-        elif row is None:
-            session.add(IpName(ip=ip, name=name))
-        else:
-            row.name = name
-    await broadcast_event("entries_changed")
-    return {"ok": True}
 
 
 @app.get("/api/settings")
@@ -733,24 +713,6 @@ async def revoke_baby_access(baby_id: int, user_id: int, request: Request):
             )
         )
     return {"ok": True}
-
-
-@app.get("/api/ips")
-async def get_known_ips(request: Request, baby_id: int = DEFAULT_BABY_ID):
-    """Distinct IPs seen in entries, with their assigned name (if any)."""
-    if (denied := await require_access(request, baby_id, ROLE_VIEWER)) is not None:
-        return denied
-    async with Session() as session:
-        ips = (
-            await session.scalars(
-                select(distinct(Entry.ip))
-                .where(Entry.ip.is_not(None), Entry.baby_id == baby_id)
-                .order_by(Entry.ip)
-            )
-        ).all()
-        name_rows = (await session.scalars(select(IpName))).all()
-    names = {r.ip: r.name for r in name_rows}
-    return [{"ip": ip, "name": names.get(ip, "")} for ip in ips]
 
 
 async def _open_entry(entry_type: str, baby_id: int):

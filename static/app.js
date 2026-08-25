@@ -40,7 +40,6 @@ const I18N = {
     no_data:'Keine Daten', not_enough_data:'Zu wenig Daten', no_sleep_data:'Noch keine Schlafdaten',
     no_growth_data:'Noch keine Gewichts-/Größendaten', growth_weight:'Gewicht', growth_height:'Größe',
     btn_add_measurement:'+ Eintrag',
-    settings_ip_names_title:'Geräte', settings_name_placeholder:'Name eingeben', settings_no_ips:'Noch keine Geräte bekannt',
     settings_quick_title:'Schnellzugriff (max. 5)', quick_max_toast:'Maximal 5 Schnellzugriffe',
     settings_baby_title:'Babys',
     lbl_baby_name:'Name', lbl_birthday:'Geburtstag', baby_name_placeholder:'Name des Babys',
@@ -111,7 +110,6 @@ const I18N = {
     no_data:'No data', not_enough_data:'Not enough data', no_sleep_data:'No sleep data yet',
     no_growth_data:'No weight/height data yet', growth_weight:'Weight', growth_height:'Height',
     btn_add_measurement:'+ Entry',
-    settings_ip_names_title:'Devices', settings_name_placeholder:'Enter name', settings_no_ips:'No devices seen yet',
     settings_quick_title:'Quick actions (max 5)', quick_max_toast:'Max 5 quick actions',
     settings_baby_title:'Babies',
     lbl_baby_name:'Name', lbl_birthday:'Birthday', baby_name_placeholder:"Baby's name",
@@ -235,14 +233,13 @@ function initUI() {
   document.getElementById('export-csv-btn').textContent = t('btn_download_csv');
 }
 
-const IP_COLORS = [
+const USER_COLORS = [
   '#c8602a','#3a7d6b','#5b4fa8','#b04040','#2e6fa8',
   '#8a6a1f','#4a7a2e','#8a2e6a','#2e6a8a','#6a3a2e',
 ];
 
-let ipColorMap = {};
+let userColorMap = {};
 let colorIndex = 0;
-let ipNameMap = {};
 let currentDate = todayStr();
 let openSleepEntry = null;
 let openWalkEntry = null;
@@ -315,10 +312,10 @@ function fmtAgo(iso) {
   if (diff < 1440) return t('ago_hour', Math.round(diff/60));
   return t('ago_day', Math.round(diff/1440));
 }
-function displayKey(ip) { return ipNameMap[ip] || ip; }
-function getIpColor(ip) {
-  if (!ipColorMap[ip]) { ipColorMap[ip] = IP_COLORS[colorIndex % IP_COLORS.length]; colorIndex++; }
-  return ipColorMap[ip];
+function displayKey(username) { return username || '?'; }
+function getUserColor(username) {
+  if (!userColorMap[username]) { userColorMap[username] = USER_COLORS[colorIndex % USER_COLORS.length]; colorIndex++; }
+  return userColorMap[username];
 }
 function esc(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
 
@@ -713,22 +710,20 @@ async function loadLog() {
   await checkOpenSleep();
   await checkOpenWalk();
   renderQuickActions();
-  const namesRes = await fetch('/api/ip-names');
-  ipNameMap = await namesRes.json();
   const allRes = await fetch(`/api/entries?limit=500&baby_id=${currentBabyId}`);
   const allEntries = await allRes.json();
-  ipColorMap = {}; colorIndex = 0;
-  allEntries.forEach(e => getIpColor(displayKey(e.ip)));
+  userColorMap = {}; colorIndex = 0;
+  allEntries.forEach(e => getUserColor(displayKey(e.username)));
 
   const res = await fetch(`/api/entries?date=${currentDate}&baby_id=${currentBabyId}`);
   const entries = await res.json();
   currentEntries = entries;
 
-  const todayKeys = [...new Set(entries.map(e => displayKey(e.ip)))];
+  const todayKeys = [...new Set(entries.map(e => displayKey(e.username)))];
   const legend = document.getElementById('ip-legend');
   legend.innerHTML = todayKeys.map(key => `
     <div class="ip-legend-item">
-      <div class="ip-dot" style="background:${getIpColor(key)}"></div>${esc(key)}
+      <div class="ip-dot" style="background:${getUserColor(key)}"></div>${esc(key)}
     </div>
   `).join('');
 
@@ -750,7 +745,7 @@ async function loadLog() {
   }
 
   list.innerHTML = entries.map(e => {
-    const color = getIpColor(displayKey(e.ip));
+    const color = getUserColor(displayKey(e.username));
     const tp = getType(e.type);
     const m = e.meta || {};
     let timeStr = fmtTime(e.ts_start);
@@ -797,7 +792,7 @@ async function loadLog() {
           ${metaStr ? `<div class="entry-meta">${esc(metaStr)}</div>` : ''}
           ${e.note ? `<div class="entry-note">${esc(e.note)}</div>` : ''}
         </div>
-        <span class="ip-badge" style="background:${color}" title="${esc(e.ip)}"></span>
+        <span class="ip-badge" style="background:${color}" title="${esc(e.username || '')}"></span>
         <button class="del-btn" onclick="event.stopPropagation(); deleteEntry(${e.id})" title="${t('confirm_delete')}"><svg viewBox="0 0 24 24" class="ic"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
       </div>
     `;
@@ -1236,12 +1231,10 @@ async function loadStats() {
 
 // ── Settings ──
 async function loadSettings() {
-  const [ipsRes, meRes, passkeysRes] = await Promise.all([
-    currentBabyId == null ? Promise.resolve(null) : fetch(`/api/ips?baby_id=${currentBabyId}`),
+  const [meRes, passkeysRes] = await Promise.all([
     fetch('/api/auth/me'),
     fetch('/api/auth/passkeys'),
   ]);
-  const ips = ipsRes ? await ipsRes.json() : [];
   const me = await meRes.json();
   const passkeys = await passkeysRes.json();
   const el = document.getElementById('settings-content');
@@ -1291,22 +1284,6 @@ async function loadSettings() {
       }).join('')}
     </div>
   `;
-
-  html += `<div class="section-title">${t('settings_ip_names_title')}</div>`;
-  html += !ips.length
-    ? `<div class="empty">${t('settings_no_ips')}</div>`
-    : ips.map(({ ip, name }) => `
-      <div class="ip-name-row">
-        <div class="ip-avatar" style="background:${getIpColor(name || ip)}">${esc(name ? name.charAt(0).toUpperCase() : '?')}</div>
-        <div class="ip-name-fields">
-          <div class="ip-name-inline">
-            <input type="text" class="ip-name-input" data-ip="${esc(ip)}" value="${esc(name)}" placeholder="${t('settings_name_placeholder')}">
-            <button class="btn-small" onclick="saveIpName(this)">${t('btn_save')}</button>
-          </div>
-          <span class="ip-name-ip">${esc(ip)}</span>
-        </div>
-      </div>
-    `).join('');
 
   html += `<div class="section-title">${t('settings_security_title')}</div>
     <div class="security-row">
@@ -1574,19 +1551,6 @@ async function revokeBabyAccess(babyId, userId) {
   } else {
     toast(data.error || t('toast_error'));
   }
-}
-
-async function saveIpName(btn) {
-  const input = btn.closest('.ip-name-row').querySelector('.ip-name-input');
-  const ip = input.dataset.ip;
-  const name = input.value.trim();
-  await fetch(`/api/ip-names/${encodeURIComponent(ip)}`, {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name }),
-  });
-  toast(t('toast_saved'));
-  loadLog();
 }
 
 // ── Modal ──
