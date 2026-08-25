@@ -41,7 +41,8 @@ const I18N = {
     no_growth_data:'Noch keine Gewichts-/Größendaten', growth_weight:'Gewicht', growth_height:'Größe',
     btn_add_measurement:'+ Eintrag',
     settings_quick_title:'Schnellzugriff (max. 5)', quick_max_toast:'Maximal 5 Schnellzugriffe',
-    settings_baby_title:'Babys',
+    settings_baby_title:'Babys', lbl_current_baby:'Aktuell ausgewählt',
+    settings_tab_baby:'Baby', settings_tab_quicklog:'Quick-Log', settings_tab_account:'Account',
     lbl_baby_name:'Name', lbl_birthday:'Geburtstag', baby_name_placeholder:'Name des Babys',
     baby_fallback:'Baby', btn_add_baby:'Baby hinzufügen', btn_delete:'Löschen',
     confirm_delete_baby:'Dieses Baby und alle seine Einträge unwiderruflich löschen?',
@@ -57,8 +58,11 @@ const I18N = {
     btn_add_passkey:'Passkey hinzufügen',
     prompt_password_to_disable:'Passwort zum Deaktivieren eingeben',
     prompt_passkey_name:'Name für diesen Passkey',
-    lbl_your_role:'Deine Rolle', role_owner:'Besitzer', role_editor:'Bearbeiter', role_viewer:'Betrachter',
+    role_owner:'Besitzer', role_editor:'Bearbeiter', role_viewer:'Betrachter',
     btn_manage_access:'Zugriff verwalten', btn_remove:'Entfernen', btn_invite:'Einladen',
+    lbl_shared_with:'Geteilt mit', lbl_profile:'Profil', lbl_selected:'gewählt',
+    quick_hint:'Wähle bis zu 5 Aktionen, die du direkt neben dem Plus-Button antippen kannst.',
+    quick_footnote:'Alle anderen Aktionen bleiben über das große Plus erreichbar.',
     lbl_invite_email:'E-Mail', lbl_role:'Rolle',
     bd_welcome:'Willkommen', bd_happy:'🎉 Alles Gute',
     bd_born_today: name=>`${name} ist heute geboren`,
@@ -111,7 +115,8 @@ const I18N = {
     no_growth_data:'No weight/height data yet', growth_weight:'Weight', growth_height:'Height',
     btn_add_measurement:'+ Entry',
     settings_quick_title:'Quick actions (max 5)', quick_max_toast:'Max 5 quick actions',
-    settings_baby_title:'Babies',
+    settings_baby_title:'Babies', lbl_current_baby:'Currently selected',
+    settings_tab_baby:'Baby', settings_tab_quicklog:'Quick-Log', settings_tab_account:'Account',
     lbl_baby_name:'Name', lbl_birthday:'Birthday', baby_name_placeholder:"Baby's name",
     baby_fallback:'Baby', btn_add_baby:'Add baby', btn_delete:'Delete',
     confirm_delete_baby:'Permanently delete this baby and all its entries?',
@@ -127,8 +132,11 @@ const I18N = {
     btn_add_passkey:'Add passkey',
     prompt_password_to_disable:'Enter your password to disable',
     prompt_passkey_name:'Name for this passkey',
-    lbl_your_role:'Your role', role_owner:'Owner', role_editor:'Editor', role_viewer:'Viewer',
+    role_owner:'Owner', role_editor:'Editor', role_viewer:'Viewer',
     btn_manage_access:'Manage access', btn_remove:'Remove', btn_invite:'Invite',
+    lbl_shared_with:'Shared with', lbl_profile:'Profile', lbl_selected:'selected',
+    quick_hint:'Choose up to 5 actions you can tap right next to the plus button.',
+    quick_footnote:'Every other action is still one tap away through the big plus.',
     lbl_invite_email:'Email', lbl_role:'Role',
     bd_welcome:'Welcome', bd_happy:'🎉 Happy birthday',
     bd_born_today: name=>`${name} was born today`,
@@ -179,6 +187,10 @@ const ICONS = {
   home: '<path d="M4 11 12 4l8 7"/><path d="M6 10v9.5a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1V10"/><path d="M10 20.5V15h4v5.5"/>',
   mood: '<circle cx="12" cy="12" r="8.3"/><circle cx="9.2" cy="10.3" r=".9"/><circle cx="14.8" cy="10.3" r=".9"/><path d="M8.3 14.5c1 1.6 2.3 2.5 3.7 2.5s2.7-.9 3.7-2.5"/>',
   cake: '<path d="M4 20.5h16"/><path d="M4.5 20.5v-5.2c0-1 .8-1.8 1.8-1.8h11.4c1 0 1.8.8 1.8 1.8v5.2"/><path d="M4.5 16.6c1.2 0 1.2 1.2 2.5 1.2s1.2-1.2 2.5-1.2 1.2 1.2 2.5 1.2 1.2-1.2 2.5-1.2 1.2 1.2 2.5 1.2 1.3-1.2 2.5-1.2"/><path d="M12 13.5v-3"/><path d="M12 9.6c-.7-.5-.7-1.5 0-2.3.7.8.7 1.8 0 2.3Z"/>',
+  check: '<path d="M5 13l4 4L19 7"/>',
+  person: '<circle cx="12" cy="8.5" r="3.5"/><path d="M5 20c0-4 3-6.5 7-6.5s7 2.5 7 6.5"/>',
+  shield: '<path d="M12 3l7 3v6c0 4.8-3 8.5-7 9.5C8 20.5 5 16.8 5 12V6l7-3Z"/>',
+  key: '<circle cx="8" cy="15" r="3.2"/><path d="M10.3 12.7 18 5M15 8l2 2M17.5 5.5l2 2"/>',
 };
 function icon(name) { return `<svg viewBox="0 0 24 24" class="ic">${ICONS[name] || ''}</svg>`; }
 function typeIcon(name) { return name === 'sleep' ? icon('zzz') : icon(name); }
@@ -367,6 +379,11 @@ function switchTab(name, btn) {
 let babies = [];
 let currentBabyId = null;
 let baby = { name: '', birthday: '' };
+
+// ── Settings tabs ──
+let settingsTab = localStorage.getItem('settingsTab') || 'baby';
+let settingsMe = {};
+let settingsPasskeys = [];
 
 function currentBaby() {
   return babies.find(b => b.id === currentBabyId) || { name: '', birthday: '' };
@@ -1235,78 +1252,148 @@ async function loadSettings() {
     fetch('/api/auth/me'),
     fetch('/api/auth/passkeys'),
   ]);
-  const me = await meRes.json();
-  const passkeys = await passkeysRes.json();
-  const el = document.getElementById('settings-content');
+  settingsMe = await meRes.json();
+  settingsPasskeys = await passkeysRes.json();
+  renderSettingsTabs();
+  renderSettingsTab();
+}
 
-  let html = `<div class="section-title">${t('settings_baby_title')}</div>`;
-  html += babies.map(b => {
+function switchSettingsTab(tabName) {
+  settingsTab = tabName;
+  localStorage.setItem('settingsTab', tabName);
+  renderSettingsTabs();
+  renderSettingsTab();
+}
+
+function renderSettingsTabs() {
+  const el = document.getElementById('settings-tabs');
+  if (!el) return;
+  const tabs = [
+    ['baby', t('settings_tab_baby')],
+    ['quicklog', t('settings_tab_quicklog')],
+    ['account', t('settings_tab_account')],
+  ];
+  el.innerHTML = tabs.map(([key, label]) =>
+    `<button class="settings-tab${settingsTab === key ? ' active' : ''}" onclick="switchSettingsTab('${key}')">${esc(label)}</button>`
+  ).join('');
+}
+
+function renderSettingsTab() {
+  if (settingsTab === 'quicklog') renderQuickLogTab();
+  else if (settingsTab === 'account') renderAccountTab();
+  else renderBabyTab();
+}
+
+function renderBabyTab() {
+  const el = document.getElementById('settings-tab-content');
+  let html = babies.map(b => {
     const canEdit = b.role === 'owner' || b.role === 'editor';
     const isOwner = b.role === 'owner';
+    const isCurrent = b.id === currentBabyId;
     return `
-    <div class="baby-row" data-id="${b.id}">
-      <div class="field"><label>${t('lbl_baby_name')}</label>
-        <input type="text" class="baby-name-input" value="${esc(b.name)}" placeholder="${t('baby_name_placeholder')}" ${canEdit ? '' : 'disabled'}>
+    <div class="settings-card${isCurrent ? ' current' : ''}" data-id="${b.id}">
+      ${isCurrent ? `<div class="pill-current">${t('lbl_current_baby')}</div>` : ''}
+      <div style="display:flex;gap:12px;margin-bottom:14px;${isCurrent ? 'margin-top:4px;' : ''}">
+        <div class="avatar-circle">${icon('person')}</div>
+        <div style="flex:1;display:flex;flex-direction:column;gap:8px;">
+          <div class="field" style="margin-bottom:0;"><label>${t('lbl_baby_name')}</label>
+            <input type="text" class="baby-name-input" value="${esc(b.name)}" placeholder="${t('baby_name_placeholder')}" ${canEdit ? '' : 'disabled'}>
+          </div>
+          <div class="field" style="margin-bottom:0;"><label>${t('lbl_birthday')}</label>
+            <input type="date" class="baby-birthday-input" value="${esc(b.birthday)}" ${canEdit ? '' : 'disabled'}>
+          </div>
+        </div>
       </div>
-      <div class="field"><label>${t('lbl_birthday')}</label>
-        <input type="date" class="baby-birthday-input" value="${esc(b.birthday)}" ${canEdit ? '' : 'disabled'}>
-      </div>
-      <div class="s-sub" style="margin-bottom:8px;">${t('lbl_your_role')}: ${t('role_' + b.role)}</div>
-      <div class="baby-actions">
-        ${isOwner ? `<button class="btn-small secondary" onclick="toggleBabyAccess(${b.id})">${t('btn_manage_access')}</button>` : ''}
-        ${isOwner ? `<button class="btn-small secondary" onclick="deleteBabyRow(${b.id})">${t('btn_delete')}</button>` : ''}
-        ${canEdit ? `<button class="btn-small" onclick="saveBabyRow(${b.id})">${t('btn_save')}</button>` : ''}
+      <div style="display:flex;align-items:center;justify-content:space-between;">
+        <span class="badge-role ${b.role}">${t('role_' + b.role)}</span>
+        <div class="baby-actions" style="margin-bottom:0;">
+          ${isOwner ? `<button class="btn-small secondary" onclick="toggleBabyAccess(${b.id})">${t('btn_manage_access')}</button>` : ''}
+          ${isOwner ? `<button class="btn-small secondary" onclick="deleteBabyRow(${b.id})">${t('btn_delete')}</button>` : ''}
+          ${canEdit ? `<button class="btn-small" onclick="saveBabyRow(${b.id})">${t('btn_save')}</button>` : ''}
+        </div>
       </div>
       <div class="access-wrap" id="access-wrap-${b.id}" style="display:none;"></div>
     </div>
   `;
   }).join('');
   html += `
-    <div class="baby-row">
+    <div class="settings-card add-card">
       <div class="field"><label>${t('lbl_baby_name')}</label>
         <input type="text" id="new-baby-name-input" placeholder="${t('baby_name_placeholder')}">
       </div>
-      <div class="field"><label>${t('lbl_birthday')}</label>
+      <div class="field" style="margin-bottom:0;"><label>${t('lbl_birthday')}</label>
         <input type="date" id="new-baby-birthday-input">
       </div>
-      <div class="baby-actions">
+      <div class="baby-actions" style="margin-bottom:0;margin-top:12px;">
         <button class="btn-small" onclick="addBabyRow()">${t('btn_add_baby')}</button>
       </div>
     </div>
   `;
+  el.innerHTML = html;
+}
 
-  html += `<div class="section-title">${t('settings_quick_title')}</div>
-    <div class="type-grid">
-      ${QUICK_TYPE_KEYS.map(key => {
-        const tp = getType(key);
-        const selected = getQuickActions().includes(key);
-        return `<div class="type-tile${selected ? ' selected' : ''}" onclick="toggleQuickAction('${key}')"><div class="t-icon">${icon(tp.icon)}</div><div class="t-label">${tp.label}</div></div>`;
-      }).join('')}
+function renderQuickLogTab() {
+  const el = document.getElementById('settings-tab-content');
+  const selected = getQuickActions();
+  el.innerHTML = `
+    <div class="settings-card">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:6px;">
+        <div class="settings-card-title">${t('settings_quick_title')}</div>
+        <div class="count-pill">${selected.length} / 5 ${t('lbl_selected')}</div>
+      </div>
+      <div style="font-size:0.8rem;font-style:italic;color:var(--ink2);margin-bottom:18px;line-height:1.4;">${t('quick_hint')}</div>
+      <div class="type-grid" style="margin-bottom:0;">
+        ${QUICK_TYPE_KEYS.map(key => {
+          const tp = getType(key);
+          const sel = selected.includes(key);
+          return `<div class="type-tile${sel ? ' selected' : ''}" onclick="toggleQuickAction('${key}')">
+            ${sel ? `<div class="tile-check"><svg viewBox="0 0 24 24">${ICONS.check}</svg></div>` : ''}
+            <div class="t-icon">${icon(tp.icon)}</div><div class="t-label">${tp.label}</div>
+          </div>`;
+        }).join('')}
+      </div>
+      <div style="margin-top:18px;padding-top:14px;border-top:1px dashed var(--border);font-size:0.74rem;color:var(--ink2);line-height:1.4;">${t('quick_footnote')}</div>
     </div>
   `;
+}
 
-  html += `<div class="section-title">${t('settings_security_title')}</div>
-    <div class="field"><label>${t('lbl_display_name')}</label>
-      <input type="text" id="display-name-input" value="${esc(me.name || '')}" placeholder="${t('lbl_display_name')}">
+function renderAccountTab() {
+  const el = document.getElementById('settings-tab-content');
+  const me = settingsMe, passkeys = settingsPasskeys;
+  let html = `
+    <div class="settings-card">
+      <div class="settings-card-title">${t('lbl_profile')}</div>
+      <div style="display:flex;gap:12px;align-items:flex-end;margin-bottom:14px;">
+        <div class="avatar-circle">${esc((me.name || '?').charAt(0).toUpperCase())}</div>
+        <div class="field" style="flex:1;margin-bottom:0;"><label>${t('lbl_display_name')}</label>
+          <input type="text" id="display-name-input" value="${esc(me.name || '')}" placeholder="${t('lbl_display_name')}">
+        </div>
+      </div>
+      <div class="baby-actions" style="margin-bottom:0;">
+        <button class="btn-small" onclick="saveDisplayName()">${t('btn_save')}</button>
+      </div>
+      <div class="security-row" style="border-top:1px dashed var(--border);padding-top:14px;margin-top:2px;">
+        <div><div class="s-name">${esc(me.email || '')}</div><div class="s-sub">${t('member_since')} ${esc((me.created_at || '').slice(0, 10))} · ${t('last_login')} ${esc((me.last_login_at || '').slice(0, 16).replace('T', ' ')) || '—'}</div></div>
+        <button class="btn-small secondary" onclick="doLogout()">${t('btn_logout')}</button>
+      </div>
     </div>
-    <div class="baby-actions" style="margin-bottom:14px;">
-      <button class="btn-small" onclick="saveDisplayName()">${t('btn_save')}</button>
+
+    <div class="settings-card">
+      <div class="settings-card-title">${icon('shield')}${t('settings_totp_title')}</div>
+      <div class="security-row">
+        <div><div class="s-name">${me.totp_enabled ? t('totp_enabled_sub') : t('totp_disabled_sub')}</div></div>
+        ${me.totp_enabled
+          ? `<button class="btn-small secondary" onclick="disableTotp()">${t('btn_disable')}</button>`
+          : `<button class="btn-small" onclick="startTotpSetup()">${t('btn_enable')}</button>`}
+      </div>
+      <div id="totp-setup-wrap"></div>
     </div>
-    <div class="security-row">
-      <div><div class="s-name">${esc(me.email || '')}</div><div class="s-sub">${t('member_since')} ${esc((me.created_at || '').slice(0, 10))} · ${t('last_login')} ${esc((me.last_login_at || '').slice(0, 16).replace('T', ' ')) || '—'}</div></div>
-      <button class="btn-small secondary" onclick="doLogout()">${t('btn_logout')}</button>
-    </div>
-    <div class="security-row">
-      <div><div class="s-name">${t('settings_totp_title')}</div><div class="s-sub">${me.totp_enabled ? t('totp_enabled_sub') : t('totp_disabled_sub')}</div></div>
-      ${me.totp_enabled
-        ? `<button class="btn-small secondary" onclick="disableTotp()">${t('btn_disable')}</button>`
-        : `<button class="btn-small" onclick="startTotpSetup()">${t('btn_enable')}</button>`}
-    </div>
-    <div id="totp-setup-wrap"></div>
-    <div class="section-title" style="border:none;margin-bottom:0;">${t('settings_passkeys_title')}</div>
+
+    <div class="settings-card">
+      <div class="settings-card-title">${icon('key')}${t('settings_passkeys_title')}</div>
   `;
   html += !passkeys.length
-    ? `<div class="empty">${t('no_passkeys')}</div>`
+    ? `<div class="empty" style="padding:16px 0;">${t('no_passkeys')}</div>`
     : passkeys.map(p => `
       <div class="security-row">
         <div><div class="s-name">${esc(p.name)}</div><div class="s-sub">${esc((p.created_at || '').slice(0, 10))}</div></div>
@@ -1314,11 +1401,14 @@ async function loadSettings() {
       </div>
     `).join('');
   html += `
-    <div class="baby-actions" style="margin-top:14px;">
-      <button class="btn-small" id="add-passkey-btn" onclick="addPasskey()" style="display:none;">${t('btn_add_passkey')}</button>
+      <div style="margin-top:12px;">
+        <button class="ghost-add" id="add-passkey-btn" onclick="addPasskey()" style="display:none;">
+          <svg viewBox="0 0 24 24" class="ic" style="width:14px;height:14px;"><path d="M12 5v14M5 12h14"/></svg>
+          ${t('btn_add_passkey')}
+        </button>
+      </div>
     </div>
   `;
-
   el.innerHTML = html;
   if (window.PublicKeyCredential) document.getElementById('add-passkey-btn').style.display = '';
 }
@@ -1523,10 +1613,17 @@ async function loadBabyAccess(babyId) {
   const res = await fetch(`/api/babies/${babyId}/access`);
   const members = res.ok ? await res.json() : [];
   wrap.innerHTML = `
+    <div class="label" style="margin:16px 0 10px;padding-top:14px;border-top:1px solid var(--border);">${t('lbl_shared_with')}</div>
     ${members.map(m => `
       <div class="security-row">
-        <div><div class="s-name">${esc(m.email)}</div><div class="s-sub">${t('role_' + m.role)}</div></div>
-        <button class="btn-small secondary" onclick="revokeBabyAccess(${babyId},${m.user_id})">${t('btn_remove')}</button>
+        <div style="display:flex;align-items:center;gap:9px;">
+          <div class="avatar-circle sm">${esc(m.email.charAt(0).toUpperCase())}</div>
+          <div><div class="s-name">${esc(m.email)}</div></div>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <span class="badge-role ${m.role}">${t('role_' + m.role)}</span>
+          <svg viewBox="0 0 24 24" class="ic" style="width:16px;height:16px;color:var(--ink2);cursor:pointer;" onclick="revokeBabyAccess(${babyId},${m.user_id})"><path d="M6 6l12 12M18 6L6 18"/></svg>
+        </div>
       </div>
     `).join('')}
     <div class="field"><label>${t('lbl_invite_email')}</label>

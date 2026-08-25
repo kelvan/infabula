@@ -447,6 +447,7 @@ body:not(.log-active) .fab, body:not(.log-active) .quick-actions { display: none
   margin-bottom: 20px;
 }
 .type-tile {
+  position: relative;
   background: var(--surface);
   border: 1.5px solid var(--border);
   border-radius: 10px;
@@ -628,3 +629,68 @@ body:not(.log-active) .fab, body:not(.log-active) .quick-actions { display: none
 .totp-qr { display: flex; justify-content: center; margin: 14px 0; }
 .totp-qr svg { width: 160px; height: 160px; background: #fff; padding: 8px; border-radius: 8px; }
 .totp-secret { text-align: center; font-family: ui-monospace, 'Cascadia Code', 'Source Code Pro', monospace; font-size: 0.78rem; color: var(--ink2); word-break: break-all; margin-bottom: 14px; }
+
+/* ── Settings: tabbed layout ── */
+.settings-tabs { display: flex; gap: 8px; margin-bottom: 18px; }
+.settings-tab {
+  flex: 1;
+  text-align: center;
+  padding: 8px 0;
+  border-radius: 20px;
+  border: 1.5px solid var(--border);
+  background: var(--surface);
+  color: var(--ink2);
+  font-family: ui-monospace, 'Cascadia Code', 'Source Code Pro', monospace;
+  font-size: 0.7rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.settings-tab.active { border-color: var(--accent); background: var(--accent-soft); color: var(--accent-ink); font-weight: 600; }
+.settings-card { background: var(--surface); border: 1.5px solid var(--border); border-radius: var(--radius); padding: 16px; box-shadow: var(--shadow); margin-bottom: 16px; position: relative; }
+.settings-card.current { border-color: var(--accent2); }
+.settings-card.add-card { border-style: dashed; border-color: var(--accent2); background: transparent; box-shadow: none; }
+.settings-card-title { font-family: var(--serif); font-size: 1.02rem; font-weight: 500; margin-bottom: 12px; display: flex; align-items: center; gap: 8px; }
+.pill-current {
+  position: absolute; top: -9px; left: 16px;
+  background: var(--accent); color: #fff;
+  font-family: ui-monospace, 'Cascadia Code', 'Source Code Pro', monospace;
+  font-size: 0.6rem; letter-spacing: 0.06em; text-transform: uppercase;
+  padding: 3px 10px; border-radius: 20px;
+}
+.count-pill {
+  background: var(--accent-soft); color: var(--accent-ink);
+  font-family: ui-monospace, 'Cascadia Code', 'Source Code Pro', monospace;
+  font-size: 0.66rem; letter-spacing: 0.04em; padding: 4px 10px; border-radius: 20px; flex-shrink: 0;
+}
+.ghost-add {
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  width: 100%; padding: 14px; border: 1.5px dashed var(--accent2); border-radius: 12px;
+  background: transparent; color: var(--accent-ink);
+  font-family: ui-monospace, 'Cascadia Code', 'Source Code Pro', monospace;
+  font-size: 0.74rem; letter-spacing: 0.05em; text-transform: uppercase; cursor: pointer;
+}
+.avatar-circle {
+  width: 38px; height: 38px; border-radius: 50%;
+  background: var(--accent-soft); color: var(--accent-ink);
+  display: flex; align-items: center; justify-content: center;
+  font-family: var(--serif); font-size: 1rem; flex-shrink: 0;
+}
+.avatar-circle.sm { width: 30px; height: 30px; font-size: 0.82rem; }
+.avatar-circle .ic { width: 19px; height: 19px; stroke: var(--accent-ink); fill: none; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.settings-card-title .ic { width: 18px; height: 18px; stroke: var(--accent-ink); fill: none; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.badge-role {
+  display: inline-flex; align-items: center; padding: 3px 9px; border-radius: 20px;
+  font-family: ui-monospace, 'Cascadia Code', 'Source Code Pro', monospace;
+  font-size: 0.62rem; letter-spacing: 0.04em; text-transform: uppercase; flex-shrink: 0;
+}
+.badge-role.owner { background: var(--accent-soft); color: var(--accent-ink); }
+.badge-role.editor { background: var(--sleep-soft); color: var(--sleep); }
+.badge-role.viewer { background: var(--mood-soft); color: var(--mood); }
+.tile-check {
+  position: absolute; top: -7px; right: -7px; width: 20px; height: 20px; border-radius: 50%;
+  background: var(--accent); display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 2px 6px rgba(51,39,27,0.25);
+}
+.tile-check svg { width: 11px; height: 11px; stroke: #fff; stroke-width: 2.4; fill: none; stroke-linecap: round; stroke-linejoin: round; }
