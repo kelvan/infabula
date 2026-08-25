@@ -13,14 +13,6 @@ function bufToB64url(buf) {
   for (const b of bytes) bin += String.fromCharCode(b);
   return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
-function creationOptionsFromJSON(o) {
-  return {
-    ...o,
-    challenge: b64urlToBuf(o.challenge),
-    user: { ...o.user, id: b64urlToBuf(o.user.id) },
-    excludeCredentials: (o.excludeCredentials || []).map(c => ({ ...c, id: b64urlToBuf(c.id) })),
-  };
-}
 function requestOptionsFromJSON(o) {
   return {
     ...o,
@@ -79,9 +71,9 @@ let pendingTotpToken = null;
 
 document.getElementById('login-form').onsubmit = async e => {
   e.preventDefault();
-  const username = document.getElementById('li-username').value.trim();
+  const email = document.getElementById('li-email').value.trim();
   const password = document.getElementById('li-password').value;
-  const { ok, data } = await postJSON('/api/auth/login', { username, password });
+  const { ok, data } = await postJSON('/api/auth/login', { email, password });
   if (!ok) { showError(data.error || 'Login failed'); return; }
   if (data.totp_required) {
     pendingTotpToken = data.pending_token;
@@ -93,11 +85,13 @@ document.getElementById('login-form').onsubmit = async e => {
 
 document.getElementById('register-form').onsubmit = async e => {
   e.preventDefault();
-  const username = document.getElementById('re-username').value.trim();
+  const email = document.getElementById('re-email').value.trim();
   const password = document.getElementById('re-password').value;
-  const { ok, data } = await postJSON('/api/auth/register', { username, password });
+  const password2 = document.getElementById('re-password2').value;
+  if (password !== password2) { showError('Passwords do not match'); return; }
+  const { ok, data } = await postJSON('/api/auth/register', { email, password });
   if (!ok) { showError(data.error || 'Could not create account'); return; }
-  location.href = '/';
+  showStep('onboarding-baby-step');
 };
 
 document.getElementById('totp-form').onsubmit = async e => {
@@ -108,14 +102,25 @@ document.getElementById('totp-form').onsubmit = async e => {
   location.href = '/';
 };
 
+// ── First-baby onboarding, right after registration ──
+document.getElementById('ob-create-btn').onclick = async () => {
+  const name = document.getElementById('ob-baby-name').value.trim();
+  const birthday = document.getElementById('ob-baby-birthday').value;
+  if (name) {
+    await postJSON('/api/babies', { name, birthday });
+  }
+  location.href = '/';
+};
+document.getElementById('ob-skip-btn').onclick = () => { location.href = '/'; };
+
 // ── Passkey login ──
 if (window.PublicKeyCredential) {
   document.getElementById('passkey-login-btn').style.display = '';
 }
 document.getElementById('passkey-login-btn').onclick = async () => {
-  const username = document.getElementById('li-username').value.trim();
+  const email = document.getElementById('li-email').value.trim();
   try {
-    const { ok, data } = await postJSON('/api/auth/passkey/login/options', username ? { username } : {});
+    const { ok, data } = await postJSON('/api/auth/passkey/login/options', email ? { email } : {});
     if (!ok) { showError(data.error || 'Passkey sign-in unavailable'); return; }
     const publicKey = requestOptionsFromJSON(data.options);
     const assertion = await navigator.credentials.get({ publicKey });

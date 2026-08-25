@@ -100,6 +100,7 @@ class User(Base):
     created_at: Mapped[str | None] = mapped_column(
         String(32), default=lambda: datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     )
+    last_login_at: Mapped[str | None] = mapped_column(String(32))
 
 
 class WebauthnCredential(Base):

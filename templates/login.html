@@ -17,7 +17,7 @@
     <div id="login-error" class="login-error"></div>
 
     <form id="login-form" class="login-step">
-      <div class="field"><label>Username</label><input type="text" id="li-username" autocomplete="username" required></div>
+      <div class="field"><label>Email</label><input type="email" id="li-email" autocomplete="username" required></div>
       <div class="field"><label>Password</label><input type="password" id="li-password" autocomplete="current-password" required></div>
       <button class="btn" type="submit">Log in</button>
       <button class="btn secondary-btn" type="button" id="passkey-login-btn" style="display:none;">Sign in with a passkey</button>
@@ -25,9 +25,10 @@
     </form>
 
     <form id="register-form" class="login-step" style="display:none;">
-      <div class="field"><label>Username</label><input type="text" id="re-username" autocomplete="username" required></div>
+      <div class="field"><label>Email</label><input type="email" id="re-email" autocomplete="username" required></div>
       <div class="field"><label>Password</label><input type="password" id="re-password" autocomplete="new-password" minlength="8" required></div>
       <div class="field-hint">At least 8 characters.</div>
+      <div class="field"><label>Repeat password</label><input type="password" id="re-password2" autocomplete="new-password" minlength="8" required></div>
       <button class="btn" type="submit">Create account</button>
       <div class="login-switch">Have an account? <a href="#" id="show-login">Log in</a></div>
     </form>
@@ -37,6 +38,14 @@
       <div class="field"><input type="text" id="totp-code" inputmode="numeric" autocomplete="one-time-code" maxlength="6" required></div>
       <button class="btn" type="submit">Verify</button>
     </form>
+
+    <div id="onboarding-baby-step" class="login-step" style="display:none;">
+      <div class="field-hint">Add your baby now, or skip and do it later in Settings.</div>
+      <div class="field"><label>Baby's name</label><input type="text" id="ob-baby-name"></div>
+      <div class="field"><label>Birthday</label><input type="date" id="ob-baby-birthday"></div>
+      <button class="btn" type="button" id="ob-create-btn">Create</button>
+      <button class="btn secondary-btn" type="button" id="ob-skip-btn">Skip for now</button>
+    </div>
   </div>
 </div>
 

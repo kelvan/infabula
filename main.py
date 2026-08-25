@@ -208,28 +208,34 @@ async def login_page(request: Request):
 def user_to_dict(user: User) -> dict:
     return {
         "id": user.id,
-        "username": user.username,
+        "email": user.username,
         "name": user.name,
         "totp_enabled": user.totp_enabled,
+        "created_at": user.created_at,
+        "last_login_at": user.last_login_at,
     }
 
 
 @app.post("/api/auth/register")
 async def register(request: Request, response: Response):
     body = await request.json()
-    username = (body.get("username") or "").strip()
+    email = (body.get("email") or "").strip().lower()
     password = body.get("password") or ""
-    if not username or len(password) < 8:
+    if not auth.is_valid_email(email) or len(password) < 8:
         return JSONResponse(
-            {"error": "username and an 8+ character password are required"},
+            {"error": "a valid email and an 8+ character password are required"},
             status_code=400,
         )
     async with Session.begin() as session:
-        existing = await session.scalar(select(User).where(User.username == username))
+        existing = await session.scalar(select(User).where(User.username == email))
         if existing is not None:
-            return JSONResponse({"error": "username taken"}, status_code=409)
+            return JSONResponse({"error": "email already registered"}, status_code=409)
         user = User(
-            name=username, username=username, password_hash=auth.hash_password(password)
+            name=email,
+            username=email,
+            email=email,
+            password_hash=auth.hash_password(password),
+            last_login_at=auth.now_str(),
         )
         session.add(user)
         await session.flush()
@@ -242,16 +248,17 @@ async def register(request: Request, response: Response):
 @app.post("/api/auth/login")
 async def login(request: Request, response: Response):
     body = await request.json()
-    username = (body.get("username") or "").strip()
+    email = (body.get("email") or "").strip().lower()
     password = body.get("password") or ""
     async with Session() as session:
-        user = await session.scalar(select(User).where(User.username == username))
+        user = await session.scalar(select(User).where(User.username == email))
     password_ok = auth.verify_password(password, user.password_hash if user else None)
     if user is None or not password_ok:
         return JSONResponse({"error": "invalid credentials"}, status_code=401)
     if user.totp_enabled:
         pending_token = auth.store_pending("totp_login", {"user_id": user.id})
         return {"totp_required": True, "pending_token": pending_token}
+    await auth.touch_last_login(user.id)
     token = await auth.create_session(user.id)
     auth.set_session_cookie(response, token)
     return {"ok": True}
@@ -269,6 +276,7 @@ async def totp_verify_login(request: Request, response: Response):
     if user is None or not auth.verify_totp(user.totp_secret, body.get("code") or ""):
         return JSONResponse({"error": "invalid code"}, status_code=401)
     auth.pop_pending(pending_token, "totp_login")
+    await auth.touch_last_login(user.id)
     token = await auth.create_session(user.id)
     auth.set_session_cookie(response, token)
     return {"ok": True}
@@ -412,11 +420,11 @@ async def passkey_register_verify(request: Request):
 @app.post("/api/auth/passkey/login/options")
 async def passkey_login_options(request: Request):
     body = await request.json() if await request.body() else {}
-    username = (body.get("username") or "").strip()
+    email = (body.get("email") or "").strip().lower()
     allow_credentials = None
-    if username:
+    if email:
         async with Session() as session:
-            user = await session.scalar(select(User).where(User.username == username))
+            user = await session.scalar(select(User).where(User.username == email))
             creds = (
                 (
                     await session.scalars(
@@ -474,6 +482,7 @@ async def passkey_login_verify(request: Request, response: Response):
     async with Session.begin() as session:
         row = await session.get(WebauthnCredential, stored.id)
         row.sign_count = verification.new_sign_count
+    await auth.touch_last_login(stored.user_id)
     token = await auth.create_session(stored.user_id)
     auth.set_session_cookie(response, token)
     return {"ok": True}
@@ -678,7 +687,7 @@ async def list_baby_access(baby_id: int, request: Request):
                 .order_by(User.username)
             )
         ).all()
-    return [{"user_id": r[0], "role": r[1], "username": r[2]} for r in rows]
+    return [{"user_id": r[0], "role": r[1], "email": r[2]} for r in rows]
 
 
 @app.post("/api/babies/{baby_id}/access")
@@ -686,12 +695,12 @@ async def grant_baby_access(baby_id: int, request: Request):
     if (denied := await require_access(request, baby_id, ROLE_OWNER)) is not None:
         return denied
     body = await request.json()
-    username = (body.get("username") or "").strip()
+    email = (body.get("email") or "").strip().lower()
     role = body.get("role") or ROLE_VIEWER
     if role not in ROLE_RANK:
         return JSONResponse({"error": "invalid role"}, status_code=400)
     async with Session.begin() as session:
-        user = await session.scalar(select(User).where(User.username == username))
+        user = await session.scalar(select(User).where(User.username == email))
         if user is None:
             return JSONResponse({"error": "no such user"}, status_code=404)
         existing = await session.get(BabyAccess, (user.id, baby_id))

@@ -47,7 +47,8 @@ const I18N = {
     baby_fallback:'Baby', btn_add_baby:'Baby hinzufügen', btn_delete:'Löschen',
     confirm_delete_baby:'Dieses Baby und alle seine Einträge unwiderruflich löschen?',
     toast_no_name:'Bitte Namen angeben',
-    settings_security_title:'Sicherheit', lbl_username:'Benutzername', btn_logout:'Abmelden',
+    settings_security_title:'Sicherheit', btn_logout:'Abmelden',
+    member_since:'Dabei seit', last_login:'Letzte Anmeldung',
     settings_totp_title:'Zwei-Faktor-Authentifizierung (TOTP)',
     totp_enabled_sub:'Aktiviert', totp_disabled_sub:'Nicht aktiviert',
     btn_disable:'Deaktivieren', btn_enable:'Aktivieren', btn_confirm:'Bestätigen',
@@ -58,7 +59,7 @@ const I18N = {
     prompt_passkey_name:'Name für diesen Passkey',
     lbl_your_role:'Deine Rolle', role_owner:'Besitzer', role_editor:'Bearbeiter', role_viewer:'Betrachter',
     btn_manage_access:'Zugriff verwalten', btn_remove:'Entfernen', btn_invite:'Einladen',
-    lbl_invite_username:'Benutzername', lbl_role:'Rolle',
+    lbl_invite_email:'E-Mail', lbl_role:'Rolle',
     bd_welcome:'Willkommen', bd_happy:'🎉 Alles Gute',
     bd_born_today: name=>`${name} ist heute geboren`,
     bd_month_label: n=>`${n}-Monats-Tag`,
@@ -116,7 +117,8 @@ const I18N = {
     baby_fallback:'Baby', btn_add_baby:'Add baby', btn_delete:'Delete',
     confirm_delete_baby:'Permanently delete this baby and all its entries?',
     toast_no_name:'Please enter a name',
-    settings_security_title:'Security', lbl_username:'Username', btn_logout:'Log out',
+    settings_security_title:'Security', btn_logout:'Log out',
+    member_since:'Member since', last_login:'Last login',
     settings_totp_title:'Two-factor authentication (TOTP)',
     totp_enabled_sub:'Enabled', totp_disabled_sub:'Not enabled',
     btn_disable:'Disable', btn_enable:'Enable', btn_confirm:'Confirm',
@@ -127,7 +129,7 @@ const I18N = {
     prompt_passkey_name:'Name for this passkey',
     lbl_your_role:'Your role', role_owner:'Owner', role_editor:'Editor', role_viewer:'Viewer',
     btn_manage_access:'Manage access', btn_remove:'Remove', btn_invite:'Invite',
-    lbl_invite_username:'Username', lbl_role:'Role',
+    lbl_invite_email:'Email', lbl_role:'Role',
     bd_welcome:'Welcome', bd_happy:'🎉 Happy birthday',
     bd_born_today: name=>`${name} was born today`,
     bd_month_label: n=>`Happy ${n}-month day`,
@@ -1306,7 +1308,7 @@ async function loadSettings() {
 
   html += `<div class="section-title">${t('settings_security_title')}</div>
     <div class="security-row">
-      <div><div class="s-name">${esc(me.username || '')}</div><div class="s-sub">${t('lbl_username')}</div></div>
+      <div><div class="s-name">${esc(me.email || '')}</div><div class="s-sub">${t('member_since')} ${esc((me.created_at || '').slice(0, 10))} · ${t('last_login')} ${esc((me.last_login_at || '').slice(0, 16).replace('T', ' ')) || '—'}</div></div>
       <button class="btn-small secondary" onclick="doLogout()">${t('btn_logout')}</button>
     </div>
     <div class="security-row">
@@ -1522,12 +1524,12 @@ async function loadBabyAccess(babyId) {
   wrap.innerHTML = `
     ${members.map(m => `
       <div class="security-row">
-        <div><div class="s-name">${esc(m.username)}</div><div class="s-sub">${t('role_' + m.role)}</div></div>
+        <div><div class="s-name">${esc(m.email)}</div><div class="s-sub">${t('role_' + m.role)}</div></div>
         <button class="btn-small secondary" onclick="revokeBabyAccess(${babyId},${m.user_id})">${t('btn_remove')}</button>
       </div>
     `).join('')}
-    <div class="field"><label>${t('lbl_invite_username')}</label>
-      <input type="text" id="invite-username-${babyId}" placeholder="${t('baby_name_placeholder')}">
+    <div class="field"><label>${t('lbl_invite_email')}</label>
+      <input type="email" id="invite-email-${babyId}" placeholder="name@example.com">
     </div>
     <div class="field"><label>${t('lbl_role')}</label>
       <select id="invite-role-${babyId}">
@@ -1543,13 +1545,13 @@ async function loadBabyAccess(babyId) {
 }
 
 async function grantBabyAccess(babyId) {
-  const username = document.getElementById(`invite-username-${babyId}`).value.trim();
+  const email = document.getElementById(`invite-email-${babyId}`).value.trim();
   const role = document.getElementById(`invite-role-${babyId}`).value;
-  if (!username) { toast(t('toast_no_name')); return; }
+  if (!email) { toast(t('toast_no_name')); return; }
   const res = await fetch(`/api/babies/${babyId}/access`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ username, role }),
+    body: JSON.stringify({ email, role }),
   });
   const data = await res.json();
   if (res.ok) {

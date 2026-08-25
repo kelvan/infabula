@@ -8,6 +8,7 @@ just means the user retries.
 """
 
 import io
+import re
 import secrets
 import time
 from datetime import datetime, timedelta
@@ -24,9 +25,21 @@ SESSION_COOKIE = "session_token"
 SESSION_TTL_DAYS = 30
 PENDING_TTL_SECONDS = 300
 
+EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+
 
 def now_str() -> str:
     return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+
+def is_valid_email(value: str) -> bool:
+    return bool(EMAIL_RE.match(value))
+
+
+async def touch_last_login(user_id: int) -> None:
+    async with Session.begin() as session:
+        user = await session.get(User, user_id)
+        user.last_login_at = now_str()
 
 
 # ── password ──
