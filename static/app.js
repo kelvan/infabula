@@ -34,6 +34,7 @@ const I18N = {
     no_baby_yet:'Noch kein Baby — füge eines in den Einstellungen hinzu, oder lass dich von jemandem einladen.',
     section_last:'Letztes Ereignis', section_intervals:'Abstände',
     section_sleep:'Schlafdauer (letzte 10)', section_growth:'Wachstum',
+    stat_avg_sleep:'Ø Nickerchen', stat_avg_awake:'Ø wach dazwischen',
     stat_interval:'Abstand', stat_avg:'Ø diesen Tag',
     stat_awake_since:'Wach seit', stat_back_since:'Zurück seit',
     stat_asleep_since:'Schläft seit', stat_walking_since:'Läuft seit',
@@ -119,6 +120,7 @@ const I18N = {
     no_baby_yet:'No baby yet — add one in Settings, or get invited by someone who has one.',
     section_last:'Last event', section_intervals:'Intervals',
     section_sleep:'Sleep duration (last 10)', section_growth:'Growth',
+    stat_avg_sleep:'Avg nap duration', stat_avg_awake:'Avg awake in between',
     stat_interval:'Interval', stat_avg:'avg this day',
     stat_awake_since:'Awake since', stat_back_since:'Back since',
     stat_asleep_since:'Asleep since', stat_walking_since:'Walking since',
@@ -1275,6 +1277,20 @@ async function loadStats() {
         <div class="s-sub">${t('stat_avg')}: ${fmtDur(iv.avg)}</div>
       </div>`;
   });
+  if (data.avg_sleep_min != null) {
+    ivCards += `
+      <div class="stat-card">
+        <div class="s-label">${typeIcon(getType('sleep').icon)}${t('stat_avg_sleep')}</div>
+        <div class="s-val">${fmtDur(data.avg_sleep_min)}</div>
+      </div>`;
+  }
+  if (data.avg_awake_min != null) {
+    ivCards += `
+      <div class="stat-card">
+        <div class="s-label">${typeIcon(getType('sleep').icon)}${t('stat_avg_awake')}</div>
+        <div class="s-val">${fmtDur(data.avg_awake_min)}</div>
+      </div>`;
+  }
 
   let sleepBars = `<div class="empty">${t('no_sleep_data')}</div>`;
   if (data.sleep_durations.length) {

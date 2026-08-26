@@ -164,6 +164,10 @@ MAX_ENTRIES_LIMIT = 1000
 ENTRY_MAX_FUTURE = timedelta(hours=1)
 ENTRY_MAX_PAST = timedelta(days=7)
 
+# A nap runs shorter than this; anything longer is treated as night sleep
+# and left out of the average nap duration.
+NIGHT_SLEEP_MIN_MINUTES = 240
+
 
 def entries_of(baby_id: int = DEFAULT_BABY_ID):
     """Base query scoped to one baby's log."""
@@ -1232,6 +1236,25 @@ async def get_stats(
             {"start": e["ts_start"], "end": e["ts_end"], "minutes": round(dur)}
         )
 
+    # Night sleep runs for hours and would dominate a nap average; keep
+    # the two separate rather than let one long stretch skew the other.
+    naps = [s for s in sleep_durations if s["minutes"] < NIGHT_SLEEP_MIN_MINUTES]
+    avg_sleep_min = (
+        round(sum(s["minutes"] for s in naps) / len(naps)) if naps else None
+    )
+    # Awake time between two of those same sleeps, chronologically adjacent —
+    # sleep_entries is newest-first, so sort before taking consecutive gaps.
+    chrono = sorted(sleep_entries, key=lambda e: e["ts_start"])
+    awake_gaps = []
+    for prev, nxt in zip(chrono, chrono[1:]):
+        prev_end = parse_entry_ts(prev["ts_end"])
+        next_start = parse_entry_ts(nxt["ts_start"])
+        assert prev_end is not None and next_start is not None
+        gap = (next_start - prev_end).total_seconds() / 60
+        if gap > 0:
+            awake_gaps.append(gap)
+    avg_awake_min = round(sum(awake_gaps) / len(awake_gaps)) if awake_gaps else None
+
     intervals = {}
     for typ in ["diaper", "feeding"]:
         if typ == "feeding":
@@ -1253,6 +1276,8 @@ async def get_stats(
     return {
         "last": last,
         "sleep_durations": sleep_durations,
+        "avg_sleep_min": avg_sleep_min,
+        "avg_awake_min": avg_awake_min,
         "intervals": intervals,
         "growth": growth,
     }
