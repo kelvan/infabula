@@ -1164,7 +1164,9 @@ def build_report(entries: list[dict], start: str, end: str) -> dict:
         elif t == "note" and e.get("note"):
             totals["notes"] += 1
 
-    weight_change = weights[-1]["weight"] - weights[0]["weight"] if len(weights) >= 2 else None
+    weight_change = (
+        weights[-1]["weight"] - weights[0]["weight"] if len(weights) >= 2 else None
+    )
 
     for e in entries:
         e["shown_start"] = local_time_of(e["ts_start"])
