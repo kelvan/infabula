@@ -15,6 +15,41 @@ async def post(client, baby_id, **body):
     return await client.post(f"/api/entries?baby_id={baby_id}", json=payload)
 
 
+class TestValidation:
+    async def test_missing_type_is_a_400_not_a_crash(
+        self, client, logged_in, baby_factory
+    ):
+        baby_id = await baby_factory(await logged_in())
+        res = await client.post(
+            f"/api/entries?baby_id={baby_id}",
+            json={"ts_start": ts(), "meta": {}},
+        )
+        assert res.status_code == 400
+
+    async def test_missing_entry_on_patch_is_404(self, client, logged_in):
+        await logged_in()
+        res = await client.patch("/api/entries/999999", json={"note": "x"})
+        assert res.status_code == 404
+
+    async def test_missing_baby_on_update_is_404(self, client, logged_in):
+        """An access row pointing at a since-deleted baby — the only way
+        require_access can pass with no matching Baby row."""
+        me = await logged_in()
+        from db import BabyAccess, Session
+
+        async with Session.begin() as session:
+            session.add(BabyAccess(user_id=me, baby_id=999999, role="owner"))
+        res = await client.put("/api/babies/999999", json={"name": "x"})
+        assert res.status_code == 404
+
+    async def test_duplicate_registration_is_409_not_500(self, client):
+        body = {"email": "dup@example.com", "password": "password123"}
+        first = await client.post("/api/auth/register", json=body)
+        assert first.status_code == 200
+        second = await client.post("/api/auth/register", json=body)
+        assert second.status_code == 409
+
+
 class TestWriteWindow:
     async def test_accepts_now(self, client, logged_in, baby_factory):
         baby_id = await baby_factory(await logged_in())

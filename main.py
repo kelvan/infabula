@@ -23,6 +23,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import delete, func, select
 from sqlalchemy import false as sa_false
+from sqlalchemy.exc import IntegrityError
 from webauthn import (
     generate_authentication_options,
     generate_registration_options,
@@ -361,20 +362,29 @@ async def register(request: Request, response: Response):
             {"error": "a valid email and an 8+ character password are required"},
             status_code=400,
         )
-    async with Session.begin() as session:
-        existing = await session.scalar(select(User).where(User.username == email))
-        if existing is not None:
-            return JSONResponse({"error": "email already registered"}, status_code=409)
-        user = User(
-            name=email,
-            username=email,
-            email=email,
-            password_hash=auth.hash_password(password),
-            last_login_at=auth.now_str(),
-        )
-        session.add(user)
-        await session.flush()
-        user_id = user.id
+    try:
+        async with Session.begin() as session:
+            existing = await session.scalar(
+                select(User).where(User.username == email)
+            )
+            if existing is not None:
+                return JSONResponse(
+                    {"error": "email already registered"}, status_code=409
+                )
+            user = User(
+                name=email,
+                username=email,
+                email=email,
+                password_hash=auth.hash_password(password),
+                last_login_at=auth.now_str(),
+            )
+            session.add(user)
+            await session.flush()
+            user_id = user.id
+    except IntegrityError:
+        # A second registration for the same email landed between our
+        # check and the insert; the unique constraint is the real guard.
+        return JSONResponse({"error": "email already registered"}, status_code=409)
     token = await auth.create_session(user_id)
     auth.set_session_cookie(response, token)
     return {"ok": True}
@@ -709,7 +719,8 @@ async def passkey_login_verify(request: Request, response: Response):
         return JSONResponse({"error": "verification failed"}, status_code=401)
     async with Session.begin() as session:
         row = await session.get(WebauthnCredential, stored.id)
-        assert row is not None
+        if row is None:
+            return JSONResponse({"error": "unknown passkey"}, status_code=401)
         row.sign_count = verification.new_sign_count
     await auth.touch_last_login(stored.user_id)
     token = await auth.create_session(stored.user_id)
@@ -722,6 +733,9 @@ async def create_entry(request: Request, baby_id: int = DEFAULT_BABY_ID):
     if (denied := await require_access(request, baby_id, ROLE_EDITOR)) is not None:
         return denied
     body = await request.json()
+    entry_type = body.get("type") or ""
+    if not entry_type:
+        return JSONResponse({"error": "type is required"}, status_code=400)
     ts_start = body.get("ts_start") or ""
     if (bad := check_entry_window(ts_start)) is not None:
         return bad
@@ -730,7 +744,7 @@ async def create_entry(request: Request, baby_id: int = DEFAULT_BABY_ID):
             {"error": "too many entries for that day"}, status_code=429
         )
     entry = Entry(
-        type=body["type"],
+        type=entry_type,
         ts_start=ts_start,
         ts_end=body.get("ts_end"),
         note=body.get("note", ""),
@@ -750,7 +764,7 @@ async def patch_entry(entry_id: int, request: Request):
     async with Session() as session:
         existing = await session.get(Entry, entry_id)
     if existing is None:
-        return None
+        return JSONResponse({"error": "not found"}, status_code=404)
     if (
         denied := await require_access(request, existing.baby_id, ROLE_EDITOR)
     ) is not None:
@@ -762,7 +776,8 @@ async def patch_entry(entry_id: int, request: Request):
         return bad
     async with Session.begin() as session:
         entry = await session.get(Entry, entry_id)
-        assert entry is not None
+        if entry is None:
+            return JSONResponse({"error": "not found"}, status_code=404)
         for field in ("ts_start", "ts_end", "note", "meta"):
             if field in body:
                 setattr(entry, field, body[field])
@@ -881,7 +896,7 @@ async def update_baby(baby_id: int, request: Request):
     async with Session.begin() as session:
         baby = await session.get(Baby, baby_id)
         if baby is None:
-            return {"ok": False}
+            return JSONResponse({"error": "not found"}, status_code=404)
         if "name" in body:
             baby.name = (body.get("name") or "").strip() or baby.name
         if "birthday" in body:
