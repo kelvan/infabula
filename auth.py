@@ -12,7 +12,7 @@ import io
 import re
 import secrets
 import time
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 import bcrypt
 import pyotp
@@ -32,7 +32,8 @@ EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
 
 def now_str() -> str:
-    return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    """Bookkeeping stamp, in UTC like everything else stored."""
+    return datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
 
 
 def is_valid_email(value: str) -> bool:
@@ -66,9 +67,9 @@ def verify_password(password: str, hashed: str | None) -> bool:
 # ── sessions ──
 async def create_session(user_id: int) -> str:
     token = secrets.token_urlsafe(32)
-    expires_at = (datetime.now() + timedelta(days=SESSION_TTL_DAYS)).strftime(
-        "%Y-%m-%d %H:%M:%S"
-    )
+    expires_at = (
+        datetime.now(timezone.utc) + timedelta(days=SESSION_TTL_DAYS)
+    ).strftime("%Y-%m-%d %H:%M:%S")
     async with Session.begin() as session:
         session.add(UserSession(token=token, user_id=user_id, expires_at=expires_at))
     return token

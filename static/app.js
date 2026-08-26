@@ -280,9 +280,42 @@ function todayStr() {
   return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
 }
 function pad(n) { return String(n).padStart(2,'0'); }
+// ── UTC storage, local display ──
+// Timestamps travel and are stored as an explicit UTC instant
+// ('2026-08-26T05:23Z'); everything the user sees or types is that instant
+// in this browser's own timezone. Conversion happens only at the API
+// boundary, so form inputs stay plain local wall-clock throughout.
 function nowLocal() {
   const d = new Date();
   return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+function nowUtc() {
+  return new Date().toISOString().slice(0, 16) + 'Z';
+}
+/** 'YYYY-MM-DDTHH:MM' in local time -> stored UTC instant. */
+function toUtc(localDT) {
+  if (!localDT) return '';
+  const d = new Date(localDT);          // no zone suffix: parsed as local
+  return isNaN(d) ? '' : d.toISOString().slice(0, 16) + 'Z';
+}
+/** Stored UTC instant -> 'YYYY-MM-DDTHH:MM' in local time, for inputs. */
+function toLocalDT(utcIso) {
+  if (!utcIso) return '';
+  const d = new Date(utcIso);
+  if (isNaN(d)) return '';
+  return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+/** Stored UTC instant -> 'YYYY-MM-DD' local calendar date. */
+function localDate(utcIso) {
+  if (!utcIso) return '';
+  const d = new Date(utcIso);
+  if (isNaN(d)) return '';
+  return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+}
+/** Minutes past local midnight for a stored UTC instant. */
+function localMinutes(utcIso) {
+  const d = new Date(utcIso);
+  return d.getHours() * 60 + d.getMinutes();
 }
 // Split/join instead of relying on <input type="datetime-local">, whose time
 // step is unreliable on Android WebView/Chrome — plain date+time inputs work everywhere.
@@ -318,7 +351,7 @@ function fmtDate(s) {
   return `${d}.${m}.${y}`;
 }
 function fmtStartTime(iso) {
-  const d = iso.slice(0, 10);
+  const d = localDate(iso);
   return d === currentDate ? fmtTime(iso) : `${fmtDate(d)} ${fmtTime(iso)}`;
 }
 function fmtTime(iso) {
@@ -563,7 +596,7 @@ function renderSleepBanner() {
 }
 async function wakeUp() {
   if (!openSleepEntry) return;
-  const now = nowLocal();
+  const now = nowUtc();
   await fetch(`/api/entries/${openSleepEntry.id}`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
@@ -601,7 +634,7 @@ function renderWalkBanner() {
 }
 async function endWalk() {
   if (!openWalkEntry) return;
-  const now = nowLocal();
+  const now = nowUtc();
   await fetch(`/api/entries/${openWalkEntry.id}`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
@@ -661,7 +694,7 @@ function quickTap(type) {
 }
 
 async function quickStartOpen(type) {
-  const now = nowLocal();
+  const now = nowUtc();
   const res = await fetch('/api/entries?baby_id=' + currentBabyId, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -679,7 +712,7 @@ async function quickStartOpen(type) {
 }
 
 async function quickSubmit(type, meta = {}, note = '') {
-  const now = nowLocal();
+  const now = nowUtc();
   const res = await fetch('/api/entries?baby_id=' + currentBabyId, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -861,11 +894,10 @@ function setLogView(view) {
 }
 
 function dayMinutes(iso) {
-  const d = iso.slice(0, 10);
+  const d = localDate(iso);
   if (d < currentDate) return 0;
   if (d > currentDate) return 1440;
-  const [h, m] = iso.slice(11, 16).split(':').map(Number);
-  return h * 60 + m;
+  return localMinutes(iso);
 }
 function spanEndMinutes(e, nowMin) {
   if (e.ts_end) return dayMinutes(e.ts_end);
@@ -1928,10 +1960,11 @@ async function submitEntry() {
 
   const apiType = selectedType === 'sleep_start' ? 'sleep' : selectedType;
 
+  const endLocal = readDT('f-end');
   const body = {
     type: apiType,
-    ts_start: start,
-    ts_end: readDT('f-end') || null,
+    ts_start: toUtc(start),
+    ts_end: endLocal ? toUtc(endLocal) : null,
     note: document.getElementById('f-note')?.value || '',
     meta,
   };
@@ -1952,7 +1985,7 @@ async function submitEntry() {
     }
     closeModal();
     toast(t('toast_saved'));
-    const entryDate = start.slice(0,10);
+    const entryDate = localDate(toUtc(start));
     if (entryDate !== currentDate) { currentDate = entryDate; updateDayNav(); }
     loadLog();
   } else {
@@ -1978,8 +2011,8 @@ function openEditModal(id) {
 
 function editFieldsHtml(entry) {
   const m = entry.meta || {};
-  const start = entry.ts_start ? entry.ts_start.slice(0, 16) : '';
-  const end = entry.ts_end ? entry.ts_end.slice(0, 16) : '';
+  const start = toLocalDT(entry.ts_start);
+  const end = toLocalDT(entry.ts_end);
   const note = esc(entry.note || '');
 
   if (entry.type === 'diaper') {
@@ -2093,9 +2126,10 @@ async function submitEditEntry() {
   }
   if (entry.type === 'mood') meta.mood = document.getElementById('f-mood')?.value;
 
+  const endLocal = readDT('f-end');
   const body = {
-    ts_start: start,
-    ts_end: readDT('f-end') || null,
+    ts_start: toUtc(start),
+    ts_end: endLocal ? toUtc(endLocal) : null,
     note: document.getElementById('f-note')?.value || '',
     meta,
   };
@@ -2109,7 +2143,7 @@ async function submitEditEntry() {
   if (res.ok) {
     closeModal();
     toast(t('toast_saved'));
-    const entryDate = start.slice(0, 10);
+    const entryDate = localDate(toUtc(start));
     if (entryDate !== currentDate) { currentDate = entryDate; updateDayNav(); }
     loadLog();
   } else {

@@ -12,7 +12,7 @@ Sync-style URLs are rewritten to their async driver automatically. The legacy
 """
 
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlalchemy import JSON, Boolean, ForeignKey, Integer, String, Text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
@@ -98,7 +98,8 @@ class User(Base):
     totp_secret: Mapped[str | None] = mapped_column(String(64))
     totp_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     created_at: Mapped[str | None] = mapped_column(
-        String(32), default=lambda: datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        String(32),
+        default=lambda: datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S"),
     )
     last_login_at: Mapped[str | None] = mapped_column(String(32))
 
@@ -117,7 +118,8 @@ class WebauthnCredential(Base):
     sign_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     name: Mapped[str | None] = mapped_column(String(128))
     created_at: Mapped[str | None] = mapped_column(
-        String(32), default=lambda: datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        String(32),
+        default=lambda: datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S"),
     )
 
 
@@ -131,7 +133,8 @@ class UserSession(Base):
         ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
     )
     created_at: Mapped[str | None] = mapped_column(
-        String(32), default=lambda: datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        String(32),
+        default=lambda: datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S"),
     )
     expires_at: Mapped[str] = mapped_column(String(32), nullable=False)
 
@@ -156,7 +159,8 @@ class ApiToken(Base):
     token_hash: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
     prefix: Mapped[str] = mapped_column(String(16), nullable=False)
     created_at: Mapped[str | None] = mapped_column(
-        String(32), default=lambda: datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        String(32),
+        default=lambda: datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S"),
     )
     last_used_at: Mapped[str | None] = mapped_column(String(32))
 
@@ -168,7 +172,8 @@ class Baby(Base):
     name: Mapped[str] = mapped_column(String(128), nullable=False)
     birthday: Mapped[str | None] = mapped_column(String(10))
     created_at: Mapped[str | None] = mapped_column(
-        String(32), default=lambda: datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        String(32),
+        default=lambda: datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S"),
     )
 
 
@@ -185,7 +190,8 @@ class BabyAccess(Base):
     )
     role: Mapped[str] = mapped_column(String(16), nullable=False, default=ROLE_OWNER)
     created_at: Mapped[str | None] = mapped_column(
-        String(32), default=lambda: datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        String(32),
+        default=lambda: datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S"),
     )
 
     @property
@@ -214,7 +220,8 @@ class Entry(Base):
     meta: Mapped[dict | None] = mapped_column(JSON)
     ip: Mapped[str | None] = mapped_column(String(64))
     created_at: Mapped[str | None] = mapped_column(
-        String(32), default=lambda: datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        String(32),
+        default=lambda: datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S"),
     )
 
     def as_dict(self) -> dict:

@@ -5,8 +5,10 @@ import json
 import os
 import sqlite3
 import time
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
+from datetime import time as dtime
 from itertools import groupby
+from zoneinfo import ZoneInfo
 
 from fastapi import FastAPI, Request
 from fastapi.openapi.utils import get_openapi
@@ -19,7 +21,8 @@ from fastapi.responses import (
 )
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from sqlalchemy import delete, distinct, func, select
+from sqlalchemy import delete, func, select
+from sqlalchemy import false as sa_false
 from webauthn import (
     generate_authentication_options,
     generate_registration_options,
@@ -78,10 +81,71 @@ def custom_openapi():
 
 app.openapi = custom_openapi
 
-# ts_start/ts_end hold 'YYYY-MM-DDTHH:MM'; substr is the portable way to get
-# the date part across SQLite, PostgreSQL and MariaDB.
-DAY_START = func.substr(Entry.ts_start, 1, 10)
-DAY_END = func.substr(Entry.ts_end, 1, 10)
+# ── Time ──
+# ts_start/ts_end hold an explicit UTC instant, 'YYYY-MM-DDTHH:MMZ'. The
+# format is fixed-width, so lexicographic ordering and BETWEEN ranges are
+# chronological and no per-row conversion is needed to query.
+ENTRY_TS_FMT = "%Y-%m-%dT%H:%MZ"
+
+# Which local day an instant belongs to is a presentation question, and a
+# single-household journal has one answer: the household's own zone.
+HOUSEHOLD_TZ = ZoneInfo(os.getenv("TZ") or "UTC")
+
+
+def utc_now() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def to_entry_ts(moment: datetime) -> str:
+    return moment.astimezone(timezone.utc).strftime(ENTRY_TS_FMT)
+
+
+def parse_entry_ts(value: str) -> datetime | None:
+    try:
+        return datetime.strptime(value, ENTRY_TS_FMT).replace(tzinfo=timezone.utc)
+    except (TypeError, ValueError):
+        return None
+
+
+def local_day_bounds(day: str) -> tuple[str, str] | None:
+    """The [start, end) UTC instants covering a local calendar date.
+
+    Built from both local midnights rather than start + 24h, so the short
+    and long days either side of a DST switch come out right.
+    """
+    try:
+        parsed = date.fromisoformat(day)
+    except (TypeError, ValueError):
+        return None
+    lo = datetime.combine(parsed, dtime.min, tzinfo=HOUSEHOLD_TZ)
+    hi = datetime.combine(parsed + timedelta(days=1), dtime.min, tzinfo=HOUSEHOLD_TZ)
+    return to_entry_ts(lo), to_entry_ts(hi)
+
+
+def local_day_of(value: str) -> str:
+    """The local calendar date a stored UTC instant falls on."""
+    moment = parse_entry_ts(value)
+    if moment is None:
+        return (value or "")[:10]
+    return moment.astimezone(HOUSEHOLD_TZ).strftime("%Y-%m-%d")
+
+
+def local_time_of(value: str) -> str:
+    """The local clock time (HH:MM) of a stored UTC instant."""
+    moment = parse_entry_ts(value)
+    if moment is None:
+        return (value or "")[11:16]
+    return moment.astimezone(HOUSEHOLD_TZ).strftime("%H:%M")
+
+
+def on_local_day(column, day: str):
+    """SQL predicate: this timestamp column falls on the given local date."""
+    bounds = local_day_bounds(day)
+    if bounds is None:
+        return sa_false()
+    lo, hi = bounds
+    return (column >= lo) & (column < hi)
+
 
 ROLE_RANK = {ROLE_VIEWER: 0, ROLE_EDITOR: 1, ROLE_OWNER: 2}
 
@@ -109,11 +173,10 @@ def check_entry_window(ts_start: str, allow_old: bool = False) -> JSONResponse |
     so a typo in a three-week-old entry stays fixable — a PATCH cannot
     add rows, so it is not a flooding risk either way.
     """
-    try:
-        parsed = datetime.fromisoformat(ts_start)
-    except (TypeError, ValueError):
+    parsed = parse_entry_ts(ts_start)
+    if parsed is None:
         return JSONResponse({"error": "invalid ts_start"}, status_code=400)
-    now = datetime.now()
+    now = utc_now()
     if parsed > now + ENTRY_MAX_FUTURE:
         return JSONResponse(
             {"error": "ts_start too far in the future"}, status_code=400
@@ -128,7 +191,7 @@ async def day_is_full(baby_id: int, day: str) -> bool:
         count = await session.scalar(
             select(func.count())
             .select_from(Entry)
-            .where(Entry.baby_id == baby_id, DAY_START == day)
+            .where(Entry.baby_id == baby_id, on_local_day(Entry.ts_start, day))
         )
     return (count or 0) >= MAX_ENTRIES_PER_DAY
 
@@ -653,7 +716,7 @@ async def create_entry(request: Request, baby_id: int = DEFAULT_BABY_ID):
     ts_start = body.get("ts_start") or ""
     if (bad := check_entry_window(ts_start)) is not None:
         return bad
-    if await day_is_full(baby_id, ts_start[:10]):
+    if await day_is_full(baby_id, local_day_of(ts_start)):
         return JSONResponse(
             {"error": "too many entries for that day"}, status_code=429
         )
@@ -712,7 +775,9 @@ async def get_entries(
             .order_by(Entry.ts_start.desc())
         )
         if date:
-            stmt = stmt.where((DAY_START == date) | (DAY_END == date))
+            stmt = stmt.where(
+                on_local_day(Entry.ts_start, date) | on_local_day(Entry.ts_end, date)
+            )
         else:
             stmt = stmt.limit(limit)
         rows = (await session.execute(stmt)).all()
@@ -724,16 +789,27 @@ async def get_dates(request: Request, baby_id: int = DEFAULT_BABY_ID):
     """Return list of distinct dates that have entries."""
     if (denied := await require_access(request, baby_id, ROLE_VIEWER)) is not None:
         return denied
+    # Which local day a UTC instant lands on depends on the household
+    # zone, so the distinct-ing happens here rather than in SQL.
     async with Session() as session:
         rows = (
             await session.scalars(
-                select(distinct(DAY_START))
+                select(Entry.ts_start)
                 .where(Entry.baby_id == baby_id)
-                .order_by(DAY_START.desc())
-                .limit(90)
+                .order_by(Entry.ts_start.desc())
+                .limit(2000)
             )
         ).all()
-    return list(rows)
+    days: list[str] = []
+    seen: set[str] = set()
+    for value in rows:
+        day = local_day_of(value)
+        if day not in seen:
+            seen.add(day)
+            days.append(day)
+        if len(days) >= 90:
+            break
+    return days
 
 
 def baby_to_dict(baby: Baby) -> dict:
@@ -920,7 +996,7 @@ async def delete_entry(entry_id: int, request: Request):
 async def get_stats(request: Request, date: str = None, baby_id: int = DEFAULT_BABY_ID):
     if (denied := await require_access(request, baby_id, ROLE_VIEWER)) is not None:
         return denied
-    day = date or datetime.now().strftime("%Y-%m-%d")
+    day = date or utc_now().astimezone(HOUSEHOLD_TZ).strftime("%Y-%m-%d")
     async with Session() as session:
         rows = (
             await session.scalars(
@@ -930,7 +1006,7 @@ async def get_stats(request: Request, date: str = None, baby_id: int = DEFAULT_B
         day_rows = (
             await session.scalars(
                 entries_of(baby_id)
-                .where(DAY_START == day)
+                .where(on_local_day(Entry.ts_start, day))
                 .order_by(Entry.ts_start.asc())
             )
         ).all()
@@ -960,8 +1036,8 @@ async def get_stats(request: Request, date: str = None, baby_id: int = DEFAULT_B
     sleep_entries = [e for e in entries if e["type"] == "sleep" and e["ts_end"]][:10]
     sleep_durations = []
     for e in sleep_entries:
-        start = datetime.fromisoformat(e["ts_start"])
-        end = datetime.fromisoformat(e["ts_end"])
+        start = parse_entry_ts(e["ts_start"])
+        end = parse_entry_ts(e["ts_end"])
         dur = (end - start).total_seconds() / 60
         sleep_durations.append(
             {"start": e["ts_start"], "end": e["ts_end"], "minutes": round(dur)}
@@ -976,8 +1052,8 @@ async def get_stats(request: Request, date: str = None, baby_id: int = DEFAULT_B
         if len(typed) >= 2:
             diffs = []
             for i in range(len(typed) - 1):
-                a = datetime.fromisoformat(typed[i]["ts_start"])
-                b = datetime.fromisoformat(typed[i + 1]["ts_start"])
+                a = parse_entry_ts(typed[i]["ts_start"])
+                b = parse_entry_ts(typed[i + 1]["ts_start"])
                 diffs.append(round((b - a).total_seconds() / 60))
             intervals[typ] = {
                 "last": diffs[-1],
@@ -996,11 +1072,17 @@ async def get_stats(request: Request, date: str = None, baby_id: int = DEFAULT_B
 async def fetch_entries_range(start: str, end: str, baby_id: int = DEFAULT_BABY_ID):
     if start > end:
         start, end = end, start
+    # Inclusive range of local days: from the first day's opening instant
+    # to the last day's closing one.
+    lo_bounds = local_day_bounds(start)
+    hi_bounds = local_day_bounds(end)
+    if lo_bounds is None or hi_bounds is None:
+        return [], start, end
     async with Session() as session:
         rows = (
             await session.scalars(
                 entries_of(baby_id)
-                .where(DAY_START.between(start, end))
+                .where(Entry.ts_start >= lo_bounds[0], Entry.ts_start < hi_bounds[1])
                 .order_by(Entry.ts_start.asc())
             )
         ).all()
@@ -1026,7 +1108,7 @@ def build_report(entries: list[dict], start: str, end: str) -> dict:
         })
 
     for e in entries:
-        d = e["ts_start"][:10]
+        d = local_day_of(e["ts_start"])
         bucket = day_bucket(d)
         t = e["type"]
         m = e["meta"] or {}
@@ -1049,29 +1131,48 @@ def build_report(entries: list[dict], start: str, end: str) -> dict:
                 totals["feeding_ml"] += ml
         elif t == "sleep" and e["ts_end"]:
             mins = round(
-                (datetime.fromisoformat(e["ts_end"]) - datetime.fromisoformat(e["ts_start"])).total_seconds() / 60
+                (
+                    parse_entry_ts(e["ts_end"]) - parse_entry_ts(e["ts_start"])
+                ).total_seconds()
+                / 60
             )
             bucket["sleep_min"] += mins
             totals["sleep_min"] += mins
             totals["sleep_count"] += 1
         elif t == "walk" and e["ts_end"]:
             mins = round(
-                (datetime.fromisoformat(e["ts_end"]) - datetime.fromisoformat(e["ts_start"])).total_seconds() / 60
+                (
+                    parse_entry_ts(e["ts_end"]) - parse_entry_ts(e["ts_start"])
+                ).total_seconds()
+                / 60
             )
             bucket["walk_min"] += mins
             bucket["walk_count"] += 1
             totals["walk_min"] += mins
             totals["walk_count"] += 1
         elif t == "weight" and m.get("weight"):
-            weights.append({"time": e["ts_start"], "weight": m["weight"]})
+            weights.append(
+                {
+                    "time": e["ts_start"],
+                    "shown": (
+                        f'{local_day_of(e["ts_start"])} '
+                        f'{local_time_of(e["ts_start"])}'
+                    ),
+                    "weight": m["weight"],
+                }
+            )
         elif t == "note" and e.get("note"):
             totals["notes"] += 1
 
     weight_change = weights[-1]["weight"] - weights[0]["weight"] if len(weights) >= 2 else None
 
+    for e in entries:
+        e["shown_start"] = local_time_of(e["ts_start"])
+        e["shown_end"] = local_time_of(e["ts_end"]) if e["ts_end"] else ""
+
     entries_by_day = [
         {"date": d, "day_entries": list(items)}
-        for d, items in groupby(entries, key=lambda e: e["ts_start"][:10])
+        for d, items in groupby(entries, key=lambda e: local_day_of(e["ts_start"]))
     ]
 
     return {
