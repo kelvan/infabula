@@ -138,6 +138,39 @@ async def get_api_token_user(raw_token: str) -> User | None:
     return user
 
 
+# ── failed-attempt throttling ──
+# In-process, like the pending-ceremony state below: a restart clears it,
+# which is acceptable for a household-sized deployment and keeps the
+# database out of the hot path of every login attempt.
+FAIL_WINDOW_SECONDS = 900
+MAX_LOGIN_FAILS = 10
+MAX_TOTP_FAILS = 5
+
+_fails: dict[str, list[float]] = {}
+
+
+def _recent_fails(key: str) -> list[float]:
+    cutoff = time.time() - FAIL_WINDOW_SECONDS
+    kept = [ts for ts in _fails.get(key, []) if ts > cutoff]
+    if kept:
+        _fails[key] = kept
+    else:
+        _fails.pop(key, None)
+    return kept
+
+
+def too_many_fails(key: str, limit: int) -> bool:
+    return len(_recent_fails(key)) >= limit
+
+
+def record_fail(key: str) -> None:
+    _fails.setdefault(key, []).append(time.time())
+
+
+def clear_fails(key: str) -> None:
+    _fails.pop(key, None)
+
+
 # ── ephemeral ceremony state (pending TOTP logins, WebAuthn challenges) ──
 _pending: dict[str, dict] = {}
 

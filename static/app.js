@@ -344,7 +344,7 @@ function getUserColor(username) {
   if (!userColorMap[username]) { userColorMap[username] = USER_COLORS[colorIndex % USER_COLORS.length]; colorIndex++; }
   return userColorMap[username];
 }
-function esc(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
+function esc(s) { return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
 
 // ── Day navigation ──
 function updateDayNav() {
@@ -2007,7 +2007,7 @@ function editFieldsHtml(entry) {
   if (entry.type === 'bottle') {
     return `
       ${dtField('f-start', t('lbl_time'), start)}
-      <div class="field"><label>${t('lbl_amount')}</label><input type="number" id="f-amount" min="0" step="5" value="${m.amount || ''}"></div>
+      <div class="field"><label>${t('lbl_amount')}</label><input type="number" id="f-amount" min="0" step="5" value="${esc(String(m.amount ?? ''))}"></div>
       <div class="field"><label>${t('lbl_content')}</label>
         <select id="f-content">
           <option value="abgepumpt" ${m.content === 'abgepumpt' ? 'selected' : ''}>${t('opt_pumped')}</option>
@@ -2029,8 +2029,8 @@ function editFieldsHtml(entry) {
   if (entry.type === 'weight') {
     return `
       ${dtField('f-start', t('lbl_time'), start)}
-      <div class="field"><label>${t('lbl_weight_g')}</label><input type="number" id="f-weight" min="0" step="10" value="${m.weight || ''}"></div>
-      <div class="field"><label>${t('lbl_height_cm')}</label><input type="number" id="f-height" min="0" step="0.5" value="${m.height || ''}"></div>
+      <div class="field"><label>${t('lbl_weight_g')}</label><input type="number" id="f-weight" min="0" step="10" value="${esc(String(m.weight ?? ''))}"></div>
+      <div class="field"><label>${t('lbl_height_cm')}</label><input type="number" id="f-height" min="0" step="0.5" value="${esc(String(m.height ?? ''))}"></div>
       <div class="field"><label>${t('lbl_note')}</label><textarea id="f-note" rows="2">${note}</textarea></div>
       <button class="btn" onclick="submitEditEntry()">${t('btn_save')}</button>
     `;

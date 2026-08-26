@@ -41,7 +41,6 @@ from db import (
     BabyAccess,
     Entry,
     Session,
-    Setting,
     User,
     WebauthnCredential,
     sqlite_file,
@@ -279,11 +278,16 @@ async def login(request: Request, response: Response):
     body = await request.json()
     email = (body.get("email") or "").strip().lower()
     password = body.get("password") or ""
+    fail_key = f"login:{email}"
+    if auth.too_many_fails(fail_key, auth.MAX_LOGIN_FAILS):
+        return JSONResponse({"error": "too many attempts, try later"}, status_code=429)
     async with Session() as session:
         user = await session.scalar(select(User).where(User.username == email))
     password_ok = auth.verify_password(password, user.password_hash if user else None)
     if user is None or not password_ok:
+        auth.record_fail(fail_key)
         return JSONResponse({"error": "invalid credentials"}, status_code=401)
+    auth.clear_fails(fail_key)
     if user.totp_enabled:
         pending_token = auth.store_pending("totp_login", {"user_id": user.id})
         return {"totp_required": True, "pending_token": pending_token}
@@ -300,11 +304,24 @@ async def totp_verify_login(request: Request, response: Response):
     pending = auth.peek_pending(pending_token, "totp_login")
     if pending is None:
         return JSONResponse({"error": "expired, log in again"}, status_code=400)
+    # A wrong code deliberately does not consume the pending token, so a
+    # typo can just be retried — which is exactly why the attempt count
+    # has to be capped, or the 6-digit code would be brute-forceable for
+    # as long as the token lives.
+    fail_key = f"totp:{pending_token}"
+    if auth.too_many_fails(fail_key, auth.MAX_TOTP_FAILS):
+        auth.pop_pending(pending_token, "totp_login")
+        auth.clear_fails(fail_key)
+        return JSONResponse(
+            {"error": "too many attempts, log in again"}, status_code=429
+        )
     async with Session() as session:
         user = await session.get(User, pending["user_id"])
     if user is None or not auth.verify_totp(user.totp_secret, body.get("code") or ""):
+        auth.record_fail(fail_key)
         return JSONResponse({"error": "invalid code"}, status_code=401)
     auth.pop_pending(pending_token, "totp_login")
+    auth.clear_fails(fail_key)
     await auth.touch_last_login(user.id)
     token = await auth.create_session(user.id)
     auth.set_session_cookie(response, token)
@@ -663,30 +680,6 @@ async def get_dates(request: Request, baby_id: int = DEFAULT_BABY_ID):
             )
         ).all()
     return list(rows)
-
-
-@app.get("/api/settings", tags=["Settings"])
-async def get_settings():
-    async with Session() as session:
-        rows = (await session.scalars(select(Setting))).all()
-    return {r.key: r.value for r in rows}
-
-
-@app.put("/api/settings/{key}", tags=["Settings"])
-async def set_setting(key: str, request: Request):
-    body = await request.json()
-    value = (body.get("value") or "").strip()
-    async with Session.begin() as session:
-        row = await session.get(Setting, key)
-        if not value:
-            if row is not None:
-                await session.delete(row)
-        elif row is None:
-            session.add(Setting(key=key, value=value))
-        else:
-            row.value = value
-    await broadcast_event("entries_changed")
-    return {"ok": True}
 
 
 def baby_to_dict(baby: Baby) -> dict:
