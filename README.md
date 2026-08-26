@@ -64,16 +64,39 @@ DB_URL=mysql://user:pass@host/infabula        # needs: uv sync --extra mysql
 
 Defaults to SQLite; the older `DB_PATH` var still works and maps to a SQLite file. The schema is managed by Alembic and migrated automatically on startup — a database from before Alembic was introduced is adopted as-is, not re-created. On SQLite a timestamped backup is written to a `backups/` folder next to the database on every startup.
 
-Entries belong to a baby and record who created them, and multiple babies can be managed and switched between from the header. `baby_access` grants users an `owner`/`editor`/`viewer` role on a baby's log, but nothing currently checks it — every logged-in user can see and edit every baby.
+Entries belong to a baby and record who created them, and multiple babies can be managed and switched between from the header. `baby_access` grants users an `owner`/`editor`/`viewer` role on a baby's log.
 
 ## Accounts
 
-Signing up is open — anyone who can reach the app registers with an email and password. Optional two-factor login is available per account, from Settings → Account:
+Signing up is open — anyone who can reach the app can register with an email and password, but the account can't log in until it clicks a confirmation link sent to that address. Set these env vars to actually send it:
+
+```bash
+SMTP_HOST=smtp.example.com
+SMTP_PORT=587            # default
+SMTP_USER=you@example.com
+SMTP_PASSWORD=...
+SMTP_FROM=infabula@example.com   # defaults to SMTP_USER
+APP_BASE_URL=http://192.168.1.50:8080   # how the household reaches the app — used to build the link
+```
+
+Without `SMTP_HOST` set, the link is logged to stdout instead of emailed — fine for local dev, not for a real deployment, since nobody outside the server can ever verify. Accounts that existed before this was added are grandfathered in as already verified.
+
+Optional two-factor login is available per account, from Settings → Account:
 
 - **TOTP** — scan the QR code into an authenticator app, confirm with a code.
 - **Passkeys (WebAuthn)** — add one or more from the same tab. Passkeys need a secure context: they work on `localhost`, but over plain HTTP on a LAN IP most browsers will refuse the ceremony. Put a reverse proxy with TLS (e.g. Caddy) in front for passkeys to actually work outside of localhost.
 
 Sessions are httponly cookies, valid 30 days, stored server-side so they can be revoked by logging out.
+
+An admin account (the first account created is bootstrapped as one) can disable another account — instantly killing its sessions and API tokens, without touching its journal history — via the API:
+
+```bash
+GET  /api/admin/users
+POST /api/admin/users/{id}/disable
+POST /api/admin/users/{id}/enable
+```
+
+There's no admin page for this yet — authenticate as the admin account (cookie or bearer token) and call it directly, or from `/docs`.
 
 ## API
 

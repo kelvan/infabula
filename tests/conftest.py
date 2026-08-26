@@ -55,6 +55,7 @@ async def user_factory():
     from db import User
 
     async def make(email="a@example.com", password="password123", **kwargs):
+        kwargs.setdefault("email_verified", True)
         async with Session.begin() as session:
             user = User(
                 name=email,

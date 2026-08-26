@@ -50,9 +50,16 @@ function showStep(id) {
   document.querySelectorAll('.login-step').forEach(f => f.style.display = 'none');
   document.getElementById(id).style.display = '';
   showError('');
+  showInfo('');
+  document.getElementById('resend-link-wrap').style.display = 'none';
 }
 function showError(msg) {
   document.getElementById('login-error').textContent = msg;
+  if (msg) showInfo('');
+}
+function showInfo(msg) {
+  document.getElementById('login-info').textContent = msg;
+  if (msg) document.getElementById('login-error').textContent = '';
 }
 async function postJSON(url, body) {
   const res = await fetch(url, {
@@ -69,18 +76,46 @@ document.getElementById('show-login').onclick = e => { e.preventDefault(); showS
 
 let pendingTotpToken = null;
 
+/** After any successful login: straight into the app, unless this
+ *  account has no baby yet, in which case offer to add one first. */
+async function afterLogin() {
+  try {
+    const babies = await (await fetch('/api/babies')).json();
+    if (Array.isArray(babies) && babies.length === 0) {
+      showStep('onboarding-baby-step');
+      return;
+    }
+  } catch {}
+  location.href = '/';
+}
+
 document.getElementById('login-form').onsubmit = async e => {
   e.preventDefault();
   const email = document.getElementById('li-email').value.trim();
   const password = document.getElementById('li-password').value;
   const { ok, data } = await postJSON('/api/auth/login', { email, password });
-  if (!ok) { showError(data.error || 'Login failed'); return; }
+  if (!ok) {
+    showError(data.error || 'Login failed');
+    document.getElementById('resend-link-wrap').style.display =
+      data.error === 'email not verified' ? '' : 'none';
+    return;
+  }
   if (data.totp_required) {
     pendingTotpToken = data.pending_token;
     showStep('totp-form');
     return;
   }
-  location.href = '/';
+  afterLogin();
+};
+
+document.getElementById('resend-link').onclick = async e => {
+  e.preventDefault();
+  const email = document.getElementById('li-email').value.trim();
+  const password = document.getElementById('li-password').value;
+  const { ok, data } = await postJSON('/api/auth/resend-verification', { email, password });
+  if (!ok) { showError(data.error || 'Could not resend'); return; }
+  showInfo('Confirmation email sent — check your inbox.');
+  document.getElementById('resend-link-wrap').style.display = 'none';
 };
 
 document.getElementById('register-form').onsubmit = async e => {
@@ -91,16 +126,28 @@ document.getElementById('register-form').onsubmit = async e => {
   if (password !== password2) { showError('Passwords do not match'); return; }
   const { ok, data } = await postJSON('/api/auth/register', { email, password });
   if (!ok) { showError(data.error || 'Could not create account'); return; }
-  showStep('onboarding-baby-step');
+  document.getElementById('verify-sent-email').textContent = email;
+  showStep('verify-sent-step');
 };
+
+document.getElementById('verify-back-btn').onclick = () => showStep('login-form');
 
 document.getElementById('totp-form').onsubmit = async e => {
   e.preventDefault();
   const code = document.getElementById('totp-code').value.trim();
   const { ok, data } = await postJSON('/api/auth/totp/verify', { pending_token: pendingTotpToken, code });
   if (!ok) { showError(data.error || 'Invalid code'); return; }
-  location.href = '/';
+  afterLogin();
 };
+
+// ── Landed here from the confirmation email ──
+{
+  const params = new URLSearchParams(location.search);
+  const verify = params.get('verify');
+  if (verify === 'ok') showInfo('Email confirmed — log in below.');
+  else if (verify === 'expired') showError('That link expired or was already used. Log in and resend it below.');
+  if (verify) history.replaceState({}, '', location.pathname);
+}
 
 // ── First-baby onboarding, right after registration ──
 document.getElementById('ob-create-btn').onclick = async () => {
@@ -129,7 +176,7 @@ document.getElementById('passkey-login-btn').onclick = async () => {
       credential: credentialToJSON(assertion),
     });
     if (!verify.ok) { showError(verify.data.error || 'Passkey sign-in failed'); return; }
-    location.href = '/';
+    afterLogin();
   } catch (err) {
     showError(err.message || 'Passkey sign-in failed');
   }

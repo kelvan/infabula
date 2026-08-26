@@ -97,6 +97,11 @@ class User(Base):
     password_hash: Mapped[str | None] = mapped_column(String(255))
     totp_secret: Mapped[str | None] = mapped_column(String(64))
     totp_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    email_verified: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False
+    )
+    disabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    is_admin: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     created_at: Mapped[str | None] = mapped_column(
         String(32),
         default=lambda: datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S"),
@@ -127,6 +132,27 @@ class UserSession(Base):
     """A logged-in session, keyed by the random token stored in the session cookie."""
 
     __tablename__ = "sessions"
+
+    token: Mapped[str] = mapped_column(String(64), primary_key=True)
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    created_at: Mapped[str | None] = mapped_column(
+        String(32),
+        default=lambda: datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S"),
+    )
+    expires_at: Mapped[str] = mapped_column(String(32), nullable=False)
+
+
+class EmailVerification(Base):
+    """A pending email-confirmation link, keyed by the token in its URL.
+
+    Lives in the database rather than the in-process ceremony dict:
+    unlike a TOTP or WebAuthn ceremony, someone may not open the email
+    for hours, and the link still has to work after a server restart.
+    """
+
+    __tablename__ = "email_verifications"
 
     token: Mapped[str] = mapped_column(String(64), primary_key=True)
     user_id: Mapped[int] = mapped_column(

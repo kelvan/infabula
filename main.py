@@ -35,6 +35,7 @@ from webauthn.helpers import base64url_to_bytes, bytes_to_base64url
 from webauthn.helpers.structs import PublicKeyCredentialDescriptor
 
 import auth
+import mailer
 from db import (
     DEFAULT_BABY_ID,
     ROLE_EDITOR,
@@ -214,6 +215,13 @@ async def require_access(
         return JSONResponse({"error": "forbidden"}, status_code=403)
     return None
 
+
+def require_admin(request: Request) -> JSONResponse | None:
+    """None if the current user is an admin, else a 403 to return."""
+    if not request.state.user.is_admin:
+        return JSONResponse({"error": "forbidden"}, status_code=403)
+    return None
+
 # ── SSE pub-sub ──
 subscribers: set[asyncio.Queue] = set()
 
@@ -308,6 +316,8 @@ PUBLIC_PATHS = (
     "/api/auth/totp/verify",
     "/api/auth/passkey/login/options",
     "/api/auth/passkey/login/verify",
+    "/api/auth/verify-email",
+    "/api/auth/resend-verification",
 )
 
 
@@ -347,13 +357,19 @@ def user_to_dict(user: User) -> dict:
         "email": user.username,
         "name": user.name,
         "totp_enabled": user.totp_enabled,
+        "is_admin": user.is_admin,
         "created_at": user.created_at,
         "last_login_at": user.last_login_at,
     }
 
 
+async def send_verification_email(email: str, user_id: int) -> None:
+    token = await auth.create_email_verification(user_id)
+    await asyncio.to_thread(mailer.send_verification_email, email, token)
+
+
 @app.post("/api/auth/register", tags=["Auth"])
-async def register(request: Request, response: Response):
+async def register(request: Request):
     body = await request.json()
     email = (body.get("email") or "").strip().lower()
     password = body.get("password") or ""
@@ -376,7 +392,6 @@ async def register(request: Request, response: Response):
                 username=email,
                 email=email,
                 password_hash=auth.hash_password(password),
-                last_login_at=auth.now_str(),
             )
             session.add(user)
             await session.flush()
@@ -385,8 +400,39 @@ async def register(request: Request, response: Response):
         # A second registration for the same email landed between our
         # check and the insert; the unique constraint is the real guard.
         return JSONResponse({"error": "email already registered"}, status_code=409)
-    token = await auth.create_session(user_id)
-    auth.set_session_cookie(response, token)
+    await send_verification_email(email, user_id)
+    return {"ok": True}
+
+
+@app.get("/api/auth/verify-email", tags=["Auth"])
+async def verify_email(token: str = ""):
+    user_id = await auth.consume_email_verification(token)
+    if user_id is None:
+        return RedirectResponse("/login?verify=expired")
+    async with Session.begin() as session:
+        user = await session.get(User, user_id)
+        if user is not None:
+            user.email_verified = True
+    return RedirectResponse("/login?verify=ok")
+
+
+@app.post("/api/auth/resend-verification", tags=["Auth"])
+async def resend_verification(request: Request):
+    body = await request.json()
+    email = (body.get("email") or "").strip().lower()
+    password = body.get("password") or ""
+    fail_key = f"resend:{email}"
+    if auth.too_many_fails(fail_key, auth.MAX_RESEND_ATTEMPTS):
+        return JSONResponse({"error": "too many attempts, try later"}, status_code=429)
+    async with Session() as session:
+        user = await session.scalar(select(User).where(User.username == email))
+    if user is None or not auth.verify_password(password, user.password_hash):
+        auth.record_fail(fail_key)
+        return JSONResponse({"error": "invalid credentials"}, status_code=401)
+    auth.clear_fails(fail_key)
+    if user.email_verified:
+        return {"ok": True, "already_verified": True}
+    await send_verification_email(email, user.id)
     return {"ok": True}
 
 
@@ -405,6 +451,10 @@ async def login(request: Request, response: Response):
         auth.record_fail(fail_key)
         return JSONResponse({"error": "invalid credentials"}, status_code=401)
     auth.clear_fails(fail_key)
+    if user.disabled:
+        return JSONResponse({"error": "account disabled"}, status_code=403)
+    if not user.email_verified:
+        return JSONResponse({"error": "email not verified"}, status_code=403)
     if user.totp_enabled:
         pending_token = auth.store_pending("totp_login", {"user_id": user.id})
         return {"totp_required": True, "pending_token": pending_token}
@@ -474,6 +524,7 @@ async def update_me(request: Request):
     return {"ok": True}
 
 
+
 @app.post("/api/auth/totp/setup", tags=["Auth"])
 async def totp_setup(request: Request):
     secret = auth.new_totp_secret()
@@ -512,6 +563,60 @@ async def totp_disable(request: Request):
             return JSONResponse({"error": "wrong password"}, status_code=401)
         user.totp_enabled = False
         user.totp_secret = None
+    return {"ok": True}
+
+
+# ── Admin ──
+def admin_user_to_dict(user: User) -> dict:
+    return {
+        "id": user.id,
+        "email": user.username,
+        "name": user.name,
+        "disabled": user.disabled,
+        "is_admin": user.is_admin,
+        "email_verified": user.email_verified,
+        "created_at": user.created_at,
+        "last_login_at": user.last_login_at,
+    }
+
+
+@app.get("/api/admin/users", tags=["Admin"])
+async def admin_list_users(request: Request):
+    if (denied := require_admin(request)) is not None:
+        return denied
+    async with Session() as session:
+        rows = (
+            await session.scalars(select(User).order_by(User.id))
+        ).all()
+    return [admin_user_to_dict(u) for u in rows]
+
+
+@app.post("/api/admin/users/{user_id}/disable", tags=["Admin"])
+async def admin_disable_user(user_id: int, request: Request):
+    if (denied := require_admin(request)) is not None:
+        return denied
+    if user_id == request.state.user.id:
+        return JSONResponse(
+            {"error": "cannot disable your own account"}, status_code=400
+        )
+    async with Session.begin() as session:
+        user = await session.get(User, user_id)
+        if user is None:
+            return JSONResponse({"error": "not found"}, status_code=404)
+        user.disabled = True
+    await auth.kill_sessions_for_user(user_id)
+    return {"ok": True}
+
+
+@app.post("/api/admin/users/{user_id}/enable", tags=["Admin"])
+async def admin_enable_user(user_id: int, request: Request):
+    if (denied := require_admin(request)) is not None:
+        return denied
+    async with Session.begin() as session:
+        user = await session.get(User, user_id)
+        if user is None:
+            return JSONResponse({"error": "not found"}, status_code=404)
+        user.disabled = False
     return {"ok": True}
 
 
@@ -717,6 +822,10 @@ async def passkey_login_verify(request: Request, response: Response):
         )
     except Exception:
         return JSONResponse({"error": "verification failed"}, status_code=401)
+    async with Session() as session:
+        owner = await session.get(User, stored.user_id)
+    if owner is None or owner.disabled:
+        return JSONResponse({"error": "account disabled"}, status_code=403)
     async with Session.begin() as session:
         row = await session.get(WebauthnCredential, stored.id)
         if row is None:

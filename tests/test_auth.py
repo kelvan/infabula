@@ -7,13 +7,15 @@ import auth
 
 
 class TestRegistration:
-    async def test_creates_a_session(self, client):
+    async def test_does_not_log_in_before_verification(self, client):
+        """Registering creates the account but not a session — the
+        address has to be confirmed first."""
         res = await client.post(
             "/api/auth/register",
             json={"email": "new@example.com", "password": "password123"},
         )
         assert res.status_code == 200
-        assert (await client.get("/api/auth/me")).status_code == 200
+        assert (await client.get("/api/auth/me")).status_code == 401
 
     @pytest.mark.parametrize(
         "email", ["notanemail", "@example.com", "a@b", "", "a b@example.com"]

@@ -15,12 +15,14 @@
     <img class="login-logo" src="/static/logo.svg" alt="infabula">
 
     <div id="login-error" class="login-error"></div>
+    <div id="login-info" class="login-info"></div>
 
     <form id="login-form" class="login-step">
       <div class="field"><label>Email</label><input type="email" id="li-email" autocomplete="username" required></div>
       <div class="field"><label>Password</label><input type="password" id="li-password" autocomplete="current-password" required></div>
       <button class="btn" type="submit">Log in</button>
       <button class="btn secondary-btn" type="button" id="passkey-login-btn" style="display:none;">Sign in with a passkey</button>
+      <div class="login-switch" id="resend-link-wrap" style="display:none;"><a href="#" id="resend-link">Resend confirmation email</a></div>
       <div class="login-switch">No account? <a href="#" id="show-register">Create one</a></div>
     </form>
 
@@ -32,6 +34,11 @@
       <button class="btn" type="submit">Create account</button>
       <div class="login-switch">Have an account? <a href="#" id="show-login">Log in</a></div>
     </form>
+
+    <div id="verify-sent-step" class="login-step" style="display:none;">
+      <div class="field-hint">We sent a confirmation link to <strong id="verify-sent-email"></strong>. Click it to finish creating your account, then log in.</div>
+      <button class="btn secondary-btn" type="button" id="verify-back-btn">Back to log in</button>
+    </div>
 
     <form id="totp-form" class="login-step" style="display:none;">
       <div class="field-hint">Enter the 6-digit code from your authenticator app.</div>

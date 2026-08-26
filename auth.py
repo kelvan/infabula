@@ -19,14 +19,21 @@ import pyotp
 import qrcode
 import qrcode.image.svg
 from fastapi import Request, Response
-from sqlalchemy import select
+from sqlalchemy import delete, select
 
-from db import ApiToken, Session, User, UserSession
+from db import (
+    ApiToken,
+    EmailVerification,
+    Session,
+    User,
+    UserSession,
+)
 
 SESSION_COOKIE = "session_token"
 SESSION_TTL_DAYS = 30
 PENDING_TTL_SECONDS = 300
 API_TOKEN_PREFIX = "ib_"
+EMAIL_VERIFY_TTL_HOURS = 24
 
 EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
@@ -88,7 +95,12 @@ async def get_session_user(request: Request) -> User | None:
         row = await session.get(UserSession, token)
         if row is None or row.expires_at < now_str():
             return None
-        return await session.get(User, row.user_id)
+        user = await session.get(User, row.user_id)
+        # Belt and braces: disabling a user also deletes their sessions,
+        # but a cookie presented in the same instant shouldn't slip through.
+        if user is not None and user.disabled:
+            return None
+        return user
 
 
 async def delete_session(token: str) -> None:
@@ -96,6 +108,17 @@ async def delete_session(token: str) -> None:
         row = await session.get(UserSession, token)
         if row is not None:
             await session.delete(row)
+
+
+async def kill_sessions_for_user(user_id: int) -> None:
+    """Ends every session and API token for a user right now.
+
+    Used when disabling an account: flipping the flag alone would still
+    honor a cookie or bearer token already in hand until it expired.
+    """
+    async with Session.begin() as session:
+        await session.execute(delete(UserSession).where(UserSession.user_id == user_id))
+        await session.execute(delete(ApiToken).where(ApiToken.user_id == user_id))
 
 
 def set_session_cookie(response: Response, token: str) -> None:
@@ -111,6 +134,36 @@ def set_session_cookie(response: Response, token: str) -> None:
 
 def clear_session_cookie(response: Response) -> None:
     response.delete_cookie(SESSION_COOKIE, path="/")
+
+
+# ── email verification ──
+async def create_email_verification(user_id: int) -> str:
+    token = secrets.token_urlsafe(32)
+    expires_at = (
+        datetime.now(timezone.utc) + timedelta(hours=EMAIL_VERIFY_TTL_HOURS)
+    ).strftime("%Y-%m-%d %H:%M:%S")
+    async with Session.begin() as session:
+        # A fresh link replaces any earlier one for the same account, so
+        # an old, still-open email can't be used once a resend was asked
+        # for.
+        await session.execute(
+            delete(EmailVerification).where(EmailVerification.user_id == user_id)
+        )
+        session.add(
+            EmailVerification(token=token, user_id=user_id, expires_at=expires_at)
+        )
+    return token
+
+
+async def consume_email_verification(token: str) -> int | None:
+    """Marks the token used and returns the user_id it verified, or None."""
+    async with Session.begin() as session:
+        row = await session.get(EmailVerification, token)
+        if row is None or row.expires_at < now_str():
+            return None
+        user_id = row.user_id
+        await session.delete(row)
+    return user_id
 
 
 # ── API tokens ──
@@ -137,6 +190,8 @@ async def get_api_token_user(raw_token: str) -> User | None:
             return None
         row.last_used_at = now_str()
         user = await session.get(User, row.user_id)
+    if user is not None and user.disabled:
+        return None
     return user
 
 
@@ -147,6 +202,7 @@ async def get_api_token_user(raw_token: str) -> User | None:
 FAIL_WINDOW_SECONDS = 900
 MAX_LOGIN_FAILS = 10
 MAX_TOTP_FAILS = 5
+MAX_RESEND_ATTEMPTS = 5
 
 _fails: dict[str, list[float]] = {}
 
