@@ -346,6 +346,14 @@ function getUserColor(username) {
 }
 function esc(s) { return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
 
+/** Toast the reason the server gave, so a refused save says why instead
+ *  of a generic error the user (and the logs) can't act on. */
+async function toastError(res) {
+  let reason = '';
+  try { reason = (await res.json()).error || ''; } catch {}
+  toast(reason || t('toast_error'));
+}
+
 // ── Day navigation ──
 function updateDayNav() {
   document.getElementById('day-label').textContent = fmtDate(currentDate);
@@ -666,7 +674,7 @@ async function quickStartOpen(type) {
     toast(t('toast_saved'));
     loadLog();
   } else {
-    toast(t('toast_error'));
+    await toastError(res);
   }
 }
 
@@ -682,7 +690,7 @@ async function quickSubmit(type, meta = {}, note = '') {
     closeQuickPopup();
     loadLog();
   } else {
-    toast(t('toast_error'));
+    await toastError(res);
   }
 }
 
@@ -1948,7 +1956,7 @@ async function submitEntry() {
     if (entryDate !== currentDate) { currentDate = entryDate; updateDayNav(); }
     loadLog();
   } else {
-    toast(t('toast_error'));
+    await toastError(res);
   }
 }
 
@@ -2105,7 +2113,7 @@ async function submitEditEntry() {
     if (entryDate !== currentDate) { currentDate = entryDate; updateDayNav(); }
     loadLog();
   } else {
-    toast(t('toast_error'));
+    await toastError(res);
   }
 }
 
