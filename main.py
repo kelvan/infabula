@@ -5,7 +5,7 @@ import json
 import os
 import sqlite3
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 from itertools import groupby
 
 from fastapi import FastAPI, Request
@@ -85,10 +85,52 @@ DAY_END = func.substr(Entry.ts_end, 1, 10)
 
 ROLE_RANK = {ROLE_VIEWER: 0, ROLE_EDITOR: 1, ROLE_OWNER: 2}
 
+# Ceilings that keep a runaway script (or a bug) from filling the database.
+# All are far above what hand-logging a baby's day could ever reach.
+MAX_BABIES_PER_USER = 20
+MAX_ENTRIES_PER_DAY = 500
+MAX_ENTRIES_LIMIT = 1000
+# A journal is written as the day happens: an entry may be logged slightly
+# ahead of the clock (a bottle you're about to give) or filled in for the
+# past week, but not beyond that.
+ENTRY_MAX_FUTURE = timedelta(hours=1)
+ENTRY_MAX_PAST = timedelta(days=7)
+
 
 def entries_of(baby_id: int = DEFAULT_BABY_ID):
     """Base query scoped to one baby's log."""
     return select(Entry).where(Entry.baby_id == baby_id)
+
+
+def check_entry_window(ts_start: str, allow_old: bool = False) -> JSONResponse | None:
+    """None if ts_start is inside the allowed window, else a 400 to return.
+
+    Editing keeps the future cap but drops the past floor (`allow_old`),
+    so a typo in a three-week-old entry stays fixable — a PATCH cannot
+    add rows, so it is not a flooding risk either way.
+    """
+    try:
+        parsed = datetime.fromisoformat(ts_start)
+    except (TypeError, ValueError):
+        return JSONResponse({"error": "invalid ts_start"}, status_code=400)
+    now = datetime.now()
+    if parsed > now + ENTRY_MAX_FUTURE:
+        return JSONResponse(
+            {"error": "ts_start too far in the future"}, status_code=400
+        )
+    if not allow_old and parsed < now - ENTRY_MAX_PAST:
+        return JSONResponse({"error": "ts_start too far in the past"}, status_code=400)
+    return None
+
+
+async def day_is_full(baby_id: int, day: str) -> bool:
+    async with Session() as session:
+        count = await session.scalar(
+            select(func.count())
+            .select_from(Entry)
+            .where(Entry.baby_id == baby_id, DAY_START == day)
+        )
+    return (count or 0) >= MAX_ENTRIES_PER_DAY
 
 
 async def role_for(user_id: int, baby_id: int) -> str | None:
@@ -608,9 +650,16 @@ async def create_entry(request: Request, baby_id: int = DEFAULT_BABY_ID):
     if (denied := await require_access(request, baby_id, ROLE_EDITOR)) is not None:
         return denied
     body = await request.json()
+    ts_start = body.get("ts_start") or ""
+    if (bad := check_entry_window(ts_start)) is not None:
+        return bad
+    if await day_is_full(baby_id, ts_start[:10]):
+        return JSONResponse(
+            {"error": "too many entries for that day"}, status_code=429
+        )
     entry = Entry(
         type=body["type"],
-        ts_start=body["ts_start"],
+        ts_start=ts_start,
         ts_end=body.get("ts_end"),
         note=body.get("note", ""),
         meta=body.get("meta", {}),
@@ -635,6 +684,10 @@ async def patch_entry(entry_id: int, request: Request):
     ) is not None:
         return denied
     body = await request.json()
+    if "ts_start" in body and (
+        bad := check_entry_window(body.get("ts_start") or "", allow_old=True)
+    ) is not None:
+        return bad
     async with Session.begin() as session:
         entry = await session.get(Entry, entry_id)
         for field in ("ts_start", "ts_end", "note", "meta"):
@@ -650,6 +703,7 @@ async def get_entries(
 ):
     if (denied := await require_access(request, baby_id, ROLE_VIEWER)) is not None:
         return denied
+    limit = max(1, min(limit, MAX_ENTRIES_LIMIT))
     async with Session() as session:
         stmt = (
             select(Entry, User.name)
@@ -705,6 +759,19 @@ async def create_baby(request: Request):
     body = await request.json()
     name = (body.get("name") or "").strip() or "Baby"
     birthday = (body.get("birthday") or "").strip() or None
+    # Counts only babies this account owns — being invited to someone
+    # else's log should never use up your own allowance.
+    async with Session() as session:
+        owned = await session.scalar(
+            select(func.count())
+            .select_from(BabyAccess)
+            .where(
+                BabyAccess.user_id == request.state.user.id,
+                BabyAccess.role == ROLE_OWNER,
+            )
+        )
+    if (owned or 0) >= MAX_BABIES_PER_USER:
+        return JSONResponse({"error": "too many babies"}, status_code=429)
     async with Session.begin() as session:
         baby = Baby(name=name, birthday=birthday)
         session.add(baby)
