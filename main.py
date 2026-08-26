@@ -21,7 +21,7 @@ from fastapi.responses import (
 )
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, func, select, update
 from sqlalchemy import false as sa_false
 from sqlalchemy.exc import IntegrityError
 from webauthn import (
@@ -521,6 +521,55 @@ async def update_me(request: Request):
         user = await session.get(User, request.state.user.id)
         assert user is not None
         user.name = name[:128]
+    return {"ok": True}
+
+
+@app.delete("/api/auth/me", tags=["Auth"])
+async def delete_me(request: Request, response: Response):
+    body = await request.json()
+    user = request.state.user
+    if not auth.verify_password(body.get("password") or "", user.password_hash):
+        return JSONResponse({"error": "wrong password"}, status_code=401)
+
+    async with Session() as session:
+        owned = (
+            await session.scalars(
+                select(BabyAccess.baby_id).where(
+                    BabyAccess.user_id == user.id, BabyAccess.role == ROLE_OWNER
+                )
+            )
+        ).all()
+        solely_owned = []
+        for baby_id in owned:
+            other_owner = await session.scalar(
+                select(BabyAccess).where(
+                    BabyAccess.baby_id == baby_id,
+                    BabyAccess.role == ROLE_OWNER,
+                    BabyAccess.user_id != user.id,
+                )
+            )
+            if other_owner is None:
+                baby = await session.get(Baby, baby_id)
+                solely_owned.append(baby.name if baby else str(baby_id))
+    if solely_owned:
+        return JSONResponse(
+            {
+                "error": "transfer or delete these babies first: "
+                + ", ".join(solely_owned)
+            },
+            status_code=400,
+        )
+
+    await auth.delete_auth_records_for_user(user.id)
+    async with Session.begin() as session:
+        await session.execute(
+            delete(BabyAccess).where(BabyAccess.user_id == user.id)
+        )
+        await session.execute(
+            update(Entry).where(Entry.user_id == user.id).values(user_id=None)
+        )
+        await session.execute(delete(User).where(User.id == user.id))
+    auth.clear_session_cookie(response)
     return {"ok": True}
 
 

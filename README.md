@@ -88,6 +88,8 @@ Optional two-factor login is available per account, from Settings → Account:
 
 Sessions are httponly cookies, valid 30 days, stored server-side so they can be revoked by logging out.
 
+An account can delete itself from Settings → Account → Danger zone, with its password. Refused while it's the sole owner of a baby — transfer ownership or delete the baby first, so a journal is never silently lost. Its existing entries stay, with no author.
+
 An admin account (the first account created is bootstrapped as one) can disable another account — instantly killing its sessions and API tokens, without touching its journal history — via the API:
 
 ```bash

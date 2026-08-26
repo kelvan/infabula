@@ -65,6 +65,10 @@ const I18N = {
     token_shown_once:'Dieses Token wird nur jetzt angezeigt — kopiere es, bevor du diese Seite verlässt.',
     confirm_delete_token:'Dieses Token widerrufen?',
     prompt_passkey_name:'Name für diesen Passkey',
+    settings_danger_title:'Gefahrenzone', btn_delete_account:'Konto löschen',
+    delete_account_hint:'Löscht dein Konto dauerhaft. Nicht möglich, solange du alleiniger Besitzer eines Babys bist.',
+    prompt_password_to_delete_account:'Passwort zum Löschen eingeben',
+    confirm_delete_account:'Dein Konto unwiderruflich löschen?',
     role_owner:'Besitzer', role_editor:'Bearbeiter', role_viewer:'Betrachter',
     btn_manage_access:'Zugriff verwalten', btn_remove:'Entfernen', btn_invite:'Einladen',
     lbl_shared_with:'Geteilt mit', lbl_profile:'Profil', lbl_selected:'gewählt',
@@ -146,6 +150,10 @@ const I18N = {
     token_name_placeholder:'e.g. Laptop script',
     token_shown_once:"This token is shown only now — copy it before leaving this page.",
     confirm_delete_token:'Revoke this token?',
+    settings_danger_title:'Danger zone', btn_delete_account:'Delete account',
+    delete_account_hint:"Permanently deletes your account. Not possible while you're the sole owner of a baby.",
+    prompt_password_to_delete_account:'Enter your password to delete your account',
+    confirm_delete_account:'Permanently delete your account?',
     role_owner:'Owner', role_editor:'Editor', role_viewer:'Viewer',
     btn_manage_access:'Manage access', btn_remove:'Remove', btn_invite:'Invite',
     lbl_shared_with:'Shared with', lbl_profile:'Profile', lbl_selected:'selected',
@@ -1488,6 +1496,15 @@ function renderAccountTab() {
       </div>
     </div>
     <div id="new-token-wrap"></div>
+
+    <div class="settings-card">
+      <div class="settings-card-title">${t('settings_danger_title')}</div>
+      <div class="security-row">
+        <div><div class="s-name">${t('btn_delete_account')}</div><div class="s-sub">${t('delete_account_hint')}</div></div>
+        <button class="btn-small secondary" onclick="startDeleteAccount()">${t('btn_delete')}</button>
+      </div>
+      <div id="delete-account-wrap"></div>
+    </div>
   `;
   el.innerHTML = html;
   if (window.PublicKeyCredential) document.getElementById('add-passkey-btn').style.display = '';
@@ -1667,6 +1684,31 @@ async function deleteToken(id) {
   await fetch(`/api/auth/tokens/${id}`, { method: 'DELETE' });
   toast(t('toast_deleted'));
   loadSettings();
+}
+
+function startDeleteAccount() {
+  document.getElementById('delete-account-wrap').innerHTML = `
+    <div class="field" style="margin-top:14px;margin-bottom:0;"><label>${t('prompt_password_to_delete_account')}</label>
+      <input type="password" id="delete-account-password-input" autocomplete="current-password">
+    </div>
+    <div class="baby-actions" style="margin-bottom:0;margin-top:12px;">
+      <button class="btn-small secondary" onclick="submitDeleteAccount()">${t('btn_confirm')}</button>
+    </div>
+  `;
+  document.getElementById('delete-account-password-input').focus();
+}
+
+async function submitDeleteAccount() {
+  const password = document.getElementById('delete-account-password-input').value;
+  if (!password) return;
+  if (!confirm(t('confirm_delete_account'))) return;
+  const res = await fetch('/api/auth/me', {
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ password }),
+  });
+  if (!res.ok) { await toastError(res); return; }
+  location.href = '/login';
 }
 
 function toggleQuickAction(key) {

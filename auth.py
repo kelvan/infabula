@@ -27,6 +27,7 @@ from db import (
     Session,
     User,
     UserSession,
+    WebauthnCredential,
 )
 
 SESSION_COOKIE = "session_token"
@@ -119,6 +120,23 @@ async def kill_sessions_for_user(user_id: int) -> None:
     async with Session.begin() as session:
         await session.execute(delete(UserSession).where(UserSession.user_id == user_id))
         await session.execute(delete(ApiToken).where(ApiToken.user_id == user_id))
+
+
+async def delete_auth_records_for_user(user_id: int) -> None:
+    """Removes everything auth owns for a user ahead of deleting the row.
+
+    Baby access, journal entries and the User row itself belong to the
+    app's own models and are the caller's job.
+    """
+    async with Session.begin() as session:
+        await session.execute(delete(UserSession).where(UserSession.user_id == user_id))
+        await session.execute(delete(ApiToken).where(ApiToken.user_id == user_id))
+        await session.execute(
+            delete(WebauthnCredential).where(WebauthnCredential.user_id == user_id)
+        )
+        await session.execute(
+            delete(EmailVerification).where(EmailVerification.user_id == user_id)
+        )
 
 
 def set_session_cookie(response: Response, token: str) -> None:
