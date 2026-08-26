@@ -33,7 +33,9 @@ from db import Base, Session  # noqa: E402
 # how many rounds it took. Lowest legal cost keeps the suite quick enough
 # to run on every change.
 _real_gensalt = bcrypt.gensalt
-bcrypt.gensalt = lambda rounds=4, prefix=b"2b": _real_gensalt(4, prefix)
+bcrypt.gensalt = lambda rounds=4, prefix=b"2b": _real_gensalt(  # ty: ignore[invalid-assignment]
+    4, prefix
+)
 
 
 @pytest.fixture(autouse=True)

@@ -79,7 +79,7 @@ def custom_openapi():
     return app.openapi_schema
 
 
-app.openapi = custom_openapi
+app.openapi = custom_openapi  # ty: ignore[invalid-assignment]
 
 # ── Time ──
 # ts_start/ts_end hold an explicit UTC instant, 'YYYY-MM-DDTHH:MMZ'. The
@@ -100,10 +100,12 @@ def to_entry_ts(moment: datetime) -> str:
     return moment.astimezone(timezone.utc).strftime(ENTRY_TS_FMT)
 
 
-def parse_entry_ts(value: str) -> datetime | None:
+def parse_entry_ts(value: str | None) -> datetime | None:
+    if value is None:
+        return None
     try:
         return datetime.strptime(value, ENTRY_TS_FMT).replace(tzinfo=timezone.utc)
-    except (TypeError, ValueError):
+    except ValueError:
         return None
 
 
@@ -422,7 +424,9 @@ async def totp_verify_login(request: Request, response: Response):
         )
     async with Session() as session:
         user = await session.get(User, pending["user_id"])
-    if user is None or not auth.verify_totp(user.totp_secret, body.get("code") or ""):
+    if user is None or not auth.verify_totp(
+        user.totp_secret or "", body.get("code") or ""
+    ):
         auth.record_fail(fail_key)
         return JSONResponse({"error": "invalid code"}, status_code=401)
     auth.pop_pending(pending_token, "totp_login")
@@ -455,6 +459,7 @@ async def update_me(request: Request):
         return JSONResponse({"error": "name cannot be empty"}, status_code=400)
     async with Session.begin() as session:
         user = await session.get(User, request.state.user.id)
+        assert user is not None
         user.name = name[:128]
     return {"ok": True}
 
@@ -464,10 +469,11 @@ async def totp_setup(request: Request):
     secret = auth.new_totp_secret()
     async with Session.begin() as session:
         user = await session.get(User, request.state.user.id)
+        assert user is not None
         user.totp_secret = secret
         user.totp_enabled = False
         username = user.username
-    uri = auth.totp_uri(secret, username)
+    uri = auth.totp_uri(secret, username or "")
     return {"secret": secret, "qr_svg": auth.totp_qr_svg(uri)}
 
 
@@ -476,6 +482,7 @@ async def totp_confirm(request: Request):
     body = await request.json()
     async with Session.begin() as session:
         user = await session.get(User, request.state.user.id)
+        assert user is not None
         if not user.totp_secret or not auth.verify_totp(
             user.totp_secret, body.get("code") or ""
         ):
@@ -489,6 +496,7 @@ async def totp_disable(request: Request):
     body = await request.json()
     async with Session.begin() as session:
         user = await session.get(User, request.state.user.id)
+        assert user is not None
         ok = auth.verify_password(body.get("password") or "", user.password_hash or "")
         if not ok:
             return JSONResponse({"error": "wrong password"}, status_code=401)
@@ -701,6 +709,7 @@ async def passkey_login_verify(request: Request, response: Response):
         return JSONResponse({"error": "verification failed"}, status_code=401)
     async with Session.begin() as session:
         row = await session.get(WebauthnCredential, stored.id)
+        assert row is not None
         row.sign_count = verification.new_sign_count
     await auth.touch_last_login(stored.user_id)
     token = await auth.create_session(stored.user_id)
@@ -753,6 +762,7 @@ async def patch_entry(entry_id: int, request: Request):
         return bad
     async with Session.begin() as session:
         entry = await session.get(Entry, entry_id)
+        assert entry is not None
         for field in ("ts_start", "ts_end", "note", "meta"):
             if field in body:
                 setattr(entry, field, body[field])
@@ -762,7 +772,10 @@ async def patch_entry(entry_id: int, request: Request):
 
 @app.get("/api/entries", tags=["Entries"])
 async def get_entries(
-    request: Request, date: str = None, limit: int = 300, baby_id: int = DEFAULT_BABY_ID
+    request: Request,
+    date: str | None = None,
+    limit: int = 300,
+    baby_id: int = DEFAULT_BABY_ID,
 ):
     if (denied := await require_access(request, baby_id, ROLE_VIEWER)) is not None:
         return denied
@@ -993,7 +1006,9 @@ async def delete_entry(entry_id: int, request: Request):
 
 
 @app.get("/api/stats", tags=["Stats"])
-async def get_stats(request: Request, date: str = None, baby_id: int = DEFAULT_BABY_ID):
+async def get_stats(
+    request: Request, date: str | None = None, baby_id: int = DEFAULT_BABY_ID
+):
     if (denied := await require_access(request, baby_id, ROLE_VIEWER)) is not None:
         return denied
     day = date or utc_now().astimezone(HOUSEHOLD_TZ).strftime("%Y-%m-%d")
@@ -1038,6 +1053,7 @@ async def get_stats(request: Request, date: str = None, baby_id: int = DEFAULT_B
     for e in sleep_entries:
         start = parse_entry_ts(e["ts_start"])
         end = parse_entry_ts(e["ts_end"])
+        assert start is not None and end is not None
         dur = (end - start).total_seconds() / 60
         sleep_durations.append(
             {"start": e["ts_start"], "end": e["ts_end"], "minutes": round(dur)}
@@ -1054,6 +1070,7 @@ async def get_stats(request: Request, date: str = None, baby_id: int = DEFAULT_B
             for i in range(len(typed) - 1):
                 a = parse_entry_ts(typed[i]["ts_start"])
                 b = parse_entry_ts(typed[i + 1]["ts_start"])
+                assert a is not None and b is not None
                 diffs.append(round((b - a).total_seconds() / 60))
             intervals[typ] = {
                 "last": diffs[-1],
@@ -1130,43 +1147,44 @@ def build_report(entries: list[dict], start: str, end: str) -> dict:
                 bucket["feeding_ml"] += ml
                 totals["feeding_ml"] += ml
         elif t == "sleep" and e["ts_end"]:
-            mins = round(
-                (
-                    parse_entry_ts(e["ts_end"]) - parse_entry_ts(e["ts_start"])
-                ).total_seconds()
-                / 60
-            )
+            e_end = parse_entry_ts(e["ts_end"])
+            e_start = parse_entry_ts(e["ts_start"])
+            assert e_end is not None and e_start is not None
+            mins = round((e_end - e_start).total_seconds() / 60)
             bucket["sleep_min"] += mins
             totals["sleep_min"] += mins
             totals["sleep_count"] += 1
         elif t == "walk" and e["ts_end"]:
-            mins = round(
-                (
-                    parse_entry_ts(e["ts_end"]) - parse_entry_ts(e["ts_start"])
-                ).total_seconds()
-                / 60
-            )
+            e_end = parse_entry_ts(e["ts_end"])
+            e_start = parse_entry_ts(e["ts_start"])
+            assert e_end is not None and e_start is not None
+            mins = round((e_end - e_start).total_seconds() / 60)
             bucket["walk_min"] += mins
             bucket["walk_count"] += 1
             totals["walk_min"] += mins
             totals["walk_count"] += 1
         elif t == "weight" and m.get("weight"):
-            weights.append(
-                {
-                    "time": e["ts_start"],
-                    "shown": (
-                        f'{local_day_of(e["ts_start"])} '
-                        f'{local_time_of(e["ts_start"])}'
-                    ),
-                    "weight": m["weight"],
-                }
-            )
+            try:
+                weight = float(m["weight"])
+            except (TypeError, ValueError):
+                pass
+            else:
+                weights.append(
+                    {
+                        "time": e["ts_start"],
+                        "shown": (
+                            f'{local_day_of(e["ts_start"])} '
+                            f'{local_time_of(e["ts_start"])}'
+                        ),
+                        "weight": weight,
+                    }
+                )
         elif t == "note" and e.get("note"):
             totals["notes"] += 1
 
-    weight_change = (
-        weights[-1]["weight"] - weights[0]["weight"] if len(weights) >= 2 else None
-    )
+    weight_change = None
+    if len(weights) >= 2:
+        weight_change = float(weights[-1]["weight"]) - float(weights[0]["weight"])
 
     for e in entries:
         e["shown_start"] = local_time_of(e["ts_start"])

@@ -43,6 +43,7 @@ def is_valid_email(value: str) -> bool:
 async def touch_last_login(user_id: int) -> None:
     async with Session.begin() as session:
         user = await session.get(User, user_id)
+        assert user is not None
         user.last_login_at = now_str()
 
 

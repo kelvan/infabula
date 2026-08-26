@@ -25,6 +25,7 @@ def test_parse_rejects_naive_timestamps():
 
 def test_parse_roundtrips():
     moment = main.parse_entry_ts("2026-08-26T05:23Z")
+    assert moment is not None
     assert main.to_entry_ts(moment) == "2026-08-26T05:23Z"
 
 
@@ -58,10 +59,13 @@ class TestLocalDay:
 
 class TestDayBounds:
     def _hours(self, day):
-        lo, hi = main.local_day_bounds(day)
-        return (
-            main.parse_entry_ts(hi) - main.parse_entry_ts(lo)
-        ).total_seconds() / 3600
+        bounds = main.local_day_bounds(day)
+        assert bounds is not None
+        lo, hi = bounds
+        parsed_lo = main.parse_entry_ts(lo)
+        parsed_hi = main.parse_entry_ts(hi)
+        assert parsed_lo is not None and parsed_hi is not None
+        return (parsed_hi - parsed_lo).total_seconds() / 3600
 
     def test_normal_day_is_24h(self):
         assert self._hours("2026-08-26") == 24
@@ -74,9 +78,10 @@ class TestDayBounds:
         assert self._hours("2026-10-25") == 25
 
     def test_bounds_are_half_open_and_meet(self):
-        _, first_end = main.local_day_bounds("2026-08-25")
-        second_start, _ = main.local_day_bounds("2026-08-26")
-        assert first_end == second_start
+        first = main.local_day_bounds("2026-08-25")
+        second = main.local_day_bounds("2026-08-26")
+        assert first is not None and second is not None
+        assert first[1] == second[0]
 
     def test_invalid_date_returns_none(self):
         assert main.local_day_bounds("not-a-date") is None
@@ -85,7 +90,9 @@ class TestDayBounds:
     def test_every_instant_lands_in_exactly_one_day(self):
         """No gaps or overlaps across a DST switch."""
         for day in ("2026-03-28", "2026-03-29", "2026-03-30"):
-            lo, hi = main.local_day_bounds(day)
+            bounds = main.local_day_bounds(day)
+            assert bounds is not None
+            lo, hi = bounds
             assert main.local_day_of(lo) == day
             # The closing bound belongs to the *next* day, not this one.
             assert main.local_day_of(hi) != day

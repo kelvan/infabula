@@ -48,7 +48,8 @@ class TestRegistration:
             user = await session.scalar(
                 select(User).where(User.username == "p@example.com")
             )
-        assert "password123" not in (user.password_hash or "")
+        assert user is not None and user.password_hash is not None
+        assert "password123" not in user.password_hash
         assert user.password_hash.startswith("$2b$")
 
 
@@ -268,6 +269,7 @@ class TestApiTokens:
 
         async with Session() as session:
             row = await session.scalar(select(ApiToken))
+        assert row is not None
         assert row.token_hash == auth.hash_token(token)
         assert token not in row.token_hash
 
