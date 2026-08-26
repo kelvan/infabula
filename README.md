@@ -12,6 +12,17 @@ uv run uvicorn main:app --host 0.0.0.0 --port 8080
 Open in browser: `http://localhost:8080`
 From other devices on LAN: `http://<server-ip>:8080`
 
+## Tests
+
+```bash
+uv run pytest
+```
+
+Runs against a throwaway SQLite database with the migrations applied. The
+suite pins `TZ=Europe/Vienna`, since which local day a UTC instant falls
+on is exactly the sort of thing that only breaks on someone else's
+machine.
+
 ## Features
 
 - **Diaper** – time + type (wet/dirty/both)
