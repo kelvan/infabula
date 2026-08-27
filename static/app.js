@@ -2201,8 +2201,9 @@ async function submitEditEntry() {
   if (res.ok) {
     closeModal();
     toast(t('toast_saved'));
-    const entryDate = localDate(toUtc(start));
-    if (entryDate !== currentDate) { currentDate = entryDate; updateDayNav(); }
+    // Unlike creating an entry, editing shouldn't relocate the viewport —
+    // an overnight sleep edited from today's view still belongs on today
+    // even though it started yesterday.
     loadLog();
   } else {
     await toastError(res);
