@@ -8,4 +8,7 @@ COPY pyproject.toml uv.lock ./
 RUN uv sync --frozen --no-dev
 COPY . .
 VOLUME /app/data
-CMD ["uv", "run", "--no-sync", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8080"]
+
+# Behind Caddy, so trust its X-Forwarded-Proto — otherwise request.url.scheme
+# always reads "http" and the WebAuthn origin check rejects every ceremony.
+CMD ["uv", "run", "--no-sync", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8080", "--proxy-headers", "--forwarded-allow-ips=*"]
