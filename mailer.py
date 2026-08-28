@@ -30,8 +30,16 @@ def send_email(to: str, subject: str, body: str) -> None:
     msg["From"] = SMTP_FROM
     msg["To"] = to
     msg.set_content(body)
-    with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as server:
-        server.starttls(context=ssl.create_default_context())
+    context = ssl.create_default_context()
+    # Port 465 is implicit TLS from the first byte; anything else is
+    # assumed to be plaintext-then-STARTTLS (587's convention).
+    if SMTP_PORT == 465:
+        server = smtplib.SMTP_SSL(SMTP_HOST, SMTP_PORT, context=context)
+    else:
+        server = smtplib.SMTP(SMTP_HOST, SMTP_PORT)
+    with server:
+        if SMTP_PORT != 465:
+            server.starttls(context=context)
         if SMTP_USER and SMTP_PASSWORD:
             server.login(SMTP_USER, SMTP_PASSWORD)
         server.send_message(msg)
