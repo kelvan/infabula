@@ -480,7 +480,7 @@ async def login(request: Request, response: Response):
         return {"totp_required": True, "pending_token": pending_token}
     await auth.touch_last_login(user.id)
     token = await auth.create_session(user.id)
-    auth.set_session_cookie(response, token)
+    auth.set_session_cookie(response, token, request)
     return {"ok": True}
 
 
@@ -513,7 +513,7 @@ async def totp_verify_login(request: Request, response: Response):
     auth.clear_fails(fail_key)
     await auth.touch_last_login(user.id)
     token = await auth.create_session(user.id)
-    auth.set_session_cookie(response, token)
+    auth.set_session_cookie(response, token, request)
     return {"ok": True}
 
 
@@ -902,7 +902,7 @@ async def passkey_login_verify(request: Request, response: Response):
         row.sign_count = verification.new_sign_count
     await auth.touch_last_login(stored.user_id)
     token = await auth.create_session(stored.user_id)
-    auth.set_session_cookie(response, token)
+    auth.set_session_cookie(response, token, request)
     return {"ok": True}
 
 

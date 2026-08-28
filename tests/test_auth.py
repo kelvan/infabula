@@ -55,6 +55,46 @@ class TestRegistration:
         assert user.password_hash.startswith("$2b$")
 
 
+class TestSessionCookie:
+    async def test_marked_secure_over_https(self, user_factory):
+        """Over TLS the session cookie must carry Secure, or a browser
+        will happily replay it over plain HTTP."""
+        import httpx
+
+        import main
+
+        await user_factory()
+        transport = httpx.ASGITransport(app=main.app)
+        async with httpx.AsyncClient(
+            transport=transport, base_url="https://test"
+        ) as tls_client:
+            res = await tls_client.post(
+                "/api/auth/login",
+                json={"email": "a@example.com", "password": "password123"},
+            )
+        assert res.status_code == 200
+        assert "secure" in res.headers["set-cookie"].lower()
+
+    async def test_not_secure_over_plain_http(self, client, user_factory):
+        """...but local dev over http still has to work, so don't set it
+        unconditionally — the browser would drop the cookie entirely."""
+        await user_factory()
+        res = await client.post(
+            "/api/auth/login",
+            json={"email": "a@example.com", "password": "password123"},
+        )
+        assert res.status_code == 200
+        assert "secure" not in res.headers["set-cookie"].lower()
+
+    async def test_always_httponly(self, client, user_factory):
+        await user_factory()
+        res = await client.post(
+            "/api/auth/login",
+            json={"email": "a@example.com", "password": "password123"},
+        )
+        assert "httponly" in res.headers["set-cookie"].lower()
+
+
 class TestLogin:
     async def test_correct_password(self, client, user_factory):
         await user_factory()

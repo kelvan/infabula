@@ -139,12 +139,21 @@ async def delete_auth_records_for_user(user_id: int) -> None:
         )
 
 
-def set_session_cookie(response: Response, token: str) -> None:
+def set_session_cookie(response: Response, token: str, request: Request) -> None:
+    """Hand out the session cookie, marked Secure whenever the request
+    arrived over TLS.
+
+    Tracking the actual scheme rather than hardcoding it keeps plain-HTTP
+    local dev and the tests working, while a real deployment behind TLS
+    always gets the flag — provided uvicorn is started with
+    --proxy-headers so the reverse proxy's scheme is what's read here.
+    """
     response.set_cookie(
         SESSION_COOKIE,
         token,
         max_age=SESSION_TTL_DAYS * 86400,
         httponly=True,
+        secure=request.url.scheme == "https",
         samesite="lax",
         path="/",
     )
