@@ -93,6 +93,15 @@ ENTRY_TS_FMT = "%Y-%m-%dT%H:%MZ"
 # single-household journal has one answer: the household's own zone.
 HOUSEHOLD_TZ = ZoneInfo(os.getenv("TZ") or "UTC")
 
+# Open by default (household deployments have always let anyone who can
+# reach the app sign up); flip off once the app is reachable from the
+# internet and new accounts should only come from an invite.
+REGISTRATION_ENABLED = (os.getenv("REGISTRATION_ENABLED") or "true").lower() not in (
+    "false",
+    "0",
+    "no",
+)
+
 
 def utc_now() -> datetime:
     return datetime.now(timezone.utc)
@@ -374,6 +383,8 @@ async def send_verification_email(email: str, user_id: int) -> None:
 
 @app.post("/api/auth/register", tags=["Auth"])
 async def register(request: Request):
+    if not REGISTRATION_ENABLED:
+        return JSONResponse({"error": "registration is closed"}, status_code=403)
     body = await request.json()
     email = (body.get("email") or "").strip().lower()
     password = body.get("password") or ""

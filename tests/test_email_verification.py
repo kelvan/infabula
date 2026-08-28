@@ -12,6 +12,13 @@ async def register(client, email="new@example.com", password="password123"):
 
 
 class TestRegistration:
+    async def test_closed_registration_is_refused(self, client, monkeypatch):
+        import main
+
+        monkeypatch.setattr(main, "REGISTRATION_ENABLED", False)
+        res = await register(client)
+        assert res.status_code == 403
+
     async def test_account_starts_unverified(self, client):
         await register(client)
         from sqlalchemy import select
