@@ -45,6 +45,7 @@ async def clean_db():
         for table in reversed(Base.metadata.sorted_tables):
             await session.execute(table.delete())
     auth._fails.clear()
+    auth._bans.clear()
     auth._pending.clear()
     yield
 

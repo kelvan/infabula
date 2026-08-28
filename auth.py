@@ -9,6 +9,7 @@ just means the user retries.
 
 import hashlib
 import io
+import ipaddress
 import re
 import secrets
 import time
@@ -231,7 +232,17 @@ MAX_LOGIN_FAILS = 10
 MAX_TOTP_FAILS = 5
 MAX_RESEND_ATTEMPTS = 5
 
+# The per-account limit alone still lets someone spray one stolen password
+# across account after account, ten tries each, indefinitely. Counting
+# failures per source address too catches that, and repeat offenders get a
+# ban that doubles each time rather than a window that just rolls off.
+MAX_IP_FAILS = 20
+BAN_BASE_SECONDS = 900
+BAN_MAX_SECONDS = 86400
+
 _fails: dict[str, list[float]] = {}
+# key -> (ban expires at, how many bans this key has earned)
+_bans: dict[str, tuple[float, int]] = {}
 
 
 def _recent_fails(key: str) -> list[float]:
@@ -254,6 +265,55 @@ def record_fail(key: str) -> None:
 
 def clear_fails(key: str) -> None:
     _fails.pop(key, None)
+
+
+def is_lan_address(ip: str) -> bool:
+    """Whether an address belongs to the household's own network.
+
+    LAN clients are exempt from IP bans: the router NATs hairpinned
+    traffic to a single address, so every device in the house shares one
+    source IP and one person mistyping their password repeatedly would
+    otherwise lock out everybody. The per-account limit still applies to
+    them; the ban is aimed at the internet.
+
+    Anything not publicly routable counts, which is what ``is_private``
+    already means — it spans the RFC1918 ranges, loopback, link-local
+    and the reserved documentation blocks.
+    """
+    try:
+        return ipaddress.ip_address(ip).is_private
+    except ValueError:
+        return False
+
+
+def is_banned(key: str) -> bool:
+    entry = _bans.get(key)
+    if entry is None:
+        return False
+    expires_at, offences = entry
+    if time.time() < expires_at:
+        return True
+    # Ban lapsed, but remember the offence count so a repeat offender is
+    # banned for longer next time rather than starting from scratch.
+    _bans[key] = (0.0, offences)
+    return False
+
+
+def record_ip_fail(ip: str) -> None:
+    """Count a failed credential check, banning the address once it has
+    failed too often. No-op for LAN addresses."""
+    if not ip or is_lan_address(ip):
+        return
+    key = f"ip:{ip}"
+    record_fail(key)
+    if not too_many_fails(key, MAX_IP_FAILS):
+        return
+    offences = _bans.get(key, (0.0, 0))[1] + 1
+    duration = min(BAN_BASE_SECONDS * (2 ** (offences - 1)), BAN_MAX_SECONDS)
+    _bans[key] = (time.time() + duration, offences)
+    # Start the next window clean so the ban, not a stale backlog of
+    # failures, is what gates the address from here on.
+    clear_fails(key)
 
 
 # ── ephemeral ceremony state (pending TOTP logins, WebAuthn challenges) ──

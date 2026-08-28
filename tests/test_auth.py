@@ -1,5 +1,7 @@
 """Login, throttling, TOTP and API tokens."""
 
+import time
+
 import pyotp
 import pytest
 
@@ -93,6 +95,112 @@ class TestSessionCookie:
             json={"email": "a@example.com", "password": "password123"},
         )
         assert "httponly" in res.headers["set-cookie"].lower()
+
+
+class TestIpBan:
+    """The per-account limit alone lets one address spray a password
+    across account after account; these cover the per-IP ban that stops
+    it, and the LAN exemption that keeps it from locking out the house."""
+
+    HEADERS = {"X-Forwarded-For": "8.8.8.8"}
+
+    async def _fail_login(self, client, email="a@example.com", headers=None):
+        return await client.post(
+            "/api/auth/login",
+            json={"email": email, "password": "wrong"},
+            headers=self.HEADERS if headers is None else headers,
+        )
+
+    async def test_spraying_many_accounts_gets_the_ip_banned(
+        self, client, user_factory
+    ):
+        """Each account stays under its own limit, but the address
+        doesn't."""
+        for i in range(auth.MAX_IP_FAILS):
+            await user_factory(email=f"user{i}@example.com")
+            res = await self._fail_login(client, f"user{i}@example.com")
+            assert res.status_code == 401, f"attempt {i} should be a plain refusal"
+
+        await user_factory(email="next@example.com")
+        res = await self._fail_login(client, "next@example.com")
+        assert res.status_code == 429
+
+    async def test_ban_blocks_even_the_correct_password(self, client, user_factory):
+        await user_factory()
+        for i in range(auth.MAX_IP_FAILS):
+            await self._fail_login(client, f"ghost{i}@example.com")
+        res = await client.post(
+            "/api/auth/login",
+            json={"email": "a@example.com", "password": "password123"},
+            headers=self.HEADERS,
+        )
+        assert res.status_code == 429
+
+    async def test_ban_is_scoped_to_the_offending_address(self, client, user_factory):
+        await user_factory()
+        for i in range(auth.MAX_IP_FAILS):
+            await self._fail_login(client, f"ghost{i}@example.com")
+        res = await client.post(
+            "/api/auth/login",
+            json={"email": "a@example.com", "password": "password123"},
+            headers={"X-Forwarded-For": "9.9.9.9"},
+        )
+        assert res.status_code == 200
+
+    async def test_lan_addresses_are_never_banned(self, client, user_factory):
+        """One family member fat-fingering their password must not lock
+        out everyone else — the router NATs them all to one address."""
+        await user_factory()
+        lan = {"X-Forwarded-For": "10.0.1.1"}
+        for i in range(auth.MAX_IP_FAILS + 5):
+            await self._fail_login(client, f"ghost{i}@example.com", headers=lan)
+        res = await client.post(
+            "/api/auth/login",
+            json={"email": "a@example.com", "password": "password123"},
+            headers=lan,
+        )
+        assert res.status_code == 200
+
+    def test_ban_duration_escalates_and_is_capped(self):
+        key = "ip:93.184.216.34"
+        auth._bans.clear()
+        durations = []
+        for _ in range(8):
+            for _ in range(auth.MAX_IP_FAILS):
+                auth.record_ip_fail("93.184.216.34")
+            expires_at, offences = auth._bans[key]
+            durations.append(round(expires_at - time.time()))
+            # Serve out the ban so the next round earns a fresh one.
+            auth._bans[key] = (0.0, offences)
+
+        assert durations[1] > durations[0], "a repeat offender should wait longer"
+        assert max(durations) <= auth.BAN_MAX_SECONDS
+        assert durations[-1] == auth.BAN_MAX_SECONDS, "should settle at the cap"
+
+    async def test_forged_lan_header_does_not_dodge_the_ban(
+        self, client, user_factory
+    ):
+        """A client can send its own X-Forwarded-For and a proxy appends
+        to it, so the leftmost entry is attacker-controlled. Claiming to
+        be on the LAN must not buy an exemption."""
+        await user_factory()
+        forged = {"X-Forwarded-For": "10.0.1.1, 8.8.8.8"}
+        for i in range(auth.MAX_IP_FAILS):
+            await self._fail_login(client, f"ghost{i}@example.com", headers=forged)
+        res = await client.post(
+            "/api/auth/login",
+            json={"email": "a@example.com", "password": "password123"},
+            headers=forged,
+        )
+        assert res.status_code == 429, "should be banned as 8.8.8.8, not exempt"
+
+    def test_unparseable_address_is_not_treated_as_lan(self):
+        assert auth.is_lan_address("not-an-ip") is False
+        assert auth.is_lan_address("") is False
+        assert auth.is_lan_address("10.0.1.1") is True
+        assert auth.is_lan_address("192.168.1.5") is True
+        assert auth.is_lan_address("127.0.0.1") is True
+        assert auth.is_lan_address("8.8.8.8") is False
 
 
 class TestLogin:

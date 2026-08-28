@@ -304,9 +304,20 @@ templates.env.cache = None
 
 
 def get_client_ip(request: Request) -> str:
+    """The address the request actually came from.
+
+    Takes the *last* X-Forwarded-For entry, not the first. A client can
+    send its own X-Forwarded-For and a proxy appends to it rather than
+    replacing it, so the leftmost entry is attacker-controlled — the
+    rightmost is the one the proxy in front of us wrote itself. Caddy is
+    also configured to overwrite the header outright; this is the second
+    lock on that door.
+    """
     forwarded = request.headers.get("X-Forwarded-For")
     if forwarded:
-        return forwarded.split(",")[0].strip()
+        hops = [hop.strip() for hop in forwarded.split(",") if hop.strip()]
+        if hops:
+            return hops[-1]
     return request.client.host if request.client else "unknown"
 
 
@@ -461,14 +472,18 @@ async def login(request: Request, response: Response):
     body = await request.json()
     email = (body.get("email") or "").strip().lower()
     password = body.get("password") or ""
+    client_ip = get_client_ip(request)
     fail_key = f"login:{email}"
-    if auth.too_many_fails(fail_key, auth.MAX_LOGIN_FAILS):
+    if auth.is_banned(f"ip:{client_ip}") or auth.too_many_fails(
+        fail_key, auth.MAX_LOGIN_FAILS
+    ):
         return JSONResponse({"error": "too many attempts, try later"}, status_code=429)
     async with Session() as session:
         user = await session.scalar(select(User).where(User.username == email))
     password_ok = auth.verify_password(password, user.password_hash if user else None)
     if user is None or not password_ok:
         auth.record_fail(fail_key)
+        auth.record_ip_fail(client_ip)
         return JSONResponse({"error": "invalid credentials"}, status_code=401)
     auth.clear_fails(fail_key)
     if user.disabled:
@@ -495,7 +510,10 @@ async def totp_verify_login(request: Request, response: Response):
     # typo can just be retried — which is exactly why the attempt count
     # has to be capped, or the 6-digit code would be brute-forceable for
     # as long as the token lives.
+    client_ip = get_client_ip(request)
     fail_key = f"totp:{pending_token}"
+    if auth.is_banned(f"ip:{client_ip}"):
+        return JSONResponse({"error": "too many attempts, try later"}, status_code=429)
     if auth.too_many_fails(fail_key, auth.MAX_TOTP_FAILS):
         auth.pop_pending(pending_token, "totp_login")
         auth.clear_fails(fail_key)
@@ -508,6 +526,7 @@ async def totp_verify_login(request: Request, response: Response):
         user.totp_secret or "", body.get("code") or ""
     ):
         auth.record_fail(fail_key)
+        auth.record_ip_fail(client_ip)
         return JSONResponse({"error": "invalid code"}, status_code=401)
     auth.pop_pending(pending_token, "totp_login")
     auth.clear_fails(fail_key)
