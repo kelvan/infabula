@@ -360,7 +360,12 @@ async def login_page(request: Request):
     if await auth.get_session_user(request) is not None:
         return RedirectResponse("/")
     return templates.TemplateResponse(
-        "login.html", {"request": request, "v": ASSET_VERSION}
+        "login.html",
+        {
+            "request": request,
+            "v": ASSET_VERSION,
+            "registration_enabled": REGISTRATION_ENABLED,
+        },
     )
 
 

@@ -23,9 +23,14 @@
       <button class="btn" type="submit">Log in</button>
       <button class="btn secondary-btn" type="button" id="passkey-login-btn" style="display:none;">Sign in with a passkey</button>
       <div class="login-switch" id="resend-link-wrap" style="display:none;"><a href="#" id="resend-link">Resend confirmation email</a></div>
+      {% if registration_enabled %}
       <div class="login-switch">No account? <a href="#" id="show-register">Create one</a></div>
+      {% else %}
+      <div class="login-switch">Registration is currently closed.</div>
+      {% endif %}
     </form>
 
+    {% if registration_enabled %}
     <form id="register-form" class="login-step" style="display:none;">
       <div class="field"><label>Email</label><input type="email" id="re-email" autocomplete="username" required></div>
       <div class="field"><label>Password</label><input type="password" id="re-password" autocomplete="new-password" minlength="8" required></div>
@@ -34,6 +39,7 @@
       <button class="btn" type="submit">Create account</button>
       <div class="login-switch">Have an account? <a href="#" id="show-login">Log in</a></div>
     </form>
+    {% endif %}
 
     <div id="verify-sent-step" class="login-step" style="display:none;">
       <div class="field-hint">We sent a confirmation link to <strong id="verify-sent-email"></strong>. Click it to finish creating your account, then log in.</div>

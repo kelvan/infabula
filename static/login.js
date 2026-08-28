@@ -71,8 +71,10 @@ async function postJSON(url, body) {
   return { ok: res.ok, data };
 }
 
-document.getElementById('show-register').onclick = e => { e.preventDefault(); showStep('register-form'); };
-document.getElementById('show-login').onclick = e => { e.preventDefault(); showStep('login-form'); };
+const showRegisterLink = document.getElementById('show-register');
+if (showRegisterLink) showRegisterLink.onclick = e => { e.preventDefault(); showStep('register-form'); };
+const showLoginLink = document.getElementById('show-login');
+if (showLoginLink) showLoginLink.onclick = e => { e.preventDefault(); showStep('login-form'); };
 
 let pendingTotpToken = null;
 
@@ -118,7 +120,8 @@ document.getElementById('resend-link').onclick = async e => {
   document.getElementById('resend-link-wrap').style.display = 'none';
 };
 
-document.getElementById('register-form').onsubmit = async e => {
+const registerForm = document.getElementById('register-form');
+if (registerForm) registerForm.onsubmit = async e => {
   e.preventDefault();
   const email = document.getElementById('re-email').value.trim();
   const password = document.getElementById('re-password').value;
