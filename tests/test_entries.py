@@ -33,10 +33,20 @@ class TestValidation:
 
     async def test_missing_baby_on_update_is_404(self, client, logged_in):
         """An access row pointing at a since-deleted baby — the only way
-        require_access can pass with no matching Baby row."""
-        me = await logged_in()
-        from db import BabyAccess, Session
+        require_access can pass with no matching Baby row.
 
+        SQLite only: it leaves foreign keys unenforced by default, so
+        that orphaned row can exist there. PostgreSQL rejects the insert
+        outright, which makes the state — and this branch — unreachable.
+        """
+        import pytest
+
+        from db import BabyAccess, Session, is_sqlite
+
+        if not is_sqlite():
+            pytest.skip("PostgreSQL enforces the FK, so the row can't exist")
+
+        me = await logged_in()
         async with Session.begin() as session:
             session.add(BabyAccess(user_id=me, baby_id=999999, role="owner"))
         res = await client.put("/api/babies/999999", json={"name": "x"})

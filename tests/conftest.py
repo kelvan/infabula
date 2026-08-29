@@ -19,14 +19,18 @@ sys.path.insert(0, str(ROOT))
 # Must happen before `import main` — it binds the zone and the engine at
 # module scope.
 os.environ["TZ"] = "Europe/Vienna"
+# Defaults to a throwaway SQLite file. Point TEST_DB_URL at a scratch
+# PostgreSQL/MySQL database to run the same suite against that backend —
+# worth doing before a migration, since the app supports all three and
+# only SQLite gets exercised by default.
 _TMP_DB = Path(tempfile.mkdtemp(prefix="infabula-tests-")) / "test.db"
-os.environ["DB_URL"] = f"sqlite:///{_TMP_DB}"
+os.environ["DB_URL"] = os.getenv("TEST_DB_URL") or f"sqlite:///{_TMP_DB}"
 
 import bcrypt  # noqa: E402
 
 import auth  # noqa: E402
 import main  # noqa: E402
-from db import Base, Session  # noqa: E402
+from db import Base, Session, engine  # noqa: E402
 
 # bcrypt's cost is the point in production and pure overhead here — the
 # tests care that hashing round-trips and that wrong passwords fail, not
@@ -41,6 +45,11 @@ bcrypt.gensalt = lambda rounds=4, prefix=b"2b": _real_gensalt(  # ty: ignore[inv
 @pytest.fixture(autouse=True)
 async def clean_db():
     """Empty every table between tests, so order never matters."""
+    # Each test runs in its own event loop, but the pool hands back
+    # connections created on the previous one — which asyncpg refuses to
+    # reuse. Harmless under SQLite and irrelevant in production (one loop
+    # for the process lifetime), but it breaks the suite on PostgreSQL.
+    await engine.dispose()
     async with Session.begin() as session:
         for table in reversed(Base.metadata.sorted_tables):
             await session.execute(table.delete())
