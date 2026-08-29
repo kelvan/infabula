@@ -366,6 +366,13 @@ async def index(request: Request):
     )
 
 
+def registration_allowed(request: Request) -> bool:
+    """Open globally per REGISTRATION_ENABLED, or always for the LAN —
+    closing it to the internet shouldn't stop the household adding a
+    new member from their own wifi."""
+    return REGISTRATION_ENABLED or auth.is_lan_address(get_client_ip(request))
+
+
 @app.get("/login", response_class=HTMLResponse)
 async def login_page(request: Request):
     if await auth.get_session_user(request) is not None:
@@ -375,7 +382,7 @@ async def login_page(request: Request):
         {
             "request": request,
             "v": ASSET_VERSION,
-            "registration_enabled": REGISTRATION_ENABLED,
+            "registration_enabled": registration_allowed(request),
         },
     )
 
@@ -399,7 +406,7 @@ async def send_verification_email(email: str, user_id: int) -> None:
 
 @app.post("/api/auth/register", tags=["Auth"])
 async def register(request: Request):
-    if not REGISTRATION_ENABLED:
+    if not registration_allowed(request):
         return JSONResponse({"error": "registration is closed"}, status_code=403)
     body = await request.json()
     email = (body.get("email") or "").strip().lower()

@@ -12,12 +12,33 @@ async def register(client, email="new@example.com", password="password123"):
 
 
 class TestRegistration:
-    async def test_closed_registration_is_refused(self, client, monkeypatch):
+    async def test_closed_registration_is_refused_from_the_internet(
+        self, client, monkeypatch
+    ):
         import main
 
         monkeypatch.setattr(main, "REGISTRATION_ENABLED", False)
-        res = await register(client)
+        res = await client.post(
+            "/api/auth/register",
+            json={"email": "new@example.com", "password": "password123"},
+            headers={"X-Forwarded-For": "8.8.8.8"},
+        )
         assert res.status_code == 403
+
+    async def test_closed_registration_still_works_from_the_lan(
+        self, client, monkeypatch
+    ):
+        """Closing registration to the internet shouldn't stop the
+        household adding a member from their own wifi."""
+        import main
+
+        monkeypatch.setattr(main, "REGISTRATION_ENABLED", False)
+        res = await client.post(
+            "/api/auth/register",
+            json={"email": "new@example.com", "password": "password123"},
+            headers={"X-Forwarded-For": "10.0.1.55"},
+        )
+        assert res.status_code == 200
 
     async def test_account_starts_unverified(self, client):
         await register(client)
@@ -38,6 +59,27 @@ class TestRegistration:
             json={"email": "new@example.com", "password": "password123"},
         )
         assert res.status_code == 403
+
+
+class TestLoginPageRegistrationState:
+    async def test_shows_the_form_for_lan_even_when_globally_closed(
+        self, client, monkeypatch
+    ):
+        import main
+
+        monkeypatch.setattr(main, "REGISTRATION_ENABLED", False)
+        res = await client.get("/login", headers={"X-Forwarded-For": "10.0.1.55"})
+        assert 'id="register-form"' in res.text
+
+    async def test_hides_the_form_for_the_internet_when_closed(
+        self, client, monkeypatch
+    ):
+        import main
+
+        monkeypatch.setattr(main, "REGISTRATION_ENABLED", False)
+        res = await client.get("/login", headers={"X-Forwarded-For": "8.8.8.8"})
+        assert 'id="register-form"' not in res.text
+        assert "Registration is currently closed" in res.text
 
 
 class TestVerifyLink:
