@@ -10,6 +10,7 @@ from datetime import time as dtime
 from itertools import groupby
 from zoneinfo import ZoneInfo
 
+import jinja2
 from fastapi import FastAPI, Request
 from fastapi.openapi.utils import get_openapi
 from fastapi.responses import (
@@ -299,7 +300,19 @@ class CachedStaticFiles(StaticFiles):
 
 
 app.mount("/static", CachedStaticFiles(directory="static"), name="static")
-templates = Jinja2Templates(directory="templates", auto_reload=True)
+# auto_reload only matters for local dev — templates are baked into the
+# image in production, so nothing ever changes underneath the process.
+# Starlette 1.0 dropped passing Environment options through
+# Jinja2Templates directly; a real Environment is required instead.
+_jinja_env = jinja2.Environment(
+    loader=jinja2.FileSystemLoader("templates"),
+    # Matches what Jinja2Templates(directory=...) used to set up on its
+    # own — extension-based, not a blanket True, so anything that isn't
+    # .html/.xml wouldn't get escaped when it shouldn't be.
+    autoescape=jinja2.select_autoescape(),
+    auto_reload=True,
+)
+templates = Jinja2Templates(env=_jinja_env)
 templates.env.cache = None
 
 
@@ -362,7 +375,7 @@ async def auth_gate(request: Request, call_next):
 @app.get("/", response_class=HTMLResponse)
 async def index(request: Request):
     return templates.TemplateResponse(
-        "index.html", {"request": request, "v": ASSET_VERSION}
+        request, "index.html", {"v": ASSET_VERSION}
     )
 
 
@@ -378,9 +391,9 @@ async def login_page(request: Request):
     if await auth.get_session_user(request) is not None:
         return RedirectResponse("/")
     return templates.TemplateResponse(
+        request,
         "login.html",
         {
-            "request": request,
             "v": ASSET_VERSION,
             "registration_enabled": registration_allowed(request),
         },
@@ -1456,7 +1469,7 @@ async def report(
     entries, start, end = await fetch_entries_range(start, end, baby_id)
     data = build_report(entries, start, end)
     return templates.TemplateResponse(
-        "report.html", {"request": request, "v": ASSET_VERSION, **data}
+        request, "report.html", {"v": ASSET_VERSION, **data}
     )
 
 
