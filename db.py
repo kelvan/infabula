@@ -13,6 +13,7 @@ Sync-style URLs are rewritten to their async driver automatically. The legacy
 
 import os
 from datetime import datetime, timezone
+from urllib.parse import quote, urlsplit, urlunsplit
 
 from sqlalchemy import JSON, Boolean, ForeignKey, Integer, String, Text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
@@ -46,9 +47,39 @@ def sync_url(url: str) -> str:
     return f"{scheme.partition('+')[0]}://{rest}"
 
 
+def with_password(url: str, password: str) -> str:
+    """Put a separately-supplied password into a URL's userinfo.
+
+    Lets the password arrive as its own value — a podman/docker secret,
+    say — instead of being written into DB_URL in plaintext wherever the
+    container is configured. A password already in the URL wins, so this
+    can't silently override an explicit one.
+    """
+    parsed = urlsplit(url)
+    if not parsed.hostname or parsed.password is not None:
+        return url
+    userinfo = quote(parsed.username or "", safe="")
+    userinfo += ":" + quote(password, safe="")
+    host = parsed.hostname
+    if parsed.port:
+        host += f":{parsed.port}"
+    return urlunsplit(
+        (
+            parsed.scheme,
+            f"{userinfo}@{host}",
+            parsed.path,
+            parsed.query,
+            parsed.fragment,
+        )
+    )
+
+
 def database_url() -> str:
     url = os.getenv("DB_URL")
     if url:
+        password = os.getenv("DB_PASSWORD")
+        if password:
+            url = with_password(url, password)
         return normalize_url(url)
     return f"sqlite+aiosqlite:///{os.getenv('DB_PATH', 'infabula.db')}"
 
