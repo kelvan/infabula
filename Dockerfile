@@ -3,6 +3,10 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 # Entries are stored as UTC instants; TZ picks which local day and clock
 # time they're grouped/shown as. Override with -e TZ=... .
 ENV TZ=Europe/Vienna
+# Without this, stdout is block-buffered once it's a pipe rather than a
+# tty, so log output (errors included) can sit unflushed indefinitely
+# instead of reaching `podman logs`/journald.
+ENV PYTHONUNBUFFERED=1
 WORKDIR /app
 COPY pyproject.toml uv.lock ./
 RUN uv sync --frozen --no-dev --extra postgres

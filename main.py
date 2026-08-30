@@ -2,6 +2,7 @@ import asyncio
 import csv
 import io
 import json
+import logging
 import os
 import sqlite3
 import time
@@ -53,6 +54,8 @@ from db import (
     sqlite_file,
 )
 from migrate import run_migrations
+
+logger = logging.getLogger(__name__)
 
 app = FastAPI(
     title="infabula API",
@@ -947,6 +950,7 @@ async def passkey_login_verify(request: Request, response: Response):
             credential_current_sign_count=stored.sign_count,
         )
     except Exception:
+        logger.exception("passkey login verification failed")
         return JSONResponse({"error": "verification failed"}, status_code=401)
     async with Session() as session:
         owner = await session.get(User, stored.user_id)
