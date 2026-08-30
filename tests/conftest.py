@@ -23,8 +23,11 @@ os.environ["TZ"] = "Europe/Vienna"
 # PostgreSQL/MySQL database to run the same suite against that backend —
 # worth doing before a migration, since the app supports all three and
 # only SQLite gets exercised by default.
-_TMP_DB = Path(tempfile.mkdtemp(prefix="infabula-tests-")) / "test.db"
+_TMP_DIR = Path(tempfile.mkdtemp(prefix="infabula-tests-"))
+_TMP_DB = _TMP_DIR / "test.db"
 os.environ["DB_URL"] = os.getenv("TEST_DB_URL") or f"sqlite:///{_TMP_DB}"
+# Avatar uploads land here instead of a real `data/` in the repo checkout.
+os.environ["DATA_DIR"] = str(_TMP_DIR / "data")
 
 import bcrypt  # noqa: E402
 

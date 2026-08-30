@@ -50,7 +50,8 @@ const I18N = {
     baby_fallback:'Baby', btn_add_baby:'Baby hinzufügen', btn_delete:'Löschen',
     confirm_delete_baby:'Dieses Baby und alle seine Einträge unwiderruflich löschen?',
     confirm_remove_access:'Zugriff für diese Person entfernen?',
-    toast_no_name:'Bitte Namen angeben',
+    toast_no_name:'Bitte Namen angeben', toast_not_an_image:'Bitte ein Bild auswählen',
+    btn_remove_photo:'Foto entfernen',
     settings_security_title:'Sicherheit', btn_logout:'Abmelden', lbl_display_name:'Anzeigename',
     member_since:'Dabei seit', last_login:'Letzte Anmeldung',
     settings_totp_title:'Zwei-Faktor-Authentifizierung (TOTP)',
@@ -138,7 +139,8 @@ const I18N = {
     baby_fallback:'Baby', btn_add_baby:'Add baby', btn_delete:'Delete',
     confirm_delete_baby:'Permanently delete this baby and all its entries?',
     confirm_remove_access:'Remove this person\'s access?',
-    toast_no_name:'Please enter a name',
+    toast_no_name:'Please enter a name', toast_not_an_image:'Please choose an image',
+    btn_remove_photo:'Remove photo',
     settings_security_title:'Security', btn_logout:'Log out', lbl_display_name:'Display name',
     member_since:'Member since', last_login:'Last login',
     settings_totp_title:'Two-factor authentication (TOTP)',
@@ -453,6 +455,18 @@ let baby = { name: '', birthday: '' };
 // ── Settings tabs ──
 let settingsTab = localStorage.getItem('settingsTab') || 'baby';
 let settingsMe = {};
+// Bumped after this account's own avatar changes, so the freshly uploaded
+// or removed photo shows immediately instead of behind the avatar
+// endpoint's 5-minute Cache-Control.
+let avatarCacheBust = Date.now();
+
+function avatarHtml(userId, hasAvatar, initialsSource, sizeClass) {
+  const cls = 'avatar-circle' + (sizeClass ? ' ' + sizeClass : '');
+  if (hasAvatar) {
+    return `<img class="${cls}" src="/api/users/${userId}/avatar?v=${avatarCacheBust}" alt="">`;
+  }
+  return `<div class="${cls}">${esc((initialsSource || '?').charAt(0).toUpperCase())}</div>`;
+}
 let settingsPasskeys = [];
 let settingsTokens = [];
 
@@ -1472,12 +1486,17 @@ function renderAccountTab() {
     <div class="settings-card">
       <div class="settings-card-title">${t('lbl_profile')}</div>
       <div style="display:flex;gap:12px;align-items:flex-end;margin-bottom:14px;">
-        <div class="avatar-circle">${esc((me.name || '?').charAt(0).toUpperCase())}</div>
+        <div class="avatar-upload" onclick="document.getElementById('avatar-file-input').click()">
+          ${avatarHtml(me.id, me.has_avatar, me.name)}
+          <div class="avatar-edit-badge"><svg viewBox="0 0 24 24"><path d="M4 8a2 2 0 0 1 2-2h1.2l.9-1.5A1.6 1.6 0 0 1 9.5 3.7h5a1.6 1.6 0 0 1 1.4.8L16.8 6H18a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2Z"/><circle cx="12" cy="13" r="3.4"/></svg></div>
+        </div>
+        <input type="file" id="avatar-file-input" accept="image/jpeg,image/png,image/webp,image/gif" style="display:none;" onchange="uploadAvatar(event)">
         <div class="field" style="flex:1;margin-bottom:0;"><label>${t('lbl_display_name')}</label>
           <input type="text" id="display-name-input" value="${esc(me.name || '')}" placeholder="${t('lbl_display_name')}">
         </div>
       </div>
       <div class="baby-actions" style="margin-bottom:0;">
+        ${me.has_avatar ? `<button class="btn-small secondary" onclick="removeAvatar()">${t('btn_remove_photo')}</button>` : ''}
         <button class="btn-small" onclick="saveDisplayName()">${t('btn_save')}</button>
       </div>
       <div class="security-row" style="border-top:1px dashed var(--border);padding-top:14px;margin-top:2px;">
@@ -1567,6 +1586,28 @@ async function saveDisplayName() {
   } else {
     toast(t('toast_error'));
   }
+}
+
+async function uploadAvatar(event) {
+  const file = event.target.files[0];
+  event.target.value = '';
+  if (!file) return;
+  if (!file.type.startsWith('image/')) { toast(t('toast_not_an_image')); return; }
+  const body = new FormData();
+  body.append('file', file);
+  const res = await fetch('/api/auth/me/avatar', { method: 'POST', body });
+  if (!res.ok) { await toastError(res); return; }
+  avatarCacheBust = Date.now();
+  toast(t('toast_saved'));
+  loadSettings();
+}
+
+async function removeAvatar() {
+  const res = await fetch('/api/auth/me/avatar', { method: 'DELETE' });
+  if (!res.ok) { await toastError(res); return; }
+  avatarCacheBust = Date.now();
+  toast(t('toast_deleted'));
+  loadSettings();
 }
 
 async function doLogout() {
@@ -1827,7 +1868,7 @@ async function loadBabyAccess(babyId) {
     ${members.map(m => `
       <div class="security-row">
         <div style="display:flex;align-items:center;gap:9px;">
-          <div class="avatar-circle sm">${esc(m.email.charAt(0).toUpperCase())}</div>
+          ${avatarHtml(m.user_id, m.has_avatar, m.email, 'sm')}
           <div><div class="s-name">${esc(m.email)}</div></div>
         </div>
         <div style="display:flex;align-items:center;gap:8px;">

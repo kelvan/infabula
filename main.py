@@ -12,7 +12,7 @@ from itertools import groupby
 from zoneinfo import ZoneInfo
 
 import jinja2
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, UploadFile
 from fastapi.openapi.utils import get_openapi
 from fastapi.responses import (
     FileResponse,
@@ -24,6 +24,7 @@ from fastapi.responses import (
 )
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from PIL import Image, ImageOps
 from sqlalchemy import delete, func, select, update
 from sqlalchemy import false as sa_false
 from sqlalchemy.exc import IntegrityError
@@ -106,6 +107,18 @@ REGISTRATION_ENABLED = (os.getenv("REGISTRATION_ENABLED") or "true").lower() not
     "0",
     "no",
 )
+
+# Backed by the same volume the SQLite-era DB file used to live on — kept
+# around after the Postgres migration specifically for uploads like this.
+DATA_DIR = os.getenv("DATA_DIR", "data")
+AVATAR_DIR = os.path.join(DATA_DIR, "avatars")
+AVATAR_SIZE = 256
+AVATAR_MAX_UPLOAD_BYTES = 8 * 1024 * 1024
+os.makedirs(AVATAR_DIR, exist_ok=True)
+
+
+def avatar_path(user_id: int) -> str:
+    return os.path.join(AVATAR_DIR, f"{user_id}.webp")
 
 
 def utc_now() -> datetime:
@@ -244,6 +257,32 @@ def require_admin(request: Request) -> JSONResponse | None:
     if not request.state.user.is_admin:
         return JSONResponse({"error": "forbidden"}, status_code=403)
     return None
+
+
+async def shares_a_baby_with(viewer_id: int, target_id: int) -> bool:
+    """Whether two accounts have overlapping access to at least one baby.
+
+    Gates avatar viewing: a household member's photo shouldn't be fetchable
+    by user id alone from an unrelated account on the same server.
+    """
+    if viewer_id == target_id:
+        return True
+    async with Session() as session:
+        mine = set(
+            (
+                await session.scalars(
+                    select(BabyAccess.baby_id).where(BabyAccess.user_id == viewer_id)
+                )
+            ).all()
+        )
+        if not mine:
+            return False
+        theirs = await session.scalar(
+            select(func.count())
+            .select_from(BabyAccess)
+            .where(BabyAccess.user_id == target_id, BabyAccess.baby_id.in_(mine))
+        )
+    return bool(theirs)
 
 # ── SSE pub-sub ──
 subscribers: set[asyncio.Queue] = set()
@@ -436,6 +475,7 @@ def user_to_dict(user: User) -> dict:
         "created_at": user.created_at,
         "last_login_at": user.last_login_at,
         "quick_actions": user.quick_actions,
+        "has_avatar": os.path.exists(avatar_path(user.id)),
     }
 
 
@@ -623,6 +663,57 @@ async def update_quick_actions(request: Request):
         assert user is not None
         user.quick_actions = actions[:5]
     return {"ok": True}
+
+
+@app.post("/api/auth/me/avatar", tags=["Auth"])
+async def upload_avatar(request: Request, file: UploadFile):
+    data = await file.read(AVATAR_MAX_UPLOAD_BYTES + 1)
+    if len(data) > AVATAR_MAX_UPLOAD_BYTES:
+        return JSONResponse({"error": "image too large"}, status_code=400)
+    try:
+        img = Image.open(io.BytesIO(data))
+        # Format is read from the header alone; check it before the
+        # decode below, which is where an exotic/rarely-fuzzed format's
+        # decoder would actually run on attacker-controlled bytes.
+        if img.format not in ("JPEG", "PNG", "WEBP", "GIF"):
+            return JSONResponse({"error": "unsupported image format"}, status_code=400)
+        img.load()
+    except Exception:
+        return JSONResponse({"error": "not a valid image"}, status_code=400)
+    img = ImageOps.exif_transpose(img) or img
+    if img.mode not in ("RGB", "RGBA"):
+        img = img.convert("RGBA" if "transparency" in img.info else "RGB")
+    if img.mode == "RGBA":
+        background = Image.new("RGB", img.size, (255, 255, 255))
+        background.paste(img, mask=img.getchannel("A"))
+        img = background
+    img = ImageOps.fit(img, (AVATAR_SIZE, AVATAR_SIZE), Image.Resampling.LANCZOS)
+    dest = avatar_path(request.state.user.id)
+    tmp = dest + ".tmp"
+    img.save(tmp, "WEBP", quality=85)
+    os.replace(tmp, dest)
+    return {"ok": True}
+
+
+@app.delete("/api/auth/me/avatar", tags=["Auth"])
+async def delete_avatar(request: Request):
+    try:
+        os.remove(avatar_path(request.state.user.id))
+    except FileNotFoundError:
+        pass
+    return {"ok": True}
+
+
+@app.get("/api/users/{user_id}/avatar", tags=["Auth"])
+async def get_avatar(user_id: int, request: Request):
+    if not await shares_a_baby_with(request.state.user.id, user_id):
+        return JSONResponse({"error": "forbidden"}, status_code=403)
+    path = avatar_path(user_id)
+    if not os.path.exists(path):
+        return JSONResponse({"error": "no avatar"}, status_code=404)
+    return FileResponse(
+        path, media_type="image/webp", headers={"Cache-Control": "private, max-age=300"}
+    )
 
 
 @app.delete("/api/auth/me", tags=["Auth"])
@@ -1204,7 +1295,15 @@ async def list_baby_access(baby_id: int, request: Request):
                 .order_by(User.username)
             )
         ).all()
-    return [{"user_id": r[0], "role": r[1], "email": r[2]} for r in rows]
+    return [
+        {
+            "user_id": r[0],
+            "role": r[1],
+            "email": r[2],
+            "has_avatar": os.path.exists(avatar_path(r[0])),
+        }
+        for r in rows
+    ]
 
 
 @app.post("/api/babies/{baby_id}/access", tags=["Baby access"])
