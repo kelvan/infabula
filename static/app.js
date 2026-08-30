@@ -2311,3 +2311,8 @@ window.addEventListener('resize', () => {
 setInterval(() => {
   if (logView === 'timeline' && document.getElementById('tab-log').classList.contains('active')) renderTimeline();
 }, 60000);
+
+// PWA install eligibility on Android needs an active service worker.
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("/sw.js");
+}

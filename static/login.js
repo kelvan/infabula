@@ -184,3 +184,8 @@ document.getElementById('passkey-login-btn').onclick = async () => {
     showError(err.message || 'Passkey sign-in failed');
   }
 };
+
+// PWA install eligibility on Android needs an active service worker.
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("/sw.js");
+}

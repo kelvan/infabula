@@ -14,6 +14,7 @@ import jinja2
 from fastapi import FastAPI, Request
 from fastapi.openapi.utils import get_openapi
 from fastapi.responses import (
+    FileResponse,
     HTMLResponse,
     JSONResponse,
     RedirectResponse,
@@ -300,6 +301,22 @@ class CachedStaticFiles(StaticFiles):
 
 
 app.mount("/static", CachedStaticFiles(directory="static"), name="static")
+
+
+@app.get("/sw.js", tags=["PWA"], include_in_schema=False)
+async def service_worker():
+    """Served from the root, not /static/: a service worker's default
+    scope is the directory it's fetched from, and it has to cover the
+    whole app to satisfy Chrome's install-eligibility check — /static/
+    would only ever let it control static assets. Also deliberately
+    uncached, unlike everything under /static/, so a future change to
+    this file isn't stuck behind a year-long immutable cache.
+    """
+    return FileResponse(
+        "sw.js",
+        media_type="text/javascript",
+        headers={"Cache-Control": "no-cache"},
+    )
 # auto_reload only matters for local dev — templates are baked into the
 # image in production, so nothing ever changes underneath the process.
 # Starlette 1.0 dropped passing Environment options through
@@ -348,6 +365,7 @@ def row_to_dict(entry: Entry) -> dict:
 PUBLIC_PREFIXES = ("/static/",)
 PUBLIC_PATHS = (
     "/login",
+    "/sw.js",
     "/api/auth/register",
     "/api/auth/login",
     "/api/auth/totp/verify",
