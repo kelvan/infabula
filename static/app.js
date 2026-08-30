@@ -44,6 +44,9 @@ const I18N = {
     settings_quick_title:'Schnellzugriff (max. 5)', quick_max_toast:'Maximal 5 Schnellzugriffe',
     settings_baby_title:'Babys', lbl_current_baby:'Aktuell ausgewählt',
     settings_tab_baby:'Baby', settings_tab_quicklog:'Quick-Log', settings_tab_account:'Account',
+    settings_tab_admin:'Admin', lbl_admin_users:'Benutzer', lbl_admin_babies:'Babys (alle)',
+    lbl_admin_badge:'Admin', lbl_disabled_badge:'Deaktiviert', lbl_none:'Keine',
+    lbl_owners:'Besitzer', loading:'Lädt…',
     lbl_baby_name:'Name', lbl_birthday:'Geburtstag', baby_name_placeholder:'Name des Babys',
     lbl_nap_threshold:'Schlafschwelle', lbl_minutes:'Minuten',
     nap_threshold_hint:'Schlafeinträge unter diesem Wert zählen als Nickerchen, längere als Nachtschlaf. Bei Neugeborenen niedriger ansetzen, mit dem Alter erhöhen.',
@@ -135,6 +138,9 @@ const I18N = {
     settings_quick_title:'Quick actions (max 5)', quick_max_toast:'Max 5 quick actions',
     settings_baby_title:'Babies', lbl_current_baby:'Currently selected',
     settings_tab_baby:'Baby', settings_tab_quicklog:'Quick-Log', settings_tab_account:'Account',
+    settings_tab_admin:'Admin', lbl_admin_users:'Users', lbl_admin_babies:'Babies (all)',
+    lbl_admin_badge:'Admin', lbl_disabled_badge:'Disabled', lbl_none:'None',
+    lbl_owners:'Owners', loading:'Loading…',
     lbl_baby_name:'Name', lbl_birthday:'Birthday', baby_name_placeholder:"Baby's name",
     lbl_nap_threshold:'Nap threshold', lbl_minutes:'minutes',
     nap_threshold_hint:'Sleep entries shorter than this count as a nap in stats; longer ones count as night sleep. Lower this for a newborn, raise it as naps consolidate.',
@@ -1391,6 +1397,7 @@ function renderSettingsTabs() {
     ['quicklog', t('settings_tab_quicklog')],
     ['account', t('settings_tab_account')],
   ];
+  if (settingsMe.is_admin) tabs.push(['admin', t('settings_tab_admin')]);
   el.innerHTML = tabs.map(([key, label]) =>
     `<button class="settings-tab${settingsTab === key ? ' active' : ''}" onclick="switchSettingsTab('${key}')">${esc(label)}</button>`
   ).join('');
@@ -1399,7 +1406,56 @@ function renderSettingsTabs() {
 function renderSettingsTab() {
   if (settingsTab === 'quicklog') renderQuickLogTab();
   else if (settingsTab === 'account') renderAccountTab();
+  else if (settingsTab === 'admin' && settingsMe.is_admin) loadAdminTab();
   else renderBabyTab();
+}
+
+// ── Admin ──
+async function loadAdminTab() {
+  const el = document.getElementById('settings-tab-content');
+  el.innerHTML = `<div class="empty">${t('loading')}</div>`;
+  const [usersRes, babiesRes] = await Promise.all([
+    fetch('/api/admin/users'),
+    fetch('/api/admin/babies'),
+  ]);
+  if (!usersRes.ok || !babiesRes.ok) { el.innerHTML = `<div class="empty">${t('toast_error')}</div>`; return; }
+  renderAdminTab(await usersRes.json(), await babiesRes.json());
+}
+
+function renderAdminTab(users, babies) {
+  const el = document.getElementById('settings-tab-content');
+  el.innerHTML = `
+    <div class="settings-card">
+      <div class="settings-card-title">${t('lbl_admin_users')}</div>
+      ${users.map(u => `
+        <div class="security-row">
+          <div>
+            <div class="s-name">${esc(u.email)}${u.is_admin ? ` <span class="badge-role owner">${t('lbl_admin_badge')}</span>` : ''}${u.disabled ? ` <span class="badge-role viewer">${t('lbl_disabled_badge')}</span>` : ''}</div>
+            <div class="s-sub">${esc(u.name)} · ${t('member_since')} ${esc((u.created_at || '').slice(0, 10))}</div>
+          </div>
+          ${u.id === settingsMe.id ? '' : `<button class="btn-small secondary" onclick="adminSetUserDisabled(${u.id}, ${!u.disabled})">${u.disabled ? t('btn_enable') : t('btn_disable')}</button>`}
+        </div>
+      `).join('') || `<div class="empty">${t('lbl_none')}</div>`}
+    </div>
+    <div class="settings-card">
+      <div class="settings-card-title">${t('lbl_admin_babies')}</div>
+      ${babies.map(b => `
+        <div class="security-row">
+          <div>
+            <div class="s-name">${esc(b.name)}</div>
+            <div class="s-sub">${esc(b.birthday || '')} · ${t('lbl_owners')}: ${esc(b.owners.join(', ') || '—')}</div>
+          </div>
+        </div>
+      `).join('') || `<div class="empty">${t('lbl_none')}</div>`}
+    </div>
+  `;
+}
+
+async function adminSetUserDisabled(userId, disable) {
+  const res = await fetch(`/api/admin/users/${userId}/${disable ? 'disable' : 'enable'}`, { method: 'POST' });
+  if (!res.ok) { await toastError(res); return; }
+  toast(t('toast_saved'));
+  loadAdminTab();
 }
 
 function renderBabyTab() {

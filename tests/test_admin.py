@@ -15,6 +15,10 @@ class TestGate:
         res = await client.post(f"/api/admin/users/{other}/disable")
         assert res.status_code == 403
 
+    async def test_non_admin_cannot_list_babies(self, client, logged_in):
+        await logged_in()
+        assert (await client.get("/api/admin/babies")).status_code == 403
+
 
 class TestAdmin:
     async def test_can_list_users(self, client, logged_in, user_factory):
@@ -54,3 +58,15 @@ class TestAdmin:
         await logged_in(is_admin=True)
         res = await client.post("/api/admin/users/999999/disable")
         assert res.status_code == 404
+
+    async def test_can_list_babies_with_owners_across_all_accounts(
+        self, client, logged_in, user_factory, baby_factory
+    ):
+        admin = await logged_in(is_admin=True)
+        other = await user_factory(email="other@example.com")
+        await baby_factory(admin, name="Admin's baby")
+        await baby_factory(other, name="Other's baby")
+        rows = (await client.get("/api/admin/babies")).json()
+        by_name = {r["name"]: r for r in rows}
+        assert by_name["Admin's baby"]["owners"] == ["a@example.com"]
+        assert by_name["Other's baby"]["owners"] == ["other@example.com"]

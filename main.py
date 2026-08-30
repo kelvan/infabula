@@ -861,6 +861,33 @@ async def admin_enable_user(user_id: int, request: Request):
     return {"ok": True}
 
 
+@app.get("/api/admin/babies", tags=["Admin"])
+async def admin_list_babies(request: Request):
+    if (denied := require_admin(request)) is not None:
+        return denied
+    async with Session() as session:
+        babies = (await session.scalars(select(Baby).order_by(Baby.id))).all()
+        result = []
+        for baby in babies:
+            owners = (
+                await session.scalars(
+                    select(User.username)
+                    .join(BabyAccess, BabyAccess.user_id == User.id)
+                    .where(BabyAccess.baby_id == baby.id, BabyAccess.role == ROLE_OWNER)
+                )
+            ).all()
+            result.append(
+                {
+                    "id": baby.id,
+                    "name": baby.name,
+                    "birthday": baby.birthday or "",
+                    "created_at": baby.created_at,
+                    "owners": list(owners),
+                }
+            )
+    return result
+
+
 @app.get("/api/auth/tokens", tags=["API tokens"], summary="List your API tokens")
 async def list_tokens(request: Request):
     """Personal access tokens for this account. The raw token itself is
