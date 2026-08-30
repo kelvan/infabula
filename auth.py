@@ -25,6 +25,7 @@ from sqlalchemy import delete, select
 from db import (
     ApiToken,
     EmailVerification,
+    Invite,
     Session,
     User,
     UserSession,
@@ -36,6 +37,8 @@ SESSION_TTL_DAYS = 30
 PENDING_TTL_SECONDS = 300
 API_TOKEN_PREFIX = "ib_"
 EMAIL_VERIFY_TTL_HOURS = 24
+INVITE_TOKEN_PREFIX = "inv_"
+INVITE_TTL_HOURS = 24 * 7
 
 EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
@@ -221,6 +224,55 @@ async def get_api_token_user(raw_token: str) -> User | None:
     if user is not None and user.disabled:
         return None
     return user
+
+
+# ── invites ──
+async def create_invite(created_by: int, email: str | None) -> str:
+    """Returns the raw token — shown once, in the response, like an API
+    token; only its hash is kept."""
+    raw_token = INVITE_TOKEN_PREFIX + secrets.token_urlsafe(32)
+    expires_at = (
+        datetime.now(timezone.utc) + timedelta(hours=INVITE_TTL_HOURS)
+    ).strftime("%Y-%m-%d %H:%M:%S")
+    async with Session.begin() as session:
+        session.add(
+            Invite(
+                token_hash=hash_token(raw_token),
+                prefix=raw_token[: len(INVITE_TOKEN_PREFIX) + 8],
+                email=email,
+                created_by=created_by,
+                expires_at=expires_at,
+            )
+        )
+    return raw_token
+
+
+async def invite_is_valid(token: str, email: str) -> bool:
+    """Read-only check, ahead of creating the account — a failed
+    registration shouldn't burn a still-good invite."""
+    if not token:
+        return False
+    async with Session() as session:
+        row = await session.scalar(
+            select(Invite).where(Invite.token_hash == hash_token(token))
+        )
+    if row is None or row.used_at is not None or row.expires_at < now_str():
+        return False
+    return not row.email or row.email == email
+
+
+async def consume_invite(token: str, user_id: int) -> None:
+    """Marks the invite used once the account it was for actually got
+    created. A tiny window exists between invite_is_valid and this where
+    the same token could theoretically be redeemed twice — a real
+    concern for a public signup flow, not for one household's invites."""
+    async with Session.begin() as session:
+        row = await session.scalar(
+            select(Invite).where(Invite.token_hash == hash_token(token))
+        )
+        if row is not None:
+            row.used_at = now_str()
+            row.used_by = user_id
 
 
 # ── failed-attempt throttling ──

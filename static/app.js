@@ -47,6 +47,12 @@ const I18N = {
     settings_tab_admin:'Admin', lbl_admin_users:'Benutzer', lbl_admin_babies:'Babys (alle)',
     lbl_admin_badge:'Admin', lbl_disabled_badge:'Deaktiviert', lbl_none:'Keine',
     lbl_owners:'Besitzer', loading:'Lädt…',
+    lbl_admin_invites:'Einladungen', btn_create_invite:'Einladung erstellen',
+    lbl_invite_email_optional:'E-Mail (optional)',
+    lbl_invite_hint:'Ohne E-Mail funktioniert der Link für jeden, der ihn zuerst einlöst. Mit E-Mail nur für diese Adresse.',
+    lbl_invite_anyone:'Jeder mit dem Link', lbl_invite_used:'Eingelöst',
+    lbl_invite_expires:'Läuft ab', btn_revoke:'Widerrufen',
+    lbl_invite_link_ready:'Link (einmal angezeigt)',
     lbl_admin_totp_required_title:'Zwei-Faktor-Authentifizierung erforderlich',
     lbl_admin_totp_required_body:'Der Admin-Bereich erfordert TOTP auf diesem Konto — ein Passwort allein genügt für den Zugriff auf die Daten aller Haushaltsmitglieder nicht. Unter Account einrichten.',
     lbl_baby_name:'Name', lbl_birthday:'Geburtstag', baby_name_placeholder:'Name des Babys',
@@ -144,6 +150,12 @@ const I18N = {
     settings_tab_admin:'Admin', lbl_admin_users:'Users', lbl_admin_babies:'Babies (all)',
     lbl_admin_badge:'Admin', lbl_disabled_badge:'Disabled', lbl_none:'None',
     lbl_owners:'Owners', loading:'Loading…',
+    lbl_admin_invites:'Invites', btn_create_invite:'Create invite',
+    lbl_invite_email_optional:'Email (optional)',
+    lbl_invite_hint:"Without an email the link works for whoever redeems it first. With one, only that address can use it.",
+    lbl_invite_anyone:'Anyone with the link', lbl_invite_used:'Used',
+    lbl_invite_expires:'Expires', btn_revoke:'Revoke',
+    lbl_invite_link_ready:'Link (shown once)',
     lbl_admin_totp_required_title:'Two-factor authentication required',
     lbl_admin_totp_required_body:"The admin area requires TOTP on this account — a password alone isn't enough to reach every household member's data. Set it up under Account.",
     lbl_baby_name:'Name', lbl_birthday:'Birthday', baby_name_placeholder:"Baby's name",
@@ -1432,17 +1444,39 @@ function renderAdminTotpRequired() {
 async function loadAdminTab() {
   const el = document.getElementById('settings-tab-content');
   el.innerHTML = `<div class="empty">${t('loading')}</div>`;
-  const [usersRes, babiesRes] = await Promise.all([
+  const [usersRes, babiesRes, invitesRes] = await Promise.all([
     fetch('/api/admin/users'),
     fetch('/api/admin/babies'),
+    fetch('/api/admin/invites'),
   ]);
-  if (!usersRes.ok || !babiesRes.ok) { el.innerHTML = `<div class="empty">${t('toast_error')}</div>`; return; }
-  renderAdminTab(await usersRes.json(), await babiesRes.json());
+  if (!usersRes.ok || !babiesRes.ok || !invitesRes.ok) { el.innerHTML = `<div class="empty">${t('toast_error')}</div>`; return; }
+  renderAdminTab(await usersRes.json(), await babiesRes.json(), await invitesRes.json());
 }
 
-function renderAdminTab(users, babies) {
+function renderAdminTab(users, babies, invites) {
   const el = document.getElementById('settings-tab-content');
   el.innerHTML = `
+    <div class="settings-card">
+      <div class="settings-card-title">${t('lbl_admin_invites')}</div>
+      <div style="font-size:0.78rem;color:var(--ink2);margin-bottom:14px;line-height:1.4;">${t('lbl_invite_hint')}</div>
+      <div class="field"><label>${t('lbl_invite_email_optional')}</label>
+        <input type="email" id="new-invite-email" placeholder="name@example.com">
+      </div>
+      <div class="baby-actions" style="margin-bottom:0;">
+        <button class="btn-small" onclick="adminCreateInvite()">${t('btn_create_invite')}</button>
+      </div>
+      <div id="new-invite-result"></div>
+      ${invites.length ? '<div style="margin-top:14px;padding-top:14px;border-top:1px dashed var(--border);"></div>' : ''}
+      ${invites.map(i => `
+        <div class="security-row">
+          <div>
+            <div class="s-name">${esc(i.email || t('lbl_invite_anyone'))}</div>
+            <div class="s-sub">${i.used_at ? `${t('lbl_invite_used')} ${esc(i.used_at.slice(0, 10))}` : `${t('lbl_invite_expires')} ${esc(i.expires_at.slice(0, 10))}`}</div>
+          </div>
+          ${i.used_at ? `<span class="badge-role viewer">${t('lbl_invite_used')}</span>` : `<button class="btn-small secondary" onclick="adminRevokeInvite(${i.id})">${t('btn_revoke')}</button>`}
+        </div>
+      `).join('') || `<div class="empty">${t('lbl_none')}</div>`}
+    </div>
     <div class="settings-card">
       <div class="settings-card-title">${t('lbl_admin_users')}</div>
       ${users.map(u => `
@@ -1473,6 +1507,31 @@ async function adminSetUserDisabled(userId, disable) {
   const res = await fetch(`/api/admin/users/${userId}/${disable ? 'disable' : 'enable'}`, { method: 'POST' });
   if (!res.ok) { await toastError(res); return; }
   toast(t('toast_saved'));
+  loadAdminTab();
+}
+
+async function adminCreateInvite() {
+  const email = document.getElementById('new-invite-email').value.trim();
+  const res = await fetch('/api/admin/invites', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) { toast(data.error || t('toast_error')); return; }
+  document.getElementById('new-invite-result').innerHTML = `
+    <div class="field" style="margin-top:10px;">
+      <label>${t('lbl_invite_link_ready')}</label>
+      <input type="text" readonly value="${esc(data.link)}" onclick="this.select()">
+    </div>
+  `;
+  document.getElementById('new-invite-email').value = '';
+}
+
+async function adminRevokeInvite(id) {
+  const res = await fetch(`/api/admin/invites/${id}`, { method: 'DELETE' });
+  if (!res.ok) { await toastError(res); return; }
+  toast(t('toast_deleted'));
   loadAdminTab();
 }
 

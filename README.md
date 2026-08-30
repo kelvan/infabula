@@ -68,7 +68,7 @@ Entries belong to a baby and record who created them, and multiple babies can be
 
 ## Accounts
 
-Signing up is open by default — anyone who can reach the app can register with an email and password, but the account can't log in until it clicks a confirmation link sent to that address. Set `REGISTRATION_ENABLED=false` to close it entirely (existing accounts are unaffected) — worth doing once the app is reachable from the internet, until there's an invite flow. Set these env vars to actually send the confirmation email:
+Signing up is open by default — anyone who can reach the app can register with an email and password, but the account can't log in until it clicks a confirmation link sent to that address. Set `REGISTRATION_ENABLED=false` to close it entirely (existing accounts are unaffected, and it's still allowed from the LAN) — worth doing once the app is reachable from the internet. An admin can still bring in a new household member from anywhere with an invite, from Settings → Admin → Invites: optionally bind it to one email, share the one-time link, it expires after 7 days or first use, and can be revoked while still unused. Set these env vars to actually send the confirmation email:
 
 ```bash
 SMTP_HOST=smtp.example.com

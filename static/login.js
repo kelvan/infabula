@@ -120,6 +120,8 @@ document.getElementById('resend-link').onclick = async e => {
   document.getElementById('resend-link-wrap').style.display = 'none';
 };
 
+const inviteToken = new URLSearchParams(location.search).get('invite') || '';
+
 const registerForm = document.getElementById('register-form');
 if (registerForm) registerForm.onsubmit = async e => {
   e.preventDefault();
@@ -127,7 +129,7 @@ if (registerForm) registerForm.onsubmit = async e => {
   const password = document.getElementById('re-password').value;
   const password2 = document.getElementById('re-password2').value;
   if (password !== password2) { showError('Passwords do not match'); return; }
-  const { ok, data } = await postJSON('/api/auth/register', { email, password });
+  const { ok, data } = await postJSON('/api/auth/register', { email, password, invite_token: inviteToken });
   if (!ok) { showError(data.error || 'Could not create account'); return; }
   document.getElementById('verify-sent-email').textContent = email;
   showStep('verify-sent-step');
@@ -150,6 +152,12 @@ document.getElementById('totp-form').onsubmit = async e => {
   if (verify === 'ok') showInfo('Email confirmed — log in below.');
   else if (verify === 'expired') showError('That link expired or was already used. Log in and resend it below.');
   if (verify) history.replaceState({}, '', location.pathname);
+}
+
+// ── Landed here from an invite link ──
+if (inviteToken && registerForm) {
+  showStep('register-form');
+  history.replaceState({}, '', location.pathname);
 }
 
 // ── First-baby onboarding, right after registration ──

@@ -223,6 +223,36 @@ class ApiToken(Base):
     last_used_at: Mapped[str | None] = mapped_column(String(32))
 
 
+class Invite(Base):
+    """An admin-issued invite that lets someone register even while open
+    signup is closed (REGISTRATION_ENABLED=false) or they're off-LAN.
+
+    Only the sha256 hash is stored, same reasoning as ApiToken — the raw
+    token only ever appears once, in the response to creating it (and in
+    the link built from it). Optionally bound to one email; unbound, the
+    link works for whoever redeems it first.
+    """
+
+    __tablename__ = "invites"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
+    prefix: Mapped[str] = mapped_column(String(16), nullable=False)
+    email: Mapped[str | None] = mapped_column(String(255))
+    created_by: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    created_at: Mapped[str | None] = mapped_column(
+        String(32),
+        default=lambda: datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S"),
+    )
+    expires_at: Mapped[str] = mapped_column(String(32), nullable=False)
+    used_at: Mapped[str | None] = mapped_column(String(32))
+    used_by: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL")
+    )
+
+
 class Baby(Base):
     __tablename__ = "babies"
 

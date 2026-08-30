@@ -49,6 +49,7 @@ from db import (
     Baby,
     BabyAccess,
     Entry,
+    Invite,
     Session,
     User,
     WebauthnCredential,
@@ -472,7 +473,11 @@ async def login_page(request: Request):
         "login.html",
         {
             "v": ASSET_VERSION,
-            "registration_enabled": registration_allowed(request),
+            # An invite link has to render the register form even when
+            # open signup is otherwise closed — actual validity of the
+            # token itself is only checked at submission time.
+            "registration_enabled": registration_allowed(request)
+            or bool(request.query_params.get("invite")),
         },
     )
 
@@ -498,16 +503,24 @@ async def send_verification_email(email: str, user_id: int) -> None:
 
 @app.post("/api/auth/register", tags=["Auth"])
 async def register(request: Request):
-    if not registration_allowed(request):
-        return JSONResponse({"error": "registration is closed"}, status_code=403)
     body = await request.json()
     email = (body.get("email") or "").strip().lower()
     password = body.get("password") or ""
+    invite_token = (body.get("invite_token") or "").strip()
     if not auth.is_valid_email(email) or len(password) < 8:
         return JSONResponse(
             {"error": "a valid email and an 8+ character password are required"},
             status_code=400,
         )
+    # An invite works even when registration_allowed() would say no —
+    # that's the whole point of one: it's the explicit exception an
+    # admin granted, not a second way to walk in unannounced.
+    used_invite = bool(invite_token)
+    if used_invite:
+        if not await auth.invite_is_valid(invite_token, email):
+            return JSONResponse({"error": "invalid or expired invite"}, status_code=400)
+    elif not registration_allowed(request):
+        return JSONResponse({"error": "registration is closed"}, status_code=403)
     try:
         async with Session.begin() as session:
             existing = await session.scalar(
@@ -530,6 +543,8 @@ async def register(request: Request):
         # A second registration for the same email landed between our
         # check and the insert; the unique constraint is the real guard.
         return JSONResponse({"error": "email already registered"}, status_code=409)
+    if used_invite:
+        await auth.consume_invite(invite_token, user_id)
     await send_verification_email(email, user_id)
     return {"ok": True}
 
@@ -904,6 +919,59 @@ async def admin_list_babies(request: Request):
                 }
             )
     return result
+
+
+def invite_to_dict(invite: Invite) -> dict:
+    return {
+        "id": invite.id,
+        "prefix": invite.prefix,
+        "email": invite.email,
+        "created_at": invite.created_at,
+        "expires_at": invite.expires_at,
+        "used_at": invite.used_at,
+    }
+
+
+@app.get("/api/admin/invites", tags=["Admin"])
+async def admin_list_invites(request: Request):
+    if (denied := require_admin(request)) is not None:
+        return denied
+    async with Session() as session:
+        rows = (
+            await session.scalars(select(Invite).order_by(Invite.id.desc()))
+        ).all()
+    return [invite_to_dict(i) for i in rows]
+
+
+@app.post("/api/admin/invites", tags=["Admin"])
+async def admin_create_invite(request: Request):
+    if (denied := require_admin(request)) is not None:
+        return denied
+    body = await request.json()
+    email = (body.get("email") or "").strip().lower() or None
+    if email and not auth.is_valid_email(email):
+        return JSONResponse({"error": "invalid email"}, status_code=400)
+    raw_token = await auth.create_invite(request.state.user.id, email)
+    return {
+        "token": raw_token,
+        "link": f"{mailer.APP_BASE_URL}/login?invite={raw_token}",
+    }
+
+
+@app.delete("/api/admin/invites/{invite_id}", tags=["Admin"])
+async def admin_revoke_invite(invite_id: int, request: Request):
+    if (denied := require_admin(request)) is not None:
+        return denied
+    async with Session.begin() as session:
+        invite = await session.get(Invite, invite_id)
+        if invite is None:
+            return JSONResponse({"error": "not found"}, status_code=404)
+        if invite.used_at is not None:
+            return JSONResponse(
+                {"error": "invite was already used"}, status_code=400
+            )
+        await session.delete(invite)
+    return {"ok": True}
 
 
 @app.get("/api/auth/tokens", tags=["API tokens"], summary="List your API tokens")
