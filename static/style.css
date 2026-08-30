@@ -534,6 +534,18 @@ body:not(.log-active) .fab, body:not(.log-active) .quick-actions { display: none
 
 .quick-overlay { align-items: center; }
 .quick-modal { max-width: 380px; border-radius: 20px; align-self: center; }
+
+/* Avatar crop */
+.crop-viewport {
+  width: 260px; height: 260px; margin: 0 auto; position: relative;
+  overflow: hidden; border-radius: 12px; background: var(--surface2);
+  touch-action: none; cursor: grab;
+}
+.crop-viewport.dragging { cursor: grabbing; }
+.crop-viewport img { position: absolute; top: 0; left: 0; transform-origin: 0 0; user-select: none; -webkit-user-drag: none; }
+.crop-ring { position: absolute; inset: 0; border-radius: 50%; box-shadow: 0 0 0 2000px rgba(42,31,20,0.55); pointer-events: none; z-index: 1; }
+.crop-zoom { width: 100%; margin-top: 18px; accent-color: var(--accent); }
+.crop-hint { font-size: 0.72rem; color: var(--ink2); text-align: center; margin-top: 10px; }
 .quick-opt-row { display: flex; gap: 10px; flex-wrap: wrap; }
 .quick-opt-btn {
   flex: 1;

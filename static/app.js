@@ -51,7 +51,9 @@ const I18N = {
     confirm_delete_baby:'Dieses Baby und alle seine Einträge unwiderruflich löschen?',
     confirm_remove_access:'Zugriff für diese Person entfernen?',
     toast_no_name:'Bitte Namen angeben', toast_not_an_image:'Bitte ein Bild auswählen',
-    btn_remove_photo:'Foto entfernen',
+    btn_remove_photo:'Foto entfernen', lbl_crop_photo:'Foto zuschneiden',
+    crop_hint:'Ziehen zum Verschieben, Schieberegler zum Zoomen.',
+    btn_cancel:'Abbrechen', btn_use_photo:'Foto verwenden',
     settings_security_title:'Sicherheit', btn_logout:'Abmelden', lbl_display_name:'Anzeigename',
     member_since:'Dabei seit', last_login:'Letzte Anmeldung',
     settings_totp_title:'Zwei-Faktor-Authentifizierung (TOTP)',
@@ -140,7 +142,9 @@ const I18N = {
     confirm_delete_baby:'Permanently delete this baby and all its entries?',
     confirm_remove_access:'Remove this person\'s access?',
     toast_no_name:'Please enter a name', toast_not_an_image:'Please choose an image',
-    btn_remove_photo:'Remove photo',
+    btn_remove_photo:'Remove photo', lbl_crop_photo:'Crop photo',
+    crop_hint:'Drag to reposition, use the slider to zoom.',
+    btn_cancel:'Cancel', btn_use_photo:'Use photo',
     settings_security_title:'Security', btn_logout:'Log out', lbl_display_name:'Display name',
     member_since:'Member since', last_login:'Last login',
     settings_totp_title:'Two-factor authentication (TOTP)',
@@ -1588,13 +1592,148 @@ async function saveDisplayName() {
   }
 }
 
-async function uploadAvatar(event) {
+function uploadAvatar(event) {
   const file = event.target.files[0];
   event.target.value = '';
   if (!file) return;
   if (!file.type.startsWith('image/')) { toast(t('toast_not_an_image')); return; }
+  openAvatarCrop(file);
+}
+
+// ── Avatar crop ──
+// Lets a household member pick which part of a wider photo becomes their
+// circular avatar, instead of the server's fixed center-crop guessing for
+// them. Server-side re-validates and re-encodes regardless (see
+// upload_avatar in main.py) — this only decides the framing.
+const CROP_VIEWPORT = 260;
+const CROP_OUTPUT = 512;
+let cropState = null;
+
+function openAvatarCrop(file) {
+  const url = URL.createObjectURL(file);
+  const img = new Image();
+  img.onload = () => {
+    const baseScale = Math.max(CROP_VIEWPORT / img.naturalWidth, CROP_VIEWPORT / img.naturalHeight);
+    cropState = {
+      img, url,
+      naturalW: img.naturalWidth, naturalH: img.naturalHeight,
+      baseScale, scale: baseScale, offsetX: 0, offsetY: 0,
+      dragging: false, startX: 0, startY: 0, startOffsetX: 0, startOffsetY: 0,
+    };
+    renderCropModal();
+  };
+  img.src = url;
+}
+
+function renderCropModal() {
+  document.getElementById('avatar-crop-title').textContent = t('lbl_crop_photo');
+  document.getElementById('avatar-crop-body').innerHTML = `
+    <div class="crop-viewport" id="crop-viewport">
+      <div class="crop-ring"></div>
+    </div>
+    <input type="range" class="crop-zoom" id="crop-zoom" min="1" max="3" step="0.01" value="1">
+    <div class="crop-hint">${t('crop_hint')}</div>
+    <div class="baby-actions" style="margin-top:16px;">
+      <button class="btn-small secondary" onclick="closeAvatarCrop()">${t('btn_cancel')}</button>
+      <button class="btn-small" onclick="confirmAvatarCrop()">${t('btn_use_photo')}</button>
+    </div>
+  `;
+  const viewport = document.getElementById('crop-viewport');
+  viewport.appendChild(cropState.img);
+  cropState.img.style.width = cropState.naturalW + 'px';
+  cropState.img.style.height = cropState.naturalH + 'px';
+  applyCropTransform();
+
+  viewport.addEventListener('pointerdown', cropPointerDown);
+  window.addEventListener('pointermove', cropPointerMove);
+  window.addEventListener('pointerup', cropPointerUp);
+  document.getElementById('crop-zoom').addEventListener('input', cropZoomInput);
+
+  document.getElementById('avatar-crop-overlay').classList.add('open');
+}
+
+function clampCropOffset() {
+  const s = cropState;
+  const drawW = s.naturalW * s.scale;
+  const drawH = s.naturalH * s.scale;
+  const maxX = (drawW - CROP_VIEWPORT) / 2;
+  const maxY = (drawH - CROP_VIEWPORT) / 2;
+  s.offsetX = Math.max(-maxX, Math.min(maxX, s.offsetX));
+  s.offsetY = Math.max(-maxY, Math.min(maxY, s.offsetY));
+}
+
+function applyCropTransform() {
+  const s = cropState;
+  const drawW = s.naturalW * s.scale;
+  const drawH = s.naturalH * s.scale;
+  const x = CROP_VIEWPORT / 2 - drawW / 2 + s.offsetX;
+  const y = CROP_VIEWPORT / 2 - drawH / 2 + s.offsetY;
+  s.img.style.transform = `translate(${x}px, ${y}px) scale(${s.scale})`;
+  s.img.style.width = s.naturalW + 'px';
+  s.img.style.height = s.naturalH + 'px';
+  s.img.style.transformOrigin = '0 0';
+}
+
+function cropPointerDown(e) {
+  if (!cropState) return;
+  cropState.dragging = true;
+  cropState.startX = e.clientX;
+  cropState.startY = e.clientY;
+  cropState.startOffsetX = cropState.offsetX;
+  cropState.startOffsetY = cropState.offsetY;
+  document.getElementById('crop-viewport').classList.add('dragging');
+}
+function cropPointerMove(e) {
+  if (!cropState || !cropState.dragging) return;
+  cropState.offsetX = cropState.startOffsetX + (e.clientX - cropState.startX);
+  cropState.offsetY = cropState.startOffsetY + (e.clientY - cropState.startY);
+  clampCropOffset();
+  applyCropTransform();
+}
+function cropPointerUp() {
+  if (!cropState) return;
+  cropState.dragging = false;
+  const vp = document.getElementById('crop-viewport');
+  if (vp) vp.classList.remove('dragging');
+}
+function cropZoomInput(e) {
+  if (!cropState) return;
+  cropState.scale = cropState.baseScale * parseFloat(e.target.value);
+  clampCropOffset();
+  applyCropTransform();
+}
+
+function avatarCropOverlayClick(e) {
+  if (e.target === document.getElementById('avatar-crop-overlay')) closeAvatarCrop();
+}
+
+function closeAvatarCrop() {
+  document.getElementById('avatar-crop-overlay').classList.remove('open');
+  window.removeEventListener('pointermove', cropPointerMove);
+  window.removeEventListener('pointerup', cropPointerUp);
+  if (cropState) {
+    URL.revokeObjectURL(cropState.url);
+    cropState = null;
+  }
+}
+
+async function confirmAvatarCrop() {
+  const s = cropState;
+  if (!s) return;
+  const canvas = document.createElement('canvas');
+  canvas.width = CROP_OUTPUT;
+  canvas.height = CROP_OUTPUT;
+  const ctx = canvas.getContext('2d');
+  const k = CROP_OUTPUT / CROP_VIEWPORT;
+  const drawW = s.naturalW * s.scale;
+  const drawH = s.naturalH * s.scale;
+  const x = CROP_VIEWPORT / 2 - drawW / 2 + s.offsetX;
+  const y = CROP_VIEWPORT / 2 - drawH / 2 + s.offsetY;
+  ctx.drawImage(s.img, x * k, y * k, drawW * k, drawH * k);
+  const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+  closeAvatarCrop();
   const body = new FormData();
-  body.append('file', file);
+  body.append('file', blob, 'avatar.png');
   const res = await fetch('/api/auth/me/avatar', { method: 'POST', body });
   if (!res.ok) { await toastError(res); return; }
   avatarCacheBust = Date.now();

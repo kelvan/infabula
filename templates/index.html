@@ -160,6 +160,16 @@
   </div>
 </div>
 
+<div class="modal-overlay quick-overlay" id="avatar-crop-overlay" onclick="avatarCropOverlayClick(event)">
+  <div class="modal quick-modal">
+    <div class="modal-header">
+      <h2 id="avatar-crop-title"></h2>
+      <button class="close-btn" onclick="closeAvatarCrop()"><svg viewBox="0 0 24 24" class="ic"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    </div>
+    <div id="avatar-crop-body"></div>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <script src="/static/app.js?v={{ v }}"></script>
