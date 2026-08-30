@@ -1,6 +1,6 @@
 # infabula 🍼
 
-Simple baby journal as a local web application.
+Self-hosted, multi-user baby journal PWA for the household.
 
 ## Setup
 
