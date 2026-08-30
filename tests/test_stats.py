@@ -12,9 +12,7 @@ async def add_sleep(baby_id, start, end):
 
 
 class TestSleepAverages:
-    async def test_no_data_is_none_not_a_crash(
-        self, client, logged_in, baby_factory
-    ):
+    async def test_no_data_is_none_not_a_crash(self, client, logged_in, baby_factory):
         baby_id = await baby_factory(await logged_in())
         res = await client.get(f"/api/stats?baby_id={baby_id}")
         assert res.status_code == 200
@@ -22,9 +20,7 @@ class TestSleepAverages:
         assert data["avg_sleep_min"] is None
         assert data["avg_awake_min"] is None
 
-    async def test_single_sleep_has_no_awake_gap(
-        self, client, logged_in, baby_factory
-    ):
+    async def test_single_sleep_has_no_awake_gap(self, client, logged_in, baby_factory):
         baby_id = await baby_factory(await logged_in())
         await add_sleep(baby_id, "2026-08-20T10:00Z", "2026-08-20T11:00Z")
         data = (await client.get(f"/api/stats?baby_id={baby_id}")).json()
@@ -84,9 +80,18 @@ class TestSleepAverages:
         data = (await client.get(f"/api/stats?baby_id={baby_id}")).json()
         assert data["avg_awake_min"] == 120
 
-    async def test_only_within_baby_scope(
+    async def test_respects_a_custom_nap_threshold(
         self, client, logged_in, baby_factory
     ):
+        """A baby whose threshold has been raised should count a longer
+        sleep as still a nap, not night sleep."""
+        baby_id = await baby_factory(await logged_in())
+        await client.put(f"/api/babies/{baby_id}", json={"nap_threshold_min": 300})
+        await add_sleep(baby_id, "2026-08-20T10:00Z", "2026-08-20T14:30Z")  # 4.5h
+        data = (await client.get(f"/api/stats?baby_id={baby_id}")).json()
+        assert data["avg_sleep_min"] == 270
+
+    async def test_only_within_baby_scope(self, client, logged_in, baby_factory):
         me = await logged_in()
         baby_a = await baby_factory(me, name="a")
         baby_b = await baby_factory(me, name="b")

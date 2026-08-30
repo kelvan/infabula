@@ -45,6 +45,8 @@ const I18N = {
     settings_baby_title:'Babys', lbl_current_baby:'Aktuell ausgewählt',
     settings_tab_baby:'Baby', settings_tab_quicklog:'Quick-Log', settings_tab_account:'Account',
     lbl_baby_name:'Name', lbl_birthday:'Geburtstag', baby_name_placeholder:'Name des Babys',
+    lbl_nap_threshold:'Schlafschwelle', lbl_minutes:'Minuten',
+    nap_threshold_hint:'Schlafeinträge unter diesem Wert zählen als Nickerchen, längere als Nachtschlaf. Bei Neugeborenen niedriger ansetzen, mit dem Alter erhöhen.',
     baby_fallback:'Baby', btn_add_baby:'Baby hinzufügen', btn_delete:'Löschen',
     confirm_delete_baby:'Dieses Baby und alle seine Einträge unwiderruflich löschen?',
     confirm_remove_access:'Zugriff für diese Person entfernen?',
@@ -131,6 +133,8 @@ const I18N = {
     settings_baby_title:'Babies', lbl_current_baby:'Currently selected',
     settings_tab_baby:'Baby', settings_tab_quicklog:'Quick-Log', settings_tab_account:'Account',
     lbl_baby_name:'Name', lbl_birthday:'Birthday', baby_name_placeholder:"Baby's name",
+    lbl_nap_threshold:'Nap threshold', lbl_minutes:'minutes',
+    nap_threshold_hint:'Sleep entries shorter than this count as a nap in stats; longer ones count as night sleep. Lower this for a newborn, raise it as naps consolidate.',
     baby_fallback:'Baby', btn_add_baby:'Add baby', btn_delete:'Delete',
     confirm_delete_baby:'Permanently delete this baby and all its entries?',
     confirm_remove_access:'Remove this person\'s access?',
@@ -1400,6 +1404,14 @@ function renderBabyTab() {
           </div>
         </div>
       </div>
+      <div class="field" style="margin-top:6px;padding-top:12px;border-top:1px dashed var(--border);">
+        <label>${t('lbl_nap_threshold')}</label>
+        <div style="display:flex;align-items:center;gap:10px;">
+          <input type="number" class="baby-threshold-input" min="15" max="1440" step="5" style="width:88px;flex:none;" value="${b.nap_threshold_min}" ${canEdit ? '' : 'disabled'}>
+          <span style="font-family:ui-monospace,'Cascadia Code','Source Code Pro',monospace;font-size:0.78rem;color:var(--ink2);">${t('lbl_minutes')}</span>
+        </div>
+        <div class="field-hint" style="margin:6px 0 0;">${t('nap_threshold_hint')}</div>
+      </div>
       <div style="display:flex;align-items:center;justify-content:space-between;">
         <span class="badge-role ${b.role}">${t('role_' + b.role)}</span>
         <div class="baby-actions" style="margin-bottom:0;">
@@ -1754,14 +1766,16 @@ async function toggleQuickAction(key) {
 }
 
 async function saveBabyRow(id) {
-  const row = document.querySelector(`.baby-row[data-id="${id}"]`);
+  const row = document.querySelector(`.settings-card[data-id="${id}"]`);
   const name = row.querySelector('.baby-name-input').value;
   const birthday = row.querySelector('.baby-birthday-input').value;
-  await fetch(`/api/babies/${id}`, {
+  const nap_threshold_min = parseInt(row.querySelector('.baby-threshold-input').value, 10);
+  const res = await fetch(`/api/babies/${id}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name, birthday }),
+    body: JSON.stringify({ name, birthday, nap_threshold_min }),
   });
+  if (!res.ok) { await toastError(res); return; }
   await loadBabies();
   toast(t('toast_saved'));
   renderBirthdayBanner();

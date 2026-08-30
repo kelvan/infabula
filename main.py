@@ -183,8 +183,8 @@ MAX_ENTRIES_LIMIT = 1000
 ENTRY_MAX_FUTURE = timedelta(hours=1)
 ENTRY_MAX_PAST = timedelta(days=7)
 
-# A nap runs shorter than this; anything longer is treated as night sleep
-# and left out of the average nap duration.
+# Per-baby now (Baby.nap_threshold_min) — this is only the fallback for a
+# baby row that somehow has none.
 NIGHT_SLEEP_MIN_MINUTES = 240
 
 
@@ -1101,7 +1101,12 @@ async def get_dates(request: Request, baby_id: int = DEFAULT_BABY_ID):
 
 
 def baby_to_dict(baby: Baby) -> dict:
-    return {"id": baby.id, "name": baby.name, "birthday": baby.birthday or ""}
+    return {
+        "id": baby.id,
+        "name": baby.name,
+        "birthday": baby.birthday or "",
+        "nap_threshold_min": baby.nap_threshold_min,
+    }
 
 
 @app.get("/api/babies", tags=["Babies"])
@@ -1153,6 +1158,13 @@ async def update_baby(baby_id: int, request: Request):
     if (denied := await require_access(request, baby_id, ROLE_EDITOR)) is not None:
         return denied
     body = await request.json()
+    if "nap_threshold_min" in body:
+        threshold = body.get("nap_threshold_min")
+        if not isinstance(threshold, int) or not (15 <= threshold <= 1440):
+            return JSONResponse(
+                {"error": "nap_threshold_min must be between 15 and 1440"},
+                status_code=400,
+            )
     async with Session.begin() as session:
         baby = await session.get(Baby, baby_id)
         if baby is None:
@@ -1161,6 +1173,8 @@ async def update_baby(baby_id: int, request: Request):
             baby.name = (body.get("name") or "").strip() or baby.name
         if "birthday" in body:
             baby.birthday = (body.get("birthday") or "").strip() or None
+        if "nap_threshold_min" in body:
+            baby.nap_threshold_min = body["nap_threshold_min"]
     await broadcast_event("entries_changed")
     return {"ok": True}
 
@@ -1288,6 +1302,8 @@ async def get_stats(
         return denied
     day = date or utc_now().astimezone(HOUSEHOLD_TZ).strftime("%Y-%m-%d")
     async with Session() as session:
+        baby = await session.get(Baby, baby_id)
+        nap_threshold_min = baby.nap_threshold_min if baby else NIGHT_SLEEP_MIN_MINUTES
         rows = (
             await session.scalars(
                 entries_of(baby_id).order_by(Entry.ts_start.desc()).limit(500)
@@ -1336,7 +1352,7 @@ async def get_stats(
 
     # Night sleep runs for hours and would dominate a nap average; keep
     # the two separate rather than let one long stretch skew the other.
-    naps = [s for s in sleep_durations if s["minutes"] < NIGHT_SLEEP_MIN_MINUTES]
+    naps = [s for s in sleep_durations if s["minutes"] < nap_threshold_min]
     avg_sleep_min = (
         round(sum(s["minutes"] for s in naps) / len(naps)) if naps else None
     )
