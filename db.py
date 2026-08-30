@@ -134,6 +134,12 @@ class User(Base):
     disabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     is_admin: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     quick_actions: Mapped[list[str] | None] = mapped_column(JSON)
+    # Who created the invite this account registered through, if any —
+    # kept on the account itself so it outlives the Invite row (which can
+    # be pruned), not just derivable while that row still exists.
+    invited_by: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL")
+    )
     created_at: Mapped[str | None] = mapped_column(
         String(32),
         default=lambda: datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S"),

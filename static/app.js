@@ -52,7 +52,7 @@ const I18N = {
     lbl_invite_hint:'Ohne E-Mail funktioniert der Link für jeden, der ihn zuerst einlöst. Mit E-Mail nur für diese Adresse.',
     lbl_invite_anyone:'Jeder mit dem Link', lbl_invite_used:'Eingelöst',
     lbl_invite_expires:'Läuft ab', btn_revoke:'Widerrufen',
-    lbl_invite_link_ready:'Link (einmal angezeigt)',
+    lbl_invite_link_ready:'Link (einmal angezeigt)', lbl_invited_by:'Eingeladen von',
     lbl_admin_totp_required_title:'Zwei-Faktor-Authentifizierung erforderlich',
     lbl_admin_totp_required_body:'Der Admin-Bereich erfordert TOTP auf diesem Konto — ein Passwort allein genügt für den Zugriff auf die Daten aller Haushaltsmitglieder nicht. Unter Account einrichten.',
     lbl_baby_name:'Name', lbl_birthday:'Geburtstag', baby_name_placeholder:'Name des Babys',
@@ -155,7 +155,7 @@ const I18N = {
     lbl_invite_hint:"Without an email the link works for whoever redeems it first. With one, only that address can use it.",
     lbl_invite_anyone:'Anyone with the link', lbl_invite_used:'Used',
     lbl_invite_expires:'Expires', btn_revoke:'Revoke',
-    lbl_invite_link_ready:'Link (shown once)',
+    lbl_invite_link_ready:'Link (shown once)', lbl_invited_by:'Invited by',
     lbl_admin_totp_required_title:'Two-factor authentication required',
     lbl_admin_totp_required_body:"The admin area requires TOTP on this account — a password alone isn't enough to reach every household member's data. Set it up under Account.",
     lbl_baby_name:'Name', lbl_birthday:'Birthday', baby_name_placeholder:"Baby's name",
@@ -1483,7 +1483,7 @@ function renderAdminTab(users, babies, invites) {
         <div class="security-row">
           <div>
             <div class="s-name">${esc(u.email)}${u.is_admin ? ` <span class="badge-role owner">${t('lbl_admin_badge')}</span>` : ''}${u.disabled ? ` <span class="badge-role viewer">${t('lbl_disabled_badge')}</span>` : ''}</div>
-            <div class="s-sub">${esc(u.name)} · ${t('member_since')} ${esc((u.created_at || '').slice(0, 10))}</div>
+            <div class="s-sub">${esc(u.name)} · ${t('member_since')} ${esc((u.created_at || '').slice(0, 10))}${u.invited_by ? ` · ${t('lbl_invited_by')} ${esc(u.invited_by)}` : ''}</div>
           </div>
           ${u.id === settingsMe.id ? '' : `<button class="btn-small secondary" onclick="adminSetUserDisabled(${u.id}, ${!u.disabled})">${u.disabled ? t('btn_enable') : t('btn_disable')}</button>`}
         </div>

@@ -516,8 +516,10 @@ async def register(request: Request):
     # that's the whole point of one: it's the explicit exception an
     # admin granted, not a second way to walk in unannounced.
     used_invite = bool(invite_token)
+    inviter_id = None
     if used_invite:
-        if not await auth.invite_is_valid(invite_token, email):
+        inviter_id = await auth.find_valid_invite(invite_token, email)
+        if inviter_id is None:
             return JSONResponse({"error": "invalid or expired invite"}, status_code=400)
     elif not registration_allowed(request):
         return JSONResponse({"error": "registration is closed"}, status_code=403)
@@ -535,6 +537,7 @@ async def register(request: Request):
                 username=email,
                 email=email,
                 password_hash=auth.hash_password(password),
+                invited_by=inviter_id,
             )
             session.add(user)
             await session.flush()
@@ -841,7 +844,7 @@ async def totp_disable(request: Request):
 
 
 # ── Admin ──
-def admin_user_to_dict(user: User) -> dict:
+def admin_user_to_dict(user: User, email_by_id: dict[int, str]) -> dict:
     return {
         "id": user.id,
         "email": user.username,
@@ -851,6 +854,7 @@ def admin_user_to_dict(user: User) -> dict:
         "email_verified": user.email_verified,
         "created_at": user.created_at,
         "last_login_at": user.last_login_at,
+        "invited_by": email_by_id.get(user.invited_by) if user.invited_by else None,
     }
 
 
@@ -862,7 +866,8 @@ async def admin_list_users(request: Request):
         rows = (
             await session.scalars(select(User).order_by(User.id))
         ).all()
-    return [admin_user_to_dict(u) for u in rows]
+        email_by_id = {u.id: u.username for u in rows if u.username}
+    return [admin_user_to_dict(u, email_by_id) for u in rows]
 
 
 @app.post("/api/admin/users/{user_id}/disable", tags=["Admin"])

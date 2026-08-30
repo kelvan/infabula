@@ -46,6 +46,30 @@ class TestCreateAndRedeem:
         )
         assert res.status_code == 200
 
+    async def test_records_who_invited_the_new_account(
+        self, client, logged_in, monkeypatch
+    ):
+        admin_id = await self._admin(client, logged_in)
+        created = (await client.post("/api/admin/invites", json={})).json()
+        monkeypatch.setattr(main, "REGISTRATION_ENABLED", False)
+        await register(
+            client,
+            email="invited@example.com",
+            headers={"X-Forwarded-For": "8.8.8.8"},
+            invite_token=created["token"],
+        )
+        users = (await client.get("/api/admin/users")).json()
+        invited = next(u for u in users if u["email"] == "invited@example.com")
+        admin = next(u for u in users if u["id"] == admin_id)
+        assert invited["invited_by"] == admin["email"]
+
+    async def test_a_regular_registration_has_no_inviter(self, client, logged_in):
+        await self._admin(client, logged_in)
+        await register(client, email="walkup@example.com")
+        users = (await client.get("/api/admin/users")).json()
+        walkup = next(u for u in users if u["email"] == "walkup@example.com")
+        assert walkup["invited_by"] is None
+
     async def test_email_bound_invite_rejects_a_different_email(
         self, client, logged_in, monkeypatch
     ):

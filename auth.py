@@ -247,18 +247,24 @@ async def create_invite(created_by: int, email: str | None) -> str:
     return raw_token
 
 
-async def invite_is_valid(token: str, email: str) -> bool:
-    """Read-only check, ahead of creating the account — a failed
-    registration shouldn't burn a still-good invite."""
+async def find_valid_invite(token: str, email: str) -> int | None:
+    """Returns the inviting admin's user_id if the token is valid, unused,
+    unexpired, and (when bound to an email) matches — None otherwise.
+
+    Read-only, ahead of creating the account: a failed registration
+    shouldn't burn a still-good invite.
+    """
     if not token:
-        return False
+        return None
     async with Session() as session:
         row = await session.scalar(
             select(Invite).where(Invite.token_hash == hash_token(token))
         )
     if row is None or row.used_at is not None or row.expires_at < now_str():
-        return False
-    return not row.email or row.email == email
+        return None
+    if row.email and row.email != email:
+        return None
+    return row.created_by
 
 
 async def consume_invite(token: str, user_id: int) -> None:
