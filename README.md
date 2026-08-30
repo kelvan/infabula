@@ -100,6 +100,22 @@ POST /api/admin/users/{id}/enable
 
 There's no admin page for this yet — authenticate as the admin account (cookie or bearer token) and call it directly, or from `/docs`.
 
+### CLI
+
+`manage.py` covers the same account management from the command line — useful for creating the first account (nobody can register their way to admin) or fixing a locked-out household member without going through the API:
+
+```bash
+uv run python manage.py create a@example.com --admin   # prompts for a password
+uv run python manage.py list
+uv run python manage.py disable a@example.com
+uv run python manage.py enable a@example.com
+uv run python manage.py set-admin a@example.com [--off]
+uv run python manage.py set-password a@example.com
+uv run python manage.py delete a@example.com           # refuses while sole owner of a baby
+```
+
+Run it against the deployed container so it shares the real database: `podman exec -it <container> uv run --no-sync python manage.py ...` (`--no-sync` skips re-resolving dependencies against the container's dev-less lockfile install).
+
 ## API
 
 Every route documented at `/docs` (Swagger UI) or `/redoc`, both behind login like the rest of the app. Two ways to authenticate:
