@@ -660,18 +660,31 @@ async function endWalk() {
 // ── Quick actions ──
 const QUICK_TYPE_KEYS = ['diaper', 'nursing', 'bottle', 'sleep', 'walk', 'clothing', 'note', 'mood'];
 
+// Lives on the account (see /api/auth/quick-actions), not the browser, so
+// it follows the user across devices. Populated by loadQuickActions()
+// before the first render; the default covers the gap on a first-ever load.
+let quickActionsCache = null;
+
 function getQuickActions() {
-  try {
-    const saved = JSON.parse(localStorage.getItem('quickActions'));
-    if (Array.isArray(saved) && saved.length) {
-      return saved.filter(k => QUICK_TYPE_KEYS.includes(k)).slice(0, 5);
-    }
-  } catch {}
+  if (Array.isArray(quickActionsCache) && quickActionsCache.length) {
+    return quickActionsCache.filter(k => QUICK_TYPE_KEYS.includes(k)).slice(0, 5);
+  }
   return ['sleep', 'mood'];
 }
-function setQuickActions(actions) {
-  localStorage.setItem('quickActions', JSON.stringify(actions.slice(0, 5)));
+async function loadQuickActions() {
+  try {
+    const me = await (await fetch('/api/auth/me')).json();
+    quickActionsCache = me.quick_actions;
+  } catch {}
+}
+async function setQuickActions(actions) {
+  quickActionsCache = actions.slice(0, 5);
   renderQuickActions();
+  await fetch('/api/auth/quick-actions', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ quick_actions: quickActionsCache }),
+  });
 }
 
 function renderQuickActions() {
@@ -1334,6 +1347,7 @@ async function loadSettings() {
     fetch('/api/auth/tokens'),
   ]);
   settingsMe = await meRes.json();
+  quickActionsCache = settingsMe.quick_actions;
   settingsPasskeys = await passkeysRes.json();
   settingsTokens = await tokensRes.json();
   renderSettingsTabs();
@@ -1727,7 +1741,7 @@ async function submitDeleteAccount() {
   location.href = '/login';
 }
 
-function toggleQuickAction(key) {
+async function toggleQuickAction(key) {
   let actions = getQuickActions();
   if (actions.includes(key)) {
     actions = actions.filter(k => k !== key);
@@ -1735,7 +1749,7 @@ function toggleQuickAction(key) {
     if (actions.length >= 5) { toast(t('quick_max_toast')); return; }
     actions.push(key);
   }
-  setQuickActions(actions);
+  await setQuickActions(actions);
   loadSettings();
 }
 
@@ -2296,6 +2310,7 @@ initSwipe();
 document.getElementById('export-start').value = todayStr();
 document.getElementById('export-end').value = todayStr();
 (async () => {
+  await loadQuickActions();
   await loadBabies();
   renderBirthdayBanner();
   loadLog();

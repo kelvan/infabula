@@ -167,6 +167,11 @@ def on_local_day(column, day: str):
 
 ROLE_RANK = {ROLE_VIEWER: 0, ROLE_EDITOR: 1, ROLE_OWNER: 2}
 
+# Mirrors QUICK_TYPE_KEYS in static/app.js.
+QUICK_ACTION_TYPES = frozenset(
+    {"diaper", "nursing", "bottle", "sleep", "walk", "clothing", "note", "mood"}
+)
+
 # Ceilings that keep a runaway script (or a bug) from filling the database.
 # All are far above what hand-logging a baby's day could ever reach.
 MAX_BABIES_PER_USER = 20
@@ -430,6 +435,7 @@ def user_to_dict(user: User) -> dict:
         "is_admin": user.is_admin,
         "created_at": user.created_at,
         "last_login_at": user.last_login_at,
+        "quick_actions": user.quick_actions,
     }
 
 
@@ -601,6 +607,21 @@ async def update_me(request: Request):
         user = await session.get(User, request.state.user.id)
         assert user is not None
         user.name = name[:128]
+    return {"ok": True}
+
+
+@app.put("/api/auth/quick-actions", tags=["Auth"])
+async def update_quick_actions(request: Request):
+    body = await request.json()
+    actions = body.get("quick_actions")
+    if not isinstance(actions, list) or not all(
+        isinstance(a, str) and a in QUICK_ACTION_TYPES for a in actions
+    ):
+        return JSONResponse({"error": "invalid quick actions"}, status_code=400)
+    async with Session.begin() as session:
+        user = await session.get(User, request.state.user.id)
+        assert user is not None
+        user.quick_actions = actions[:5]
     return {"ok": True}
 
 

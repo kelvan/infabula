@@ -133,6 +133,7 @@ class User(Base):
     )
     disabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     is_admin: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    quick_actions: Mapped[list[str] | None] = mapped_column(JSON)
     created_at: Mapped[str | None] = mapped_column(
         String(32),
         default=lambda: datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S"),
