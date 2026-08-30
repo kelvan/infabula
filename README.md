@@ -64,7 +64,7 @@ DB_URL=mysql://user:pass@host/infabula        # needs: uv sync --extra mysql
 
 Defaults to SQLite; the older `DB_PATH` var still works and maps to a SQLite file. The schema is managed by Alembic and migrated automatically on startup — a database from before Alembic was introduced is adopted as-is, not re-created. On SQLite a timestamped backup is written to a `backups/` folder next to the database on every startup.
 
-Entries belong to a baby and record who created them, and multiple babies can be managed and switched between from the header. `baby_access` grants users an `owner`/`editor`/`viewer` role on a baby's log.
+Entries belong to a baby and record who created them, and multiple babies can be managed and switched between from the header. `baby_access` grants users an `owner`/`editor`/`viewer` role on a baby's log — an owner manages access from Settings → Baby → Manage access: grant, change a member's role, or revoke it. Whoever created the baby keeps permanent owner access there, so no other owner can lock them out.
 
 ## Accounts
 
@@ -80,6 +80,8 @@ APP_BASE_URL=http://192.168.1.50:8080   # how the household reaches the app — 
 ```
 
 Without `SMTP_HOST` set, the link is logged to stdout instead of emailed — fine for local dev, not for a real deployment, since nobody outside the server can ever verify. Accounts that existed before this was added are grandfathered in as already verified.
+
+The same SMTP config sends a notice for other security-relevant changes, so one household member's account being touched is never silent to them: TOTP enabled/disabled, a passkey added, and baby access granted — the latter goes to both the new member and the owner who granted it.
 
 Optional two-factor login is available per account, from Settings → Account:
 

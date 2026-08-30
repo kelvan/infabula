@@ -83,6 +83,7 @@ const I18N = {
     role_owner:'Besitzer', role_editor:'Bearbeiter', role_viewer:'Betrachter',
     btn_manage_access:'Zugriff verwalten', btn_remove:'Entfernen', btn_invite:'Hinzufügen',
     lbl_shared_with:'Geteilt mit', lbl_profile:'Profil', lbl_selected:'gewählt',
+    lbl_baby_creator:'Ersteller · Zugriff kann nicht geändert werden',
     quick_hint:'Wähle bis zu 5 Aktionen, die du direkt neben dem Plus-Button antippen kannst.',
     quick_footnote:'Alle anderen Aktionen bleiben über das große Plus erreichbar.',
     lbl_invite_email:'E-Mail', lbl_role:'Rolle',
@@ -179,6 +180,7 @@ const I18N = {
     role_owner:'Owner', role_editor:'Editor', role_viewer:'Viewer',
     btn_manage_access:'Manage access', btn_remove:'Remove', btn_invite:'Add',
     lbl_shared_with:'Shared with', lbl_profile:'Profile', lbl_selected:'selected',
+    lbl_baby_creator:"Creator · access can't be changed",
     quick_hint:'Choose up to 5 actions you can tap right next to the plus button.',
     quick_footnote:'Every other action is still one tap away through the big plus.',
     lbl_invite_email:'Email', lbl_role:'Role',
@@ -2074,20 +2076,31 @@ async function loadBabyAccess(babyId) {
   const wrap = document.getElementById(`access-wrap-${babyId}`);
   const res = await fetch(`/api/babies/${babyId}/access`);
   const members = res.ok ? await res.json() : [];
+  const baby = babies.find(b => b.id === babyId);
   wrap.innerHTML = `
     <div class="label" style="margin:16px 0 10px;padding-top:14px;border-top:1px solid var(--border);">${t('lbl_shared_with')}</div>
-    ${members.map(m => `
+    ${members.map(m => {
+      const isCreator = baby && baby.created_by === m.user_id;
+      return `
       <div class="security-row">
         <div style="display:flex;align-items:center;gap:9px;">
           ${avatarHtml(m.user_id, m.has_avatar, m.email, 'sm')}
-          <div><div class="s-name">${esc(m.email)}</div></div>
+          <div><div class="s-name">${esc(m.email)}</div>${isCreator ? `<div class="s-sub">${t('lbl_baby_creator')}</div>` : ''}</div>
         </div>
         <div style="display:flex;align-items:center;gap:8px;">
-          <span class="badge-role ${m.role}">${t('role_' + m.role)}</span>
-          <svg viewBox="0 0 24 24" class="ic" style="width:16px;height:16px;color:var(--ink2);cursor:pointer;" onclick="revokeBabyAccess(${babyId},${m.user_id})"><path d="M6 6l12 12M18 6L6 18"/></svg>
+          ${isCreator
+            ? `<span class="badge-role ${m.role}">${t('role_' + m.role)}</span>`
+            : `<select class="role-select" data-baby-id="${babyId}" data-email="${esc(m.email)}" onchange="changeBabyAccessRole(this)">
+                 <option value="viewer" ${m.role === 'viewer' ? 'selected' : ''}>${t('role_viewer')}</option>
+                 <option value="editor" ${m.role === 'editor' ? 'selected' : ''}>${t('role_editor')}</option>
+                 <option value="owner" ${m.role === 'owner' ? 'selected' : ''}>${t('role_owner')}</option>
+               </select>
+               <svg viewBox="0 0 24 24" class="ic" style="width:16px;height:16px;color:var(--ink2);cursor:pointer;" onclick="revokeBabyAccess(${babyId},${m.user_id})"><path d="M6 6l12 12M18 6L6 18"/></svg>`
+          }
         </div>
       </div>
-    `).join('')}
+    `;
+    }).join('')}
     <div class="field"><label>${t('lbl_invite_email')}</label>
       <input type="email" id="invite-email-${babyId}" placeholder="name@example.com">
     </div>
@@ -2119,6 +2132,24 @@ async function grantBabyAccess(babyId) {
     loadBabyAccess(babyId);
   } else {
     toast(data.error || t('toast_error'));
+  }
+}
+
+async function changeBabyAccessRole(selectEl) {
+  const babyId = selectEl.dataset.babyId;
+  const email = selectEl.dataset.email;
+  const role = selectEl.value;
+  const res = await fetch(`/api/babies/${babyId}/access`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, role }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (res.ok) {
+    toast(t('toast_saved'));
+  } else {
+    toast(data.error || t('toast_error'));
+    loadBabyAccess(parseInt(babyId, 10));
   }
 }
 

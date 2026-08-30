@@ -802,6 +802,9 @@ async def totp_confirm(request: Request):
         ):
             return JSONResponse({"error": "invalid code"}, status_code=400)
         user.totp_enabled = True
+        email = user.username
+    if email:
+        await asyncio.to_thread(mailer.send_totp_enabled_email, email)
     return {"ok": True}
 
 
@@ -816,6 +819,9 @@ async def totp_disable(request: Request):
             return JSONResponse({"error": "wrong password"}, status_code=401)
         user.totp_enabled = False
         user.totp_secret = None
+        email = user.username
+    if email:
+        await asyncio.to_thread(mailer.send_totp_disabled_email, email)
     return {"ok": True}
 
 
@@ -1027,6 +1033,7 @@ async def passkey_register_verify(request: Request):
         )
     except Exception:
         return JSONResponse({"error": "registration failed"}, status_code=400)
+    passkey_name = (body.get("name") or "Passkey").strip()[:128]
     async with Session.begin() as session:
         session.add(
             WebauthnCredential(
@@ -1034,8 +1041,12 @@ async def passkey_register_verify(request: Request):
                 credential_id=bytes_to_base64url(verification.credential_id),
                 public_key=bytes_to_base64url(verification.credential_public_key),
                 sign_count=verification.sign_count,
-                name=(body.get("name") or "Passkey").strip()[:128],
+                name=passkey_name,
             )
+        )
+    if request.state.user.username:
+        await asyncio.to_thread(
+            mailer.send_passkey_added_email, request.state.user.username, passkey_name
         )
     return {"ok": True}
 
@@ -1236,6 +1247,7 @@ def baby_to_dict(baby: Baby) -> dict:
         "name": baby.name,
         "birthday": baby.birthday or "",
         "nap_threshold_min": baby.nap_threshold_min,
+        "created_by": baby.created_by,
     }
 
 
@@ -1272,7 +1284,7 @@ async def create_baby(request: Request):
     if (owned or 0) >= MAX_BABIES_PER_USER:
         return JSONResponse({"error": "too many babies"}, status_code=429)
     async with Session.begin() as session:
-        baby = Baby(name=name, birthday=birthday)
+        baby = Baby(name=name, birthday=birthday, created_by=request.state.user.id)
         session.add(baby)
         await session.flush()
         session.add(
@@ -1358,11 +1370,32 @@ async def grant_baby_access(baby_id: int, request: Request):
         user = await session.scalar(select(User).where(User.username == email))
         if user is None:
             return JSONResponse({"error": "no such user"}, status_code=404)
+        baby = await session.get(Baby, baby_id)
+        if baby is not None and baby.created_by == user.id and role != ROLE_OWNER:
+            return JSONResponse(
+                {"error": "cannot change the baby creator's role"}, status_code=400
+            )
         existing = await session.get(BabyAccess, (user.id, baby_id))
+        is_new_grant = existing is None
         if existing is not None:
             existing.role = role
         else:
             session.add(BabyAccess(user_id=user.id, baby_id=baby_id, role=role))
+        baby_name = baby.name if baby is not None else ""
+    if is_new_grant:
+        if email:
+            await asyncio.to_thread(
+                mailer.send_access_granted_email, email, baby_name, role
+            )
+        actor_email = request.state.user.username
+        if actor_email and actor_email != email:
+            await asyncio.to_thread(
+                mailer.send_access_granted_owner_notice_email,
+                actor_email,
+                baby_name,
+                email,
+                role,
+            )
     return {"ok": True}
 
 
@@ -1371,6 +1404,11 @@ async def revoke_baby_access(baby_id: int, user_id: int, request: Request):
     if (denied := await require_access(request, baby_id, ROLE_OWNER)) is not None:
         return denied
     async with Session.begin() as session:
+        baby = await session.get(Baby, baby_id)
+        if baby is not None and baby.created_by == user_id:
+            return JSONResponse(
+                {"error": "cannot remove the baby creator's access"}, status_code=400
+            )
         owners = (
             await session.scalars(
                 select(BabyAccess).where(

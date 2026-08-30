@@ -233,6 +233,13 @@ class Baby(Base):
     # stats. Per baby, not a global constant, since newborns sleep in short
     # bursts around the clock and this consolidates as they mature.
     nap_threshold_min: Mapped[int] = mapped_column(Integer, nullable=False, default=240)
+    # The account that created this baby — its owner access can never be
+    # revoked or demoted, so a household always has at least one owner who
+    # can't be locked out by another owner. Null for babies that predate
+    # this column, or whose creator's account was later deleted.
+    created_by: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL")
+    )
     created_at: Mapped[str | None] = mapped_column(
         String(32),
         default=lambda: datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S"),

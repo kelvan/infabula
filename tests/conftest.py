@@ -90,7 +90,11 @@ async def baby_factory():
 
     async def make(user_id, name="Samuel", role="owner", birthday=None):
         async with Session.begin() as session:
-            baby = Baby(name=name, birthday=birthday)
+            baby = Baby(
+                name=name,
+                birthday=birthday,
+                created_by=user_id if role == "owner" else None,
+            )
             session.add(baby)
             await session.flush()
             session.add(
