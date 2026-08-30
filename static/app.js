@@ -47,6 +47,8 @@ const I18N = {
     settings_tab_admin:'Admin', lbl_admin_users:'Benutzer', lbl_admin_babies:'Babys (alle)',
     lbl_admin_badge:'Admin', lbl_disabled_badge:'Deaktiviert', lbl_none:'Keine',
     lbl_owners:'Besitzer', loading:'Lädt…',
+    lbl_admin_totp_required_title:'Zwei-Faktor-Authentifizierung erforderlich',
+    lbl_admin_totp_required_body:'Der Admin-Bereich erfordert TOTP auf diesem Konto — ein Passwort allein genügt für den Zugriff auf die Daten aller Haushaltsmitglieder nicht. Unter Account einrichten.',
     lbl_baby_name:'Name', lbl_birthday:'Geburtstag', baby_name_placeholder:'Name des Babys',
     lbl_nap_threshold:'Schlafschwelle', lbl_minutes:'Minuten',
     nap_threshold_hint:'Schlafeinträge unter diesem Wert zählen als Nickerchen, längere als Nachtschlaf. Bei Neugeborenen niedriger ansetzen, mit dem Alter erhöhen.',
@@ -141,6 +143,8 @@ const I18N = {
     settings_tab_admin:'Admin', lbl_admin_users:'Users', lbl_admin_babies:'Babies (all)',
     lbl_admin_badge:'Admin', lbl_disabled_badge:'Disabled', lbl_none:'None',
     lbl_owners:'Owners', loading:'Loading…',
+    lbl_admin_totp_required_title:'Two-factor authentication required',
+    lbl_admin_totp_required_body:"The admin area requires TOTP on this account — a password alone isn't enough to reach every household member's data. Set it up under Account.",
     lbl_baby_name:'Name', lbl_birthday:'Birthday', baby_name_placeholder:"Baby's name",
     lbl_nap_threshold:'Nap threshold', lbl_minutes:'minutes',
     nap_threshold_hint:'Sleep entries shorter than this count as a nap in stats; longer ones count as night sleep. Lower this for a newborn, raise it as naps consolidate.',
@@ -1406,11 +1410,23 @@ function renderSettingsTabs() {
 function renderSettingsTab() {
   if (settingsTab === 'quicklog') renderQuickLogTab();
   else if (settingsTab === 'account') renderAccountTab();
-  else if (settingsTab === 'admin' && settingsMe.is_admin) loadAdminTab();
+  else if (settingsTab === 'admin' && settingsMe.is_admin) {
+    settingsMe.totp_enabled ? loadAdminTab() : renderAdminTotpRequired();
+  }
   else renderBabyTab();
 }
 
 // ── Admin ──
+function renderAdminTotpRequired() {
+  document.getElementById('settings-tab-content').innerHTML = `
+    <div class="settings-card">
+      <div class="settings-card-title">${icon('shield')}${t('lbl_admin_totp_required_title')}</div>
+      <div style="font-size:0.85rem;color:var(--ink2);line-height:1.5;margin-bottom:14px;">${t('lbl_admin_totp_required_body')}</div>
+      <button class="btn-small" onclick="switchSettingsTab('account')">${t('settings_tab_account')}</button>
+    </div>
+  `;
+}
+
 async function loadAdminTab() {
   const el = document.getElementById('settings-tab-content');
   el.innerHTML = `<div class="empty">${t('loading')}</div>`;

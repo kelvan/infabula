@@ -202,10 +202,11 @@ class TestDisabled:
         assert target_client_login.status_code == 200
         assert (await client.get("/api/auth/me")).status_code == 200
 
-        await user_factory(email="admin@example.com", is_admin=True)
+        admin_id = await user_factory(email="admin@example.com", is_admin=True)
         import httpx
 
         import main
+        from db import Session, User
 
         transport = httpx.ASGITransport(app=main.app)
         async with httpx.AsyncClient(
@@ -215,6 +216,14 @@ class TestDisabled:
                 "/api/auth/login",
                 json={"email": "admin@example.com", "password": "password123"},
             )
+            # Flipped after login, not at User(...) time or before logging
+            # in: either would make the login above hit the real
+            # TOTP-challenge branch (200, but no session cookie) instead
+            # of a normal completed login.
+            async with Session.begin() as session:
+                row = await session.get(User, admin_id)
+                assert row is not None
+                row.totp_enabled = True
             res = await admin_client.post(f"/api/admin/users/{target}/disable")
             assert res.status_code == 200
 

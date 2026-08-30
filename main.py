@@ -253,9 +253,21 @@ async def require_access(
 
 
 def require_admin(request: Request) -> JSONResponse | None:
-    """None if the current user is an admin, else a 403 to return."""
-    if not request.state.user.is_admin:
+    """None if the current user is an admin with TOTP enabled, else a 403.
+
+    An admin session grants far more than a normal account (every other
+    household member's data, the ability to lock accounts out) — a bare
+    password shouldn't be enough to reach it. Regular account use is
+    unaffected; this only gates the admin endpoints.
+    """
+    user = request.state.user
+    if not user.is_admin:
         return JSONResponse({"error": "forbidden"}, status_code=403)
+    if not user.totp_enabled:
+        return JSONResponse(
+            {"error": "admin access requires two-factor authentication"},
+            status_code=403,
+        )
     return None
 
 
