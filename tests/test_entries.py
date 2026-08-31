@@ -210,6 +210,85 @@ class TestDayScoping:
             ).json()
             assert len(found) == 1, day
 
+    async def test_open_entry_started_yesterday_still_shows_today(
+        self, client, logged_in, baby_factory
+    ):
+        """A sleep that started yesterday and hasn't ended yet is still
+        ongoing today — it should show in today's list too, not only on
+        the day it started (ts_end is None, so it can't match "today"
+        the way a closed entry's end time would)."""
+        baby_id = await baby_factory(await logged_in())
+        from db import Entry, Session
+
+        async with Session.begin() as session:
+            session.add(
+                Entry(
+                    baby_id=baby_id,
+                    type="sleep",
+                    ts_start="2026-08-25T19:00Z",
+                    ts_end=None,
+                    meta={},
+                )
+            )
+        yesterday = (
+            await client.get(f"/api/entries?baby_id={baby_id}&date=2026-08-25")
+        ).json()
+        today = (
+            await client.get(f"/api/entries?baby_id={baby_id}&date=2026-08-26")
+        ).json()
+        assert len(yesterday) == 1
+        assert len(today) == 1
+
+    async def test_open_entry_does_not_leak_into_days_before_it_started(
+        self, client, logged_in, baby_factory
+    ):
+        baby_id = await baby_factory(await logged_in())
+        from db import Entry, Session
+
+        async with Session.begin() as session:
+            session.add(
+                Entry(
+                    baby_id=baby_id,
+                    type="sleep",
+                    ts_start="2026-08-25T19:00Z",
+                    ts_end=None,
+                    meta={},
+                )
+            )
+        before = (
+            await client.get(f"/api/entries?baby_id={baby_id}&date=2026-08-24")
+        ).json()
+        assert len(before) == 0
+
+    async def test_instant_entries_from_other_days_do_not_leak_in(
+        self, client, logged_in, baby_factory
+    ):
+        """Diaper/bottle/note/mood/weight entries never set ts_end at
+        all — they're instant, not an open/close pair like sleep or
+        walk. A day filter that treats "ts_end is null" as "still open"
+        without also checking the type would match nearly every entry
+        ever logged for the baby, not just genuinely ongoing ones."""
+        baby_id = await baby_factory(await logged_in())
+        from db import Entry, Session
+
+        async with Session.begin() as session:
+            for day_offset, entry_type in enumerate(
+                ["diaper", "bottle", "note", "mood", "weight"]
+            ):
+                session.add(
+                    Entry(
+                        baby_id=baby_id,
+                        type=entry_type,
+                        ts_start=f"2026-08-{20 + day_offset}T10:00Z",
+                        ts_end=None,
+                        meta={},
+                    )
+                )
+        today = (
+            await client.get(f"/api/entries?baby_id={baby_id}&date=2026-08-26")
+        ).json()
+        assert today == []
+
     async def test_dates_list_uses_local_days(self, client, logged_in, baby_factory):
         baby_id = await baby_factory(await logged_in())
         from db import Entry, Session

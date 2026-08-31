@@ -1277,8 +1277,26 @@ async def get_entries(
             .order_by(Entry.ts_start.desc())
         )
         if date:
+            bounds = local_day_bounds(date)
+            still_open_today = sa_false()
+            if bounds is not None:
+                # An open sleep/walk that started before today and hasn't
+                # ended yet spans into today too — ts_start alone would
+                # only ever place it on the day it started, never on the
+                # days it's still ongoing through. Scoped to sleep/walk
+                # specifically: every other type also leaves ts_end null
+                # (it's simply unused for an instant entry), so without
+                # this the clause below would match nearly every entry
+                # ever logged, not just genuinely open ones.
+                still_open_today = (
+                    Entry.type.in_(("sleep", "walk"))
+                    & Entry.ts_end.is_(None)
+                    & (Entry.ts_start < bounds[1])
+                )
             stmt = stmt.where(
-                on_local_day(Entry.ts_start, date) | on_local_day(Entry.ts_end, date)
+                on_local_day(Entry.ts_start, date)
+                | on_local_day(Entry.ts_end, date)
+                | still_open_today
             )
         else:
             stmt = stmt.limit(limit)
