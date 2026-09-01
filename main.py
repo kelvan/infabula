@@ -9,7 +9,7 @@ import time
 from datetime import date, datetime, timedelta, timezone
 from datetime import time as dtime
 from itertools import groupby
-from zoneinfo import ZoneInfo
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import jinja2
 from fastapi import FastAPI, Request, UploadFile
@@ -139,7 +139,17 @@ def parse_entry_ts(value: str | None) -> datetime | None:
         return None
 
 
-def local_day_bounds(day: str) -> tuple[str, str] | None:
+def resolve_tz(name: str | None) -> ZoneInfo:
+    """A caller-supplied IANA zone name, or the household zone as fallback."""
+    if not name:
+        return HOUSEHOLD_TZ
+    try:
+        return ZoneInfo(name)
+    except (ZoneInfoNotFoundError, ValueError):
+        return HOUSEHOLD_TZ
+
+
+def local_day_bounds(day: str, tz: ZoneInfo = HOUSEHOLD_TZ) -> tuple[str, str] | None:
     """The [start, end) UTC instants covering a local calendar date.
 
     Built from both local midnights rather than start + 24h, so the short
@@ -149,8 +159,8 @@ def local_day_bounds(day: str) -> tuple[str, str] | None:
         parsed = date.fromisoformat(day)
     except (TypeError, ValueError):
         return None
-    lo = datetime.combine(parsed, dtime.min, tzinfo=HOUSEHOLD_TZ)
-    hi = datetime.combine(parsed + timedelta(days=1), dtime.min, tzinfo=HOUSEHOLD_TZ)
+    lo = datetime.combine(parsed, dtime.min, tzinfo=tz)
+    hi = datetime.combine(parsed + timedelta(days=1), dtime.min, tzinfo=tz)
     return to_entry_ts(lo), to_entry_ts(hi)
 
 
@@ -170,9 +180,9 @@ def local_time_of(value: str) -> str:
     return moment.astimezone(HOUSEHOLD_TZ).strftime("%H:%M")
 
 
-def on_local_day(column, day: str):
+def on_local_day(column, day: str, tz: ZoneInfo = HOUSEHOLD_TZ):
     """SQL predicate: this timestamp column falls on the given local date."""
-    bounds = local_day_bounds(day)
+    bounds = local_day_bounds(day, tz)
     if bounds is None:
         return sa_false()
     lo, hi = bounds
@@ -1563,11 +1573,17 @@ async def delete_entry(entry_id: int, request: Request):
 
 @app.get("/api/stats", tags=["Stats"])
 async def get_stats(
-    request: Request, date: str | None = None, baby_id: int = DEFAULT_BABY_ID
+    request: Request,
+    date: str | None = None,
+    tz: str | None = None,
+    baby_id: int = DEFAULT_BABY_ID,
 ):
     if (denied := await require_access(request, baby_id, ROLE_VIEWER)) is not None:
         return denied
-    day = date or utc_now().astimezone(HOUSEHOLD_TZ).strftime("%Y-%m-%d")
+    # `tz` lets a non-browser client (e.g. Home Assistant) bucket "today" in
+    # its own zone instead of the household one. Unknown names fall back.
+    zone = resolve_tz(tz)
+    day = date or utc_now().astimezone(zone).strftime("%Y-%m-%d")
     async with Session() as session:
         baby = await session.get(Baby, baby_id)
         nap_threshold_min = baby.nap_threshold_min if baby else NIGHT_SLEEP_MIN_MINUTES
@@ -1579,7 +1595,7 @@ async def get_stats(
         day_rows = (
             await session.scalars(
                 entries_of(baby_id)
-                .where(on_local_day(Entry.ts_start, day))
+                .where(on_local_day(Entry.ts_start, day, zone))
                 .order_by(Entry.ts_start.asc())
             )
         ).all()
@@ -1588,6 +1604,13 @@ async def get_stats(
                 entries_of(baby_id)
                 .where(Entry.type == "weight")
                 .order_by(Entry.ts_start.asc())
+            )
+        ).all()
+        total_rows = (
+            await session.execute(
+                select(Entry.type, func.count())
+                .where(Entry.baby_id == baby_id)
+                .group_by(Entry.type)
             )
         ).all()
     entries = [row_to_dict(r) for r in rows]
@@ -1654,6 +1677,8 @@ async def get_stats(
                 "avg": round(sum(diffs) / len(diffs)),
             }
 
+    totals = {entry_type: count for entry_type, count in total_rows}
+
     return {
         "last": last,
         "sleep_durations": sleep_durations,
@@ -1661,6 +1686,7 @@ async def get_stats(
         "avg_awake_min": avg_awake_min,
         "intervals": intervals,
         "growth": growth,
+        "totals": totals,
     }
 
 
