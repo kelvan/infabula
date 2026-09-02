@@ -311,7 +311,7 @@ const USER_COLORS = [
 
 let userColorMap = {};
 let colorIndex = 0;
-let currentDate = todayStr();
+let currentDate = storedDate();
 let openSleepEntry = null;
 let openWalkEntry = null;
 let selectedType = null;
@@ -324,6 +324,13 @@ function todayStr() {
   return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
 }
 function pad(n) { return String(n).padStart(2,'0'); }
+// The day the user was last looking at, so a reload doesn't snap back to
+// today. A stored date at or past today collapses to today — it should
+// track "current" rather than get stuck a day behind once midnight passes.
+function storedDate() {
+  const d = localStorage.getItem('logDate');
+  return d && /^\d{4}-\d{2}-\d{2}$/.test(d) && d < todayStr() ? d : todayStr();
+}
 // ── UTC storage, local display ──
 // Timestamps travel and are stored as an explicit UTC instant
 // ('2026-08-26T05:23Z'); everything the user sees or types is that instant
@@ -433,6 +440,7 @@ async function toastError(res) {
 
 // ── Day navigation ──
 function updateDayNav() {
+  localStorage.setItem('logDate', currentDate);
   document.getElementById('day-label').textContent = fmtDate(currentDate);
   document.getElementById('date-picker').value = currentDate;
   document.getElementById('btn-next').disabled = currentDate >= todayStr();
