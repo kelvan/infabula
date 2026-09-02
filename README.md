@@ -10,7 +10,7 @@ uv run uvicorn main:app --host 0.0.0.0 --port 8080
 ```
 
 Open in browser: `http://localhost:8080`
-From other devices on LAN: `http://<server-ip>:8080`
+From other devices on the LAN: `http://<server-ip>:8080`
 
 ## Tests
 
@@ -18,43 +18,41 @@ From other devices on LAN: `http://<server-ip>:8080`
 uv run pytest
 ```
 
-Runs against a throwaway SQLite database with the migrations applied. The
-suite pins `TZ=Europe/Vienna`, since which local day a UTC instant falls
-on is exactly the sort of thing that only breaks on someone else's
-machine.
+The suite runs against a throwaway SQLite database with the migrations applied. It pins `TZ=Europe/Vienna`, because a UTC instant's local day depends on the timezone. This kind of bug shows up only on someone else's machine.
 
 ## Features
 
-- **Diaper** – time + type (wet/dirty/both)
-- **Nursing** – start/end + side
-- **Bottle** – time + amount (ml) + content
-- **Sleep** – fell asleep/woke up → automatic duration, blocked from starting twice
-- **Walk** – started/back → automatic duration, blocked from starting twice
-- **Clothing change** – time + note
-- **Weight** – time + grams
-- **Mood** – happy/neutral/fussy/crying, shown as an emoji marker
-- **Note** – free text
+- **Diaper** — time and type (wet, dirty, or both)
+- **Nursing** — start time, end time, and side
+- **Bottle** — time, amount in ml, and content
+- **Sleep** — "fell asleep" and "woke up" times, with automatic duration
+- **Walk** — "started" and "back" times, with automatic duration
+- **Clothing change** — time and note
+- **Weight** — time and weight in grams
+- **Mood** — happy, neutral, fussy, or crying, as an emoji marker
+- **Note** — free text
 
-Click any entry in the log to edit it. Multiple devices/tabs stay in sync live (SSE) — no reload needed. The log can be viewed as a list or as a day timeline (sleep/walk as bars, feeding/diaper as lines, mood as emoji), with the view choice remembered across reloads.
+The app blocks a second open sleep or walk entry while one is already open. Tap any entry in the log to edit it. All open devices and tabs stay in sync through server-sent events (SSE), so you do not need to reload the page. You can view the log as a list or as a timeline for one day. The timeline shows sleep and walks as bars, feeding and diaper changes as lines, and mood as emoji. The app remembers your view choice after a reload.
 
 ## Stats
 
-- Last event per type + "X ago", with combined Feeding (nursing + bottle)
-- Awake/back-since duration while sleep or a walk is ongoing or just finished
-- Intervals between diapers / feedings (last + average)
-- Sleep duration bar chart (last 10 sleeps)
-- IP colors: each device on the network gets its own color automatically; name them in Settings
-- Export a report or CSV for today / this week / this month / a custom range
+- Last event of each type, with time since it (for example "2h ago")
+- Combined feeding stat: nursing and bottle together
+- Awake time, or time since back from a walk, while it is open or just finished
+- Time between diaper changes and feedings: last interval and average
+- Bar chart of the last 10 sleep durations
+- One color per device on the network, with names you assign in Settings
+- Report or CSV export for today, this week, this month, or a custom date range
 
 ## Settings
 
-Assign a name to each device's IP address — the log legend and colors group by name instead of raw IP once set. Hover an entry's color dot to see which IP made it.
+Assign a name to each device's IP address in Settings. After you assign a name, the log legend and the colors use it instead of the raw IP address. Hover over an entry's color dot to see which IP address made it.
 
-Set the baby's name and birthday; a banner marks the birthday and month-days once set.
+Set the baby's name and birthday in Settings. After you set the birthday, a banner marks the birthday and the matching day of each month.
 
 ## Data
 
-Set the database with the `DB_URL` env var — SQLite, PostgreSQL and MariaDB/MySQL are supported:
+Set the database with the `DB_URL` environment variable. The app supports SQLite, PostgreSQL, and MariaDB or MySQL:
 
 ```bash
 DB_URL=sqlite:///infabula.db
@@ -62,13 +60,21 @@ DB_URL=postgresql://user:pass@host/infabula   # needs: uv sync --extra postgres
 DB_URL=mysql://user:pass@host/infabula        # needs: uv sync --extra mysql
 ```
 
-Defaults to SQLite; the older `DB_PATH` var still works and maps to a SQLite file. The schema is managed by Alembic and migrated automatically on startup — a database from before Alembic was introduced is adopted as-is, not re-created. On SQLite a timestamped backup is written to a `backups/` folder next to the database on every startup.
+The app defaults to SQLite. The older `DB_PATH` variable still works and maps to a SQLite file. Alembic manages the schema and applies migrations automatically at startup. A database from before Alembic existed keeps its data as-is: the app does not re-create it. On SQLite, the app writes a timestamped backup to a `backups/` folder next to the database at every startup.
 
-Entries belong to a baby and record who created them, and multiple babies can be managed and switched between from the header. `baby_access` grants users an `owner`/`editor`/`viewer` role on a baby's log — an owner manages access from Settings → Baby → Manage access: grant, change a member's role, or revoke it. Whoever created the baby keeps permanent owner access there, so no other owner can lock them out.
+Each entry belongs to one baby and records who created it. You can manage multiple babies and switch between them from the header.
+
+The `baby_access` table gives each user one role on a baby's log: `owner`, `editor`, or `viewer`. An owner manages access from Settings → Baby → Manage access. From there, an owner can grant access, change a member's role, or revoke access. The account that created the baby keeps owner access permanently. As a result, no other owner can remove that account's access.
 
 ## Accounts
 
-Signing up is open by default — anyone who can reach the app can register with an email and password, but the account can't log in until it clicks a confirmation link sent to that address. Set `REGISTRATION_ENABLED=false` to close it entirely (existing accounts are unaffected, and it's still allowed from the LAN) — worth doing once the app is reachable from the internet. An admin can still bring in a new household member from anywhere with an invite, from Settings → Admin → Invites: optionally bind it to one email, share the one-time link, it expires after 7 days or first use, and can be revoked while still unused. Set these env vars to actually send the confirmation email:
+By default, registration is open. Anyone who can reach the app can register with an email address and a password. A new account cannot log in until someone clicks the confirmation link sent to that address.
+
+Set `REGISTRATION_ENABLED=false` to close registration. This does not affect existing accounts, and registration still works from the LAN. Close registration after the app becomes reachable from the internet.
+
+An admin can still add a new household member from anywhere with an invite. Create an invite from Settings → Admin → Invites. You can bind an invite to one email address, or leave it open. Share the one-time link with the new member. The invite expires after 7 days, or after first use. You can revoke an unused invite at any time.
+
+Set these environment variables to send the confirmation email:
 
 ```bash
 SMTP_HOST=smtp.example.com
@@ -79,20 +85,22 @@ SMTP_FROM=infabula@example.com   # defaults to SMTP_USER
 APP_BASE_URL=http://192.168.1.50:8080   # how the household reaches the app — used to build the link
 ```
 
-Without `SMTP_HOST` set, the link is logged to stdout instead of emailed — fine for local dev, not for a real deployment, since nobody outside the server can ever verify. Accounts that existed before this was added are grandfathered in as already verified.
+If you do not set `SMTP_HOST`, the app writes the link to stdout instead of an email. This works for local development. Do not use it for a real deployment: nobody outside the server can click the link. The app treats accounts created before this feature as already verified.
 
-The same SMTP config sends a notice for other security-relevant changes, so one household member's account being touched is never silent to them: TOTP enabled/disabled, a passkey added, and baby access granted — the latter goes to both the new member and the owner who granted it.
+The app uses the same SMTP settings to send a notice for other security changes. As a result, no change to an account happens silently. The app sends a notice when TOTP turns on or off, when someone adds a passkey, and when someone grants baby access. A baby-access grant sends a notice to both the new member and the owner who granted access.
 
-Optional two-factor login is available per account, from Settings → Account:
+Each account can turn on two-factor login from Settings → Account:
 
-- **TOTP** — scan the QR code into an authenticator app, confirm with a code.
-- **Passkeys (WebAuthn)** — add one or more from the same tab. Passkeys need a secure context: they work on `localhost`, but over plain HTTP on a LAN IP most browsers will refuse the ceremony. Put a reverse proxy with TLS (e.g. Caddy) in front for passkeys to actually work outside of localhost.
+- **TOTP** — scan the QR code into an authenticator app, then confirm with a code
+- **Passkeys (WebAuthn)** — add one or more passkeys from the same tab
 
-Sessions are httponly cookies, valid 30 days, stored server-side so they can be revoked by logging out.
+Passkeys need a secure context. They work on `localhost`. Over plain HTTP on a LAN IP address, most browsers refuse the passkey ceremony. Put a reverse proxy with TLS, for example Caddy, in front of the app for passkeys to work outside `localhost`.
 
-An account can delete itself from Settings → Account → Danger zone, with its password. Refused while it's the sole owner of a baby — transfer ownership or delete the baby first, so a journal is never silently lost. Its existing entries stay, with no author.
+Sessions use httponly cookies. Each session stays valid for 30 days. The app stores sessions on the server, so you can revoke a session by logging out.
 
-An admin account (the first account created is bootstrapped as one) can disable another account — instantly killing its sessions and API tokens, without touching its journal history — via the API:
+You can delete your account from Settings → Account → Danger zone. You must enter your password to confirm. The app refuses the deletion while your account is the sole owner of a baby. Transfer ownership, or delete the baby first. This prevents a journal from disappearing without warning. After deletion, existing entries from your account stay, with no author.
+
+An admin account can disable another account through the API. The app makes the first account created an admin. Disabling an account ends its sessions and API tokens at once. Disabling an account does not touch its journal history.
 
 ```bash
 GET  /api/admin/users
@@ -100,11 +108,11 @@ POST /api/admin/users/{id}/disable
 POST /api/admin/users/{id}/enable
 ```
 
-There's no admin page for this yet — authenticate as the admin account (cookie or bearer token) and call it directly, or from `/docs`.
+An admin can also do this from Settings → Admin in the app. Or an admin can call the API directly, with a session cookie or a bearer token, or from `/docs`.
 
 ### CLI
 
-`manage.py` covers the same account management from the command line — useful for creating the first account (nobody can register their way to admin) or fixing a locked-out household member without going through the API:
+`manage.py` gives the same account management from the command line. Use it to create the first account, because registration alone never grants admin rights. Use it to fix a locked-out household member without the API:
 
 ```bash
 uv run python manage.py create a@example.com --admin   # prompts for a password
@@ -116,14 +124,16 @@ uv run python manage.py set-password a@example.com
 uv run python manage.py delete a@example.com           # refuses while sole owner of a baby
 ```
 
-Run it against the deployed container so it shares the real database: `podman exec -it <container> uv run --no-sync python manage.py ...` (`--no-sync` skips re-resolving dependencies against the container's dev-less lockfile install).
+Run the command inside the deployed container, so it uses the real database: `podman exec -it <container> uv run --no-sync python manage.py ...`. The `--no-sync` flag skips a re-check of dependencies against the container's lockfile, which excludes dev packages.
 
 ## API
 
-Every route documented at `/docs` (Swagger UI) or `/redoc`, both behind login like the rest of the app. Two ways to authenticate:
+The app documents every route at `/docs` (Swagger UI) or `/redoc`. Both need login, like the rest of the app. Two ways to authenticate:
 
-- **Session cookie** — what the browser uses; also works for scripting if you keep the cookie jar from a login request.
-- **API tokens** — create one from Settings → Account → API tokens. Send it as `Authorization: Bearer <token>`; it grants the same access as the account that created it. The raw token is shown once, at creation, and can be revoked at any time.
+- **Session cookie** — the browser uses this. If a script keeps the cookie jar from a login request, the script can use it too.
+- **API token** — create one from Settings → Account → API tokens. Send it as `Authorization: Bearer <token>`. A token grants the same access as the account that created it.
+
+The app shows a raw token once, at creation. You can revoke a token at any time.
 
 ## Podman/Docker (optional)
 
