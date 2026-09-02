@@ -626,9 +626,13 @@ function renderBirthdayBanner() {
 
   wrap.innerHTML = `
     <div class="birthday-banner${ms.kind === 'years' ? ' major' : ''}">
-      ${[[38,9,4,4,25],[56,20,3,6,-18],[72,8,5,3,40],[84,34,3,5,12]].map(
-        ([l, t2, w, h, r]) =>
-          `<span class="bd-speck" style="left:${l}%;top:${t2}px;width:${w}px;height:${h}px;transform:rotate(${r}deg)"></span>`
+      ${[
+        [6,5,8,'#f6ecc9',2.6,0], [16,4,7,'#e8b08f',3.1,0.6], [27,5,5,'#a9c9b7',2.4,1.3],
+        [38,4,8,'#e2a0ad',2.9,0.2], [50,5,6,'#f6ecc9',2.7,1.6], [61,4,7,'#a9c9b7',3.3,0.9],
+        [72,5,5,'#e8b08f',2.5,1.9], [82,4,8,'#f6ecc9',3.0,0.4], [91,5,6,'#e2a0ad',2.8,1.1],
+      ].map(
+        ([l, w, h, color, dur, delay]) =>
+          `<span class="cf-piece" style="left:${l}%;width:${w}px;height:${h}px;background:${color};animation-duration:${dur}s;animation-delay:${delay}s"></span>`
       ).join('')}
       <div class="bd-icon">${icon('cake')}</div>
       <div class="bd-info">
@@ -645,22 +649,62 @@ async function checkOpenSleep() {
   openSleepEntry = res.ok ? await res.json() : null;
   renderSleepBanner();
 }
+// ── Ambient banner backdrop ──
+// Built once per open entry; the 60s tick only rewrites the time text, so
+// the animation keeps running instead of restarting every minute.
+let sleepBannerTimer = null, walkBannerTimer = null;
+
+function svgBg(inner) {
+  return 'url("data:image/svg+xml,' + encodeURIComponent(
+    "<svg xmlns='http://www.w3.org/2000/svg' preserveAspectRatio='none' " + inner + '</svg>'
+  ) + '")';
+}
+
+function buildStarfield(host) {
+  let seed = 20260902;
+  const rnd = () => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 4294967296; };
+  for (let i = 0; i < 16; i++) {
+    const s = document.createElement('span');
+    s.className = i % 5 === 2 ? 'bstar spark' : 'bstar';
+    // edge-weighted so the middle, behind the text, stays calm
+    let x = rnd(); x = x < 0.5 ? x * 0.68 : 0.6 + x * 0.4;
+    s.style.left = (x * 100).toFixed(1) + '%';
+    s.style.top = (6 + rnd() * 70).toFixed(1) + '%';
+    s.style.setProperty('--tw', (3 + rnd() * 4).toFixed(2) + 's');
+    s.style.setProperty('--td', (-rnd() * 6).toFixed(2) + 's');
+    const sz = (1.8 + rnd() * 2).toFixed(1) + 'px';
+    s.style.width = s.style.height = sz;
+    host.appendChild(s);
+  }
+}
+
 function renderSleepBanner() {
   const wrap = document.getElementById('sleep-banner-wrap');
+  clearTimeout(sleepBannerTimer);
   if (!openSleepEntry) { wrap.innerHTML = ''; return; }
   const since = fmtTime(openSleepEntry.ts_start);
   const dur = Math.round(durMin(openSleepEntry.ts_start, new Date().toISOString()));
-  wrap.innerHTML = `
-    <div class="sleep-banner">
-      <div class="sl-icon">${icon('sleep')}<span class="sl-dot"></span></div>
-      <div class="sl-info">
-        <div class="sl-label">${t('banner_since')} ${since}</div>
-        <div class="sl-since">${fmtDur(dur)} ${t('banner_so_far')}</div>
-      </div>
-      <button class="wake-btn" onclick="wakeUp()">${t('banner_wakeup')}</button>
-    </div>
-  `;
-  setTimeout(renderSleepBanner, 60000);
+  let banner = wrap.querySelector('.sleep-banner');
+  if (!banner || banner.dataset.entry !== String(openSleepEntry.id)) {
+    wrap.innerHTML = `
+      <div class="sleep-banner" data-entry="${openSleepEntry.id}">
+        <div class="banner-decor" aria-hidden="true"><span class="bmoon"><svg viewBox="0 0 24 24"><path d="M20 14.3A8 8 0 1 1 9.7 4a6.3 6.3 0 0 0 10.3 10.3Z"/></svg></span><span class="bshoot"></span></div>
+        <div class="sl-body">
+          <div class="sl-icon">${icon('sleep')}<span class="sl-dot"></span></div>
+          <div class="sl-info">
+            <div class="sl-label"></div>
+            <div class="sl-since"></div>
+          </div>
+          <button class="wake-btn" onclick="wakeUp()"></button>
+        </div>
+      </div>`;
+    banner = wrap.querySelector('.sleep-banner');
+    buildStarfield(banner.querySelector('.banner-decor'));
+  }
+  banner.querySelector('.sl-label').textContent = `${t('banner_since')} ${since}`;
+  banner.querySelector('.sl-since').textContent = `${fmtDur(dur)} ${t('banner_so_far')}`;
+  banner.querySelector('.wake-btn').textContent = t('banner_wakeup');
+  sleepBannerTimer = setTimeout(renderSleepBanner, 60000);
 }
 async function wakeUp() {
   if (!openSleepEntry) return;
@@ -685,20 +729,40 @@ async function checkOpenWalk() {
 }
 function renderWalkBanner() {
   const wrap = document.getElementById('walk-banner-wrap');
+  clearTimeout(walkBannerTimer);
   if (!openWalkEntry) { wrap.innerHTML = ''; return; }
   const since = fmtTime(openWalkEntry.ts_start);
   const dur = Math.round(durMin(openWalkEntry.ts_start, new Date().toISOString()));
-  wrap.innerHTML = `
-    <div class="sleep-banner walk">
-      <div class="sl-icon">${icon('walk')}<span class="sl-dot"></span></div>
-      <div class="sl-info">
-        <div class="sl-label">${t('banner_walk_since')} ${since}</div>
-        <div class="sl-since">${fmtDur(dur)} ${t('banner_walk_so_far')}</div>
-      </div>
-      <button class="wake-btn" onclick="endWalk()">${t('tile_walk_end')}</button>
-    </div>
-  `;
-  setTimeout(renderWalkBanner, 60000);
+  let banner = wrap.querySelector('.sleep-banner');
+  if (!banner || banner.dataset.entry !== String(openWalkEntry.id)) {
+    wrap.innerHTML = `
+      <div class="sleep-banner walk" data-entry="${openWalkEntry.id}">
+        <div class="banner-decor" aria-hidden="true"><span class="bsun"></span><span class="pl pl-hills"></span><span class="pl pl-trees"></span></div>
+        <div class="sl-body">
+          <div class="sl-icon">${icon('walk')}<span class="sl-dot"></span></div>
+          <div class="sl-info">
+            <div class="sl-label"></div>
+            <div class="sl-since"></div>
+          </div>
+          <button class="wake-btn" onclick="endWalk()"></button>
+        </div>
+      </div>`;
+    banner = wrap.querySelector('.sleep-banner');
+    banner.querySelector('.pl-hills').style.backgroundImage = svgBg(
+      "viewBox='0 0 260 64'><path fill='#8aa87a' d='M0 64 V45 C26 37 46 35 74 43 C104 51 128 35 160 39 C192 43 214 41 236 37 C246 35 254 36 260 35 V64 Z'/>"
+    );
+    banner.querySelector('.pl-trees').style.backgroundImage = svgBg(
+      "viewBox='0 0 200 64'><g fill='#3d5b33'>" +
+      "<path d='M13 53 L26 27 L39 53 Z M23.5 53 h5 V64 h-5 Z'/>" +
+      "<path d='M66 55 L78 39 L90 55 Z M75.5 55 h5 V64 h-5 Z'/>" +
+      "<path d='M111 54 L124 30 L137 54 Z M121.5 54 h5 V64 h-5 Z'/>" +
+      "<path d='M160 56 L172 41 L184 56 Z M169.5 56 h5 V64 h-5 Z'/></g>"
+    );
+  }
+  banner.querySelector('.sl-label').textContent = `${t('banner_walk_since')} ${since}`;
+  banner.querySelector('.sl-since').textContent = `${fmtDur(dur)} ${t('banner_walk_so_far')}`;
+  banner.querySelector('.wake-btn').textContent = t('tile_walk_end');
+  walkBannerTimer = setTimeout(renderWalkBanner, 60000);
 }
 async function endWalk() {
   if (!openWalkEntry) return;

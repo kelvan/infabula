@@ -156,11 +156,20 @@ header .logo-svg { height: 38px; width: auto; }
   background: linear-gradient(135deg, var(--accent) 0%, #8a5a1c 100%);
   box-shadow: 0 10px 24px rgba(138,90,28,0.36);
 }
-.birthday-banner .bd-speck {
+.birthday-banner .cf-piece {
   position: absolute;
-  background: rgba(255,255,255,0.45);
+  top: -10px;
   border-radius: 1px;
   pointer-events: none;
+  animation-name: cfFall;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+}
+@keyframes cfFall {
+  0% { transform: translateY(-10px) rotate(0deg); opacity: 0; }
+  8% { opacity: 0.9; }
+  88% { opacity: 0.9; }
+  100% { transform: translateY(92px) rotate(320deg); opacity: 0; }
 }
 .birthday-banner .bd-icon {
   width: 40px; height: 40px; flex-shrink: 0; border-radius: 50%;
@@ -179,16 +188,27 @@ header .logo-svg { height: 38px; width: auto; }
 /* ── Sleep / walk banner ── */
 .sleep-banner {
   margin: 16px 20px 0;
-  background: linear-gradient(135deg, var(--sleep) 0%, #4d6f96 100%);
+  background: linear-gradient(135deg, var(--sleep) 0%, #3f5d82 100%);
   color: white;
   border-radius: var(--radius);
   padding: 14px 18px;
   display: flex;
   align-items: center;
-  gap: 14px;
   box-shadow: 0 8px 20px rgba(91,127,168,0.32);
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
 }
-.sleep-banner.walk { background: linear-gradient(135deg, var(--walk) 0%, #567849 100%); box-shadow: 0 8px 20px rgba(107,140,90,0.32); }
+.sleep-banner.walk { background: linear-gradient(135deg, var(--walk) 0%, #4c6b40 100%); box-shadow: 0 8px 20px rgba(107,140,90,0.32); }
+.sleep-banner .sl-body {
+  position: relative;
+  z-index: 1;
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
 .sleep-banner .sl-icon {
   width: 40px; height: 40px; flex-shrink: 0; border-radius: 50%;
   background: rgba(255,255,255,0.16);
@@ -220,6 +240,95 @@ header .logo-svg { height: 38px; width: auto; }
   letter-spacing: 0.05em;
 }
 .sleep-banner.walk .wake-btn { color: var(--walk); }
+
+/* ── Ambient banner backdrop ── */
+.banner-decor {
+  position: absolute; inset: 0;
+  overflow: hidden;
+  border-radius: inherit;
+  pointer-events: none;
+  z-index: 0;
+}
+/* keeps the copy readable no matter what drifts behind it */
+.banner-decor::after {
+  content: "";
+  position: absolute; inset: 0;
+  background: radial-gradient(120% 90% at 30% 55%, rgba(20,30,45,0.30), transparent 62%);
+}
+.sleep-banner.walk .banner-decor::after {
+  background: linear-gradient(90deg, rgba(20,40,14,0.44) 0%, rgba(20,40,14,0.30) 42%, rgba(20,40,14,0) 74%);
+}
+
+.bstar {
+  position: absolute; border-radius: 50%; background: #fdf5df; opacity: 0.16;
+  animation: bTwinkle var(--tw, 4.5s) ease-in-out var(--td, 0s) infinite;
+}
+@keyframes bTwinkle { 0%,100% { opacity: 0.14; transform: scale(0.6); } 50% { opacity: 0.9; transform: scale(1); } }
+.bstar.spark { animation-name: bSpark; }
+.bstar.spark::before, .bstar.spark::after {
+  content: ""; position: absolute; left: 50%; top: 50%;
+  background: #fdf5df; transform: translate(-50%, -50%);
+}
+.bstar.spark::before { width: 1px; height: 12px; }
+.bstar.spark::after { width: 12px; height: 1px; }
+@keyframes bSpark { 0%,100% { opacity: 0.08; } 46%,54% { opacity: 0.82; } }
+
+.bmoon {
+  position: absolute; top: 8px; left: 56%;
+  width: 22px; height: 22px;
+  filter: drop-shadow(0 0 4px rgba(246,236,201,0.4));
+  animation: bMoon 9s ease-in-out infinite alternate;
+}
+.bmoon svg { width: 100%; height: 100%; display: block; fill: #f6ecc9; }
+@keyframes bMoon { from { transform: translateY(2px); } to { transform: translateY(-7px); } }
+
+.bshoot {
+  position: absolute; top: 6px; left: 8%;
+  width: 52px; height: 1.6px;
+  background: linear-gradient(90deg, transparent, #fdf5df);
+  border-radius: 2px; opacity: 0;
+  animation: bShoot 15s linear infinite;
+}
+@keyframes bShoot {
+  0% { transform: translate(0,0) rotate(15deg); opacity: 0; }
+  1.5% { opacity: 0.9; }
+  9% { transform: translate(220px, 56px) rotate(15deg); opacity: 0; }
+  100% { opacity: 0; }
+}
+
+.pl {
+  position: absolute; left: 0; bottom: 0;
+  width: 200%; height: 100%;
+  background-repeat: repeat-x;
+  background-position: left bottom;
+  background-size: var(--tile) 100%;
+  animation: bDrift var(--spd) linear infinite;
+}
+@keyframes bDrift {
+  from { transform: translateX(calc(-1 * var(--tile))); }
+  to { transform: translateX(0); }
+}
+.pl-hills { --tile: 260px; --spd: 40s; opacity: 0.4; }
+.pl-trees { --tile: 200px; --spd: 24s; opacity: 0.5; }
+
+.bsun {
+  position: absolute; top: 6px; left: 14px;
+  width: 44px; height: 44px; border-radius: 50%;
+  background: radial-gradient(circle, rgba(246,232,196,0.9) 0%, rgba(246,232,196,0.30) 52%, transparent 72%);
+  animation: bBreathe 6s ease-in-out infinite;
+}
+@keyframes bBreathe { 0%,100% { transform: scale(1); opacity: 0.78; } 50% { transform: scale(1.08); opacity: 1; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .bstar, .bmoon, .bshoot, .pl, .bsun { animation: none !important; }
+  .bstar { opacity: 0.5; }
+  .bstar.spark { opacity: 0.6; }
+  .bshoot { display: none; }
+  .bmoon { transform: translateY(-4px); }
+  .pl-hills { transform: translateX(-150px); }
+  .pl-trees { transform: translateX(-64px); }
+  .birthday-banner .cf-piece { animation: none !important; opacity: 0.7; }
+}
 
 /* ── Entry list ── */
 .day-entries { padding: 16px 20px 0; }
