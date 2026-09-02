@@ -1,7 +1,7 @@
 stages:
   - build
 
-image:
+build-image:
   stage: build
   image: docker:27
   services:
