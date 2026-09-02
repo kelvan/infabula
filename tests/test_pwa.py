@@ -36,18 +36,31 @@ class TestServiceWorker:
 
 class TestManifest:
     async def test_reachable_without_a_session(self, client):
-        res = await client.get("/static/manifest.json")
+        res = await client.get("/manifest.json")
         assert res.status_code == 200
+
+    async def test_not_cached_like_static_assets(self, client):
+        """Icon URLs inside carry the asset version; the manifest itself
+        must stay fetchable so a changed icon is actually picked up."""
+        res = await client.get("/manifest.json")
+        assert "no-cache" in res.headers["cache-control"]
+
+    async def test_icon_urls_are_versioned(self, client):
+        """/static/ is immutable for a year — without a version query an
+        already-installed app can never see a new icon."""
+        manifest = (await client.get("/manifest.json")).json()
+        assert manifest["icons"]
+        assert all("?v=" in icon["src"] for icon in manifest["icons"])
 
     async def test_start_url_matches_what_the_service_worker_controls(self, client):
         """If these ever diverge, Chrome won't consider the app
         installable — the service worker has to control the page the
         manifest says to launch."""
-        manifest = (await client.get("/static/manifest.json")).json()
+        manifest = (await client.get("/manifest.json")).json()
         assert manifest["start_url"] == "/"
 
     async def test_has_the_icon_sizes_android_expects(self, client):
-        manifest = (await client.get("/static/manifest.json")).json()
+        manifest = (await client.get("/manifest.json")).json()
         sizes = {icon["sizes"] for icon in manifest["icons"]}
         assert "192x192" in sizes
         assert "512x512" in sizes
@@ -55,5 +68,5 @@ class TestManifest:
     async def test_has_a_maskable_icon(self, client):
         """Without one, Android falls back to boxing the icon on a
         white circle instead of using the adaptive-icon shape."""
-        manifest = (await client.get("/static/manifest.json")).json()
+        manifest = (await client.get("/manifest.json")).json()
         assert any("maskable" in icon["purpose"] for icon in manifest["icons"])

@@ -387,6 +387,18 @@ async def service_worker():
         media_type="text/javascript",
         headers={"Cache-Control": "no-cache"},
     )
+
+
+@app.get("/manifest.json", tags=["PWA"], include_in_schema=False)
+async def manifest():
+    """Served from a route rather than /static/ so the icon URLs can carry
+    the asset version — without it the year-long immutable cache on
+    /static/ pins the old icons on every already-installed device."""
+    with open("static/manifest.json") as fh:
+        data = json.load(fh)
+    for entry in data.get("icons", []):
+        entry["src"] = f"{entry['src']}?v={ASSET_VERSION}"
+    return JSONResponse(data, headers={"Cache-Control": "no-cache"})
 # auto_reload only matters for local dev — templates are baked into the
 # image in production, so nothing ever changes underneath the process.
 # Starlette 1.0 dropped passing Environment options through
@@ -436,6 +448,7 @@ PUBLIC_PREFIXES = ("/static/",)
 PUBLIC_PATHS = (
     "/login",
     "/sw.js",
+    "/manifest.json",
     "/api/auth/register",
     "/api/auth/login",
     "/api/auth/totp/verify",
