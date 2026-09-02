@@ -1,10 +1,33 @@
+# VCS / CI / tooling
 .git
+.gitignore
+.dockerignore
+.github
+.gitlab-ci.yml
+.claude
+.playwright-mcp
+deploy.sh
+infabula.container
+
+# Python caches / envs
 .venv
 __pycache__
 *.pyc
 .ruff_cache
-.playwright-mcp
-.claude
-infabula.db
-infabula.container
+.mypy_cache
+.pytest_cache
+
+# Tests — not run in the image (uv sync --no-dev)
+tests
+
+# Runtime state — provided by the volume mount, not the image
+data
+backups
+*.db
+
+# Docs
 README.md
+CHANGELOG.md
+
+# OS junk
+.DS_Store
