@@ -4,6 +4,7 @@ import io
 import json
 import logging
 import os
+import re
 import sqlite3
 import time
 from datetime import date, datetime, timedelta, timezone
@@ -389,16 +390,39 @@ async def service_worker():
     )
 
 
+ICON_DIR = "static/icons"
+
+
 @app.get("/manifest.json", tags=["PWA"], include_in_schema=False)
 async def manifest():
-    """Served from a route rather than /static/ so the icon URLs can carry
-    the asset version — without it the year-long immutable cache on
-    /static/ pins the old icons on every already-installed device."""
-    with open("static/manifest.json") as fh:
+    """Not served from /static/, and neither are the icons it points at.
+
+    Everything under /static/ carries a year-long immutable cache, so
+    once a browser (or Chrome's WebAPK minting server) has fetched the
+    manifest or an icon, a redesign never reaches it. Here the manifest
+    is uncached and every icon URL gets the asset version as a *path*
+    segment — a genuinely new URL each deploy, which nothing anywhere
+    can answer from a stale cache.
+    """
+    with open("manifest.json") as fh:
         data = json.load(fh)
     for entry in data.get("icons", []):
-        entry["src"] = f"{entry['src']}?v={ASSET_VERSION}"
+        name = entry["src"].rsplit("/", 1)[-1]
+        entry["src"] = f"/app-icon/{ASSET_VERSION}/{name}"
     return JSONResponse(data, headers={"Cache-Control": "no-cache"})
+
+
+@app.get("/app-icon/{version}/{name}", tags=["PWA"], include_in_schema=False)
+async def app_icon(version: str, name: str):
+    """PWA icons, keyed by asset version in the path (see manifest())."""
+    if not re.fullmatch(r"icon-\d+\.png", name):
+        return JSONResponse({"error": "not found"}, status_code=404)
+    path = os.path.join(ICON_DIR, name)
+    if not os.path.exists(path):
+        return JSONResponse({"error": "not found"}, status_code=404)
+    return FileResponse(
+        path, media_type="image/png", headers={"Cache-Control": "no-cache"}
+    )
 # auto_reload only matters for local dev — templates are baked into the
 # image in production, so nothing ever changes underneath the process.
 # Starlette 1.0 dropped passing Environment options through
@@ -444,7 +468,7 @@ def row_to_dict(entry: Entry) -> dict:
 # *existing* account's credentials — TOTP setup, passkey enrollment, logout —
 # stay behind the gate like any other API route. Unauthenticated HTML
 # requests bounce to /login; unauthenticated API requests get a plain 401.
-PUBLIC_PREFIXES = ("/static/",)
+PUBLIC_PREFIXES = ("/static/", "/app-icon/")
 PUBLIC_PATHS = (
     "/login",
     "/sw.js",

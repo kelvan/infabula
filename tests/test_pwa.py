@@ -45,12 +45,29 @@ class TestManifest:
         res = await client.get("/manifest.json")
         assert "no-cache" in res.headers["cache-control"]
 
-    async def test_icon_urls_are_versioned(self, client):
-        """/static/ is immutable for a year — without a version query an
-        already-installed app can never see a new icon."""
+    async def test_old_static_location_is_gone(self, client):
+        """Anything still linking /static/manifest.json would get the
+        immutable-cached copy forever — it must 404, not be duplicated."""
+        assert (await client.get("/static/manifest.json")).status_code == 404
+
+    async def test_icon_urls_are_versioned_by_path(self, client):
+        """/static/ is immutable for a year and Chrome's WebAPK server
+        caches too — the icon URL has to be a genuinely new path each
+        deploy, not the same path with a query."""
         manifest = (await client.get("/manifest.json")).json()
         assert manifest["icons"]
-        assert all("?v=" in icon["src"] for icon in manifest["icons"])
+        assert all(i["src"].startswith("/app-icon/") for i in manifest["icons"])
+
+    async def test_app_icon_route_serves_png_uncached(self, client):
+        src = (await client.get("/manifest.json")).json()["icons"][0]["src"]
+        res = await client.get(src)
+        assert res.status_code == 200
+        assert res.headers["content-type"] == "image/png"
+        assert "no-cache" in res.headers["cache-control"]
+
+    async def test_app_icon_route_rejects_a_bogus_name(self, client):
+        assert (await client.get("/app-icon/123/../secret.png")).status_code == 404
+        assert (await client.get("/app-icon/123/logo.svg")).status_code == 404
 
     async def test_start_url_matches_what_the_service_worker_controls(self, client):
         """If these ever diverge, Chrome won't consider the app
