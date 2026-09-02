@@ -45,3 +45,54 @@ class TestNapThreshold:
         babies = (await client.get("/api/babies")).json()
         mine = next(b for b in babies if b["id"] == baby_id)
         assert mine["name"] == "Original"
+
+
+class TestBottleDefaultContent:
+    async def test_defaults_to_unset(self, client, logged_in, baby_factory):
+        baby_id = await baby_factory(await logged_in())
+        babies = (await client.get("/api/babies")).json()
+        mine = next(b for b in babies if b["id"] == baby_id)
+        assert mine["bottle_default_content"] == ""
+
+    async def test_save_and_read_back(self, client, logged_in, baby_factory):
+        baby_id = await baby_factory(await logged_in())
+        assert (
+            await client.put(
+                f"/api/babies/{baby_id}", json={"bottle_default_content": "formula"}
+            )
+        ).status_code == 200
+        babies = (await client.get("/api/babies")).json()
+        mine = next(b for b in babies if b["id"] == baby_id)
+        assert mine["bottle_default_content"] == "formula"
+
+    async def test_empty_string_clears_it(self, client, logged_in, baby_factory):
+        baby_id = await baby_factory(await logged_in())
+        await client.put(
+            f"/api/babies/{baby_id}", json={"bottle_default_content": "abgepumpt"}
+        )
+        await client.put(
+            f"/api/babies/{baby_id}", json={"bottle_default_content": ""}
+        )
+        babies = (await client.get("/api/babies")).json()
+        mine = next(b for b in babies if b["id"] == baby_id)
+        assert mine["bottle_default_content"] == ""
+
+    async def test_rejects_an_unknown_value(self, client, logged_in, baby_factory):
+        baby_id = await baby_factory(await logged_in())
+        res = await client.put(
+            f"/api/babies/{baby_id}", json={"bottle_default_content": "oat"}
+        )
+        assert res.status_code == 400
+
+    async def test_bad_value_does_not_save_the_name_either(
+        self, client, logged_in, baby_factory
+    ):
+        baby_id = await baby_factory(await logged_in(), name="Original")
+        res = await client.put(
+            f"/api/babies/{baby_id}",
+            json={"name": "Changed", "bottle_default_content": "oat"},
+        )
+        assert res.status_code == 400
+        babies = (await client.get("/api/babies")).json()
+        mine = next(b for b in babies if b["id"] == baby_id)
+        assert mine["name"] == "Original"

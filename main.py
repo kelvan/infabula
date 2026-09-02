@@ -1385,6 +1385,7 @@ def baby_to_dict(baby: Baby) -> dict:
         "name": baby.name,
         "birthday": baby.birthday or "",
         "nap_threshold_min": baby.nap_threshold_min,
+        "bottle_default_content": baby.bottle_default_content or "",
         "created_by": baby.created_by,
     }
 
@@ -1445,6 +1446,13 @@ async def update_baby(baby_id: int, request: Request):
                 {"error": "nap_threshold_min must be between 15 and 1440"},
                 status_code=400,
             )
+    if "bottle_default_content" in body:
+        content = (body.get("bottle_default_content") or "").strip() or None
+        if content not in (None, "abgepumpt", "formula"):
+            return JSONResponse(
+                {"error": "bottle_default_content must be abgepumpt, formula or empty"},
+                status_code=400,
+            )
     async with Session.begin() as session:
         baby = await session.get(Baby, baby_id)
         if baby is None:
@@ -1455,6 +1463,10 @@ async def update_baby(baby_id: int, request: Request):
             baby.birthday = (body.get("birthday") or "").strip() or None
         if "nap_threshold_min" in body:
             baby.nap_threshold_min = body["nap_threshold_min"]
+        if "bottle_default_content" in body:
+            baby.bottle_default_content = (
+                body.get("bottle_default_content") or ""
+            ).strip() or None
     await broadcast_event("entries_changed")
     return {"ok": True}
 

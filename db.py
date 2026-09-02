@@ -269,6 +269,10 @@ class Baby(Base):
     # stats. Per baby, not a global constant, since newborns sleep in short
     # bursts around the clock and this consolidates as they mature.
     nap_threshold_min: Mapped[int] = mapped_column(Integer, nullable=False, default=240)
+    # Preselected content for a bottle entry: "abgepumpt" or "formula",
+    # or null to leave the picker on its first option. A household that
+    # only ever gives one skips choosing it every time.
+    bottle_default_content: Mapped[str | None] = mapped_column(String(16))
     # The account that created this baby — its owner access can never be
     # revoked or demoted, so a household always has at least one owner who
     # can't be locked out by another owner. Null for babies that predate

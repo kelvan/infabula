@@ -58,6 +58,8 @@ const I18N = {
     lbl_baby_name:'Name', lbl_birthday:'Geburtstag', baby_name_placeholder:'Name des Babys',
     lbl_nap_threshold:'Schlafschwelle', lbl_minutes:'Minuten',
     nap_threshold_hint:'Schlafeinträge unter diesem Wert zählen als Nickerchen, längere als Nachtschlaf. Bei Neugeborenen niedriger ansetzen, mit dem Alter erhöhen.',
+    lbl_bottle_default:'Standard-Inhalt (Fläschchen)', opt_bottle_ask:'Jedes Mal wählen',
+    bottle_default_hint:'Beim Fläschchen-Eintrag ist dieser Inhalt vorausgewählt.',
     baby_fallback:'Baby', btn_add_baby:'Baby hinzufügen', btn_delete:'Löschen',
     confirm_delete_baby:'Dieses Baby und alle seine Einträge unwiderruflich löschen?',
     confirm_remove_access:'Zugriff für diese Person entfernen?',
@@ -161,6 +163,8 @@ const I18N = {
     lbl_baby_name:'Name', lbl_birthday:'Birthday', baby_name_placeholder:"Baby's name",
     lbl_nap_threshold:'Nap threshold', lbl_minutes:'minutes',
     nap_threshold_hint:'Sleep entries shorter than this count as a nap in stats; longer ones count as night sleep. Lower this for a newborn, raise it as naps consolidate.',
+    lbl_bottle_default:'Default bottle content', opt_bottle_ask:'Choose each time',
+    bottle_default_hint:'Preselected as the content when you log a bottle.',
     baby_fallback:'Baby', btn_add_baby:'Add baby', btn_delete:'Delete',
     confirm_delete_baby:'Permanently delete this baby and all its entries?',
     confirm_remove_access:'Remove this person\'s access?',
@@ -872,6 +876,14 @@ async function quickSubmit(type, meta = {}, note = '') {
   }
 }
 
+// <option>s for a bottle's content, with the current baby's default preselected.
+function bottleContentOptions() {
+  const def = currentBaby().bottle_default_content || 'abgepumpt';
+  return ['abgepumpt', 'formula'].map(v =>
+    `<option value="${v}"${v === def ? ' selected' : ''}>${t(v === 'abgepumpt' ? 'opt_pumped' : 'opt_formula')}</option>`
+  ).join('');
+}
+
 function openQuickPopup(type) {
   document.getElementById('quick-title').textContent = getType(type).label;
   const body = document.getElementById('quick-body');
@@ -895,10 +907,7 @@ function openQuickPopup(type) {
     body.innerHTML = `
       <div class="field"><label>${t('lbl_amount')}</label><input type="number" id="q-amount" min="0" step="5" placeholder="120"></div>
       <div class="field"><label>${t('lbl_content')}</label>
-        <select id="q-content">
-          <option value="abgepumpt">${t('opt_pumped')}</option>
-          <option value="formula">${t('opt_formula')}</option>
-        </select>
+        <select id="q-content">${bottleContentOptions()}</select>
       </div>
       <button class="btn" onclick="quickSubmit('bottle',{amount:document.getElementById('q-amount').value,content:document.getElementById('q-content').value})">${t('btn_save')}</button>
     `;
@@ -1644,6 +1653,17 @@ function renderBabyTab() {
         </div>
         <div class="field-hint" style="margin:6px 0 0;">${t('nap_threshold_hint')}</div>
       </div>
+      <div class="field" style="margin-top:6px;">
+        <label>${t('lbl_bottle_default')}</label>
+        <select class="baby-bottle-default" ${canEdit ? '' : 'disabled'}>
+          ${['', 'abgepumpt', 'formula'].map(v => {
+            const lbl = v === '' ? t('opt_bottle_ask') : t(v === 'abgepumpt' ? 'opt_pumped' : 'opt_formula');
+            const sel = v === (b.bottle_default_content || '') ? ' selected' : '';
+            return `<option value="${v}"${sel}>${lbl}</option>`;
+          }).join('')}
+        </select>
+        <div class="field-hint" style="margin:6px 0 0;">${t('bottle_default_hint')}</div>
+      </div>
       <div style="display:flex;align-items:center;justify-content:space-between;">
         <span class="badge-role ${b.role}">${t('role_' + b.role)}</span>
         <div class="baby-actions" style="margin-bottom:0;">
@@ -2164,10 +2184,11 @@ async function saveBabyRow(id) {
   const name = row.querySelector('.baby-name-input').value;
   const birthday = row.querySelector('.baby-birthday-input').value;
   const nap_threshold_min = parseInt(row.querySelector('.baby-threshold-input').value, 10);
+  const bottle_default_content = row.querySelector('.baby-bottle-default').value;
   const res = await fetch(`/api/babies/${id}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name, birthday, nap_threshold_min }),
+    body: JSON.stringify({ name, birthday, nap_threshold_min, bottle_default_content }),
   });
   if (!res.ok) { await toastError(res); return; }
   await loadBabies();
@@ -2394,10 +2415,7 @@ function selectType(type) {
       ${dtField('f-start', t('lbl_time'), now)}
       <div class="field"><label>${t('lbl_amount')}</label><input type="number" id="f-amount" min="0" step="5" placeholder="120"></div>
       <div class="field"><label>${t('lbl_content')}</label>
-        <select id="f-content">
-          <option value="abgepumpt">${t('opt_pumped')}</option>
-          <option value="formula">${t('opt_formula')}</option>
-        </select>
+        <select id="f-content">${bottleContentOptions()}</select>
       </div>
       <div class="field"><label>${t('lbl_note')}</label><textarea id="f-note" rows="2"></textarea></div>
       <button class="btn" onclick="submitEntry()">${t('btn_save')}</button>
