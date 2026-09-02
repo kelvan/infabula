@@ -244,6 +244,10 @@ const ICONS = {
   sun: '<circle cx="12" cy="12" r="4.2"/><path d="M12 3v2.2M12 18.8V21M21 12h-2.2M5.2 12H3M18.4 5.6l-1.5 1.5M7.1 16.9l-1.5 1.5M18.4 18.4l-1.5-1.5M7.1 7.1 5.6 5.6"/>',
   home: '<path d="M4 11 12 4l8 7"/><path d="M6 10v9.5a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1V10"/><path d="M10 20.5V15h4v5.5"/>',
   mood: '<circle cx="12" cy="12" r="8.3"/><circle cx="9.2" cy="10.3" r=".9"/><circle cx="14.8" cy="10.3" r=".9"/><path d="M8.3 14.5c1 1.6 2.3 2.5 3.7 2.5s2.7-.9 3.7-2.5"/>',
+  mood_happy: '<circle cx="12" cy="12" r="8.3"/><circle cx="9.2" cy="10.3" r=".9"/><circle cx="14.8" cy="10.3" r=".9"/><path d="M8.3 14.2c1 1.7 2.3 2.6 3.7 2.6s2.7-.9 3.7-2.6"/>',
+  mood_neutral: '<circle cx="12" cy="12" r="8.3"/><circle cx="9.2" cy="10.3" r=".9"/><circle cx="14.8" cy="10.3" r=".9"/><path d="M9 15h6"/>',
+  mood_fussy: '<circle cx="12" cy="12" r="8.3"/><circle cx="9.2" cy="10.3" r=".9"/><circle cx="14.8" cy="10.3" r=".9"/><path d="M9 15.4c.8-.9 1.8-1.3 3-1.3s2.2.4 3 1.3"/>',
+  mood_crying: '<circle cx="12" cy="12" r="8.3"/><path d="M8.2 10.9c.4-.8 1.3-.8 1.7 0"/><path d="M14.1 10.9c.4-.8 1.3-.8 1.7 0"/><path d="M8.5 16c1-1.4 2.2-2.1 3.5-2.1s2.5.7 3.5 2.1"/>',
   cake: '<path d="M4 20.5h16"/><path d="M4.5 20.5v-5.2c0-1 .8-1.8 1.8-1.8h11.4c1 0 1.8.8 1.8 1.8v5.2"/><path d="M4.5 16.6c1.2 0 1.2 1.2 2.5 1.2s1.2-1.2 2.5-1.2 1.2 1.2 2.5 1.2 1.2-1.2 2.5-1.2 1.2 1.2 2.5 1.2 1.3-1.2 2.5-1.2"/><path d="M12 13.5v-3"/><path d="M12 9.6c-.7-.5-.7-1.5 0-2.3.7.8.7 1.8 0 2.3Z"/>',
   check: '<path d="M5 13l4 4L19 7"/>',
   person: '<circle cx="12" cy="8.5" r="3.5"/><path d="M5 20c0-4 3-6.5 7-6.5s7 2.5 7 6.5"/>',
@@ -934,9 +938,14 @@ async function loadLog() {
       }
     }
 
+    const moodKey = `mood_${m.mood}`;
+    const iconHtml = e.type === 'mood'
+      ? icon(moodKey in ICONS ? moodKey : 'mood')
+      : typeIcon(tp.icon);
+
     return `
       <div class="entry-item" onclick="openEditModal(${e.id})">
-        <div class="entry-icon tint-${typeTint(e.type)}">${typeIcon(tp.icon)}</div>
+        <div class="entry-icon tint-${typeTint(e.type)}">${iconHtml}</div>
         <div class="entry-body">
           <div class="entry-type">${tp.label}</div>
           <div class="entry-time">${timeStr}</div>
