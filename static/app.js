@@ -74,6 +74,11 @@ const I18N = {
     btn_cancel:'Abbrechen', btn_use_photo:'Foto verwenden',
     settings_security_title:'Sicherheit', btn_logout:'Abmelden', lbl_display_name:'Anzeigename',
     member_since:'Dabei seit', last_login:'Letzte Anmeldung',
+    settings_notify_title:'Erinnerungen', notify_rhythm_label:'Aufwach- & Fläschchen-Erinnerung',
+    notify_hint:'Push kurz bevor das Baby üblicherweise aufwacht oder das nächste Fläschchen fällig ist.',
+    notify_unavailable:'Push ist auf diesem Server nicht eingerichtet.',
+    notify_denied:'Benachrichtigungen wurden abgelehnt — im Browser erlauben.',
+    notify_unsupported:'Dieser Browser unterstützt keine Push-Benachrichtigungen.',
     settings_totp_title:'Zwei-Faktor-Authentifizierung (TOTP)',
     totp_enabled_sub:'Aktiviert', totp_disabled_sub:'Nicht aktiviert',
     btn_disable:'Deaktivieren', btn_enable:'Aktivieren', btn_confirm:'Bestätigen',
@@ -184,6 +189,11 @@ const I18N = {
     btn_cancel:'Cancel', btn_use_photo:'Use photo',
     settings_security_title:'Security', btn_logout:'Log out', lbl_display_name:'Display name',
     member_since:'Member since', last_login:'Last login',
+    settings_notify_title:'Reminders', notify_rhythm_label:'Wake & bottle reminders',
+    notify_hint:'A push shortly before the baby usually wakes or the next bottle is due.',
+    notify_unavailable:"Push isn't set up on this server.",
+    notify_denied:'Notifications were blocked — allow them in the browser.',
+    notify_unsupported:'This browser has no push support.',
     settings_totp_title:'Two-factor authentication (TOTP)',
     totp_enabled_sub:'Enabled', totp_disabled_sub:'Not enabled',
     btn_disable:'Disable', btn_enable:'Enable', btn_confirm:'Confirm',
@@ -268,6 +278,7 @@ const ICONS = {
   shield: '<path d="M12 3l7 3v6c0 4.8-3 8.5-7 9.5C8 20.5 5 16.8 5 12V6l7-3Z"/>',
   key: '<circle cx="8" cy="15" r="3.2"/><path d="M10.3 12.7 18 5M15 8l2 2M17.5 5.5l2 2"/>',
   code: '<path d="M9 8 4 12l5 4M15 8l5 4-5 4"/>',
+  bell: '<path d="M6 16.5V11a6 6 0 0 1 12 0v5.5l1.6 1.8a.6.6 0 0 1-.5 1H4.9a.6.6 0 0 1-.5-1Z"/><path d="M10 21a2 2 0 0 0 4 0"/>',
 };
 function icon(name) { return `<svg viewBox="0 0 24 24" class="ic">${ICONS[name] || ''}</svg>`; }
 function typeIcon(name) { return name === 'sleep' ? icon('zzz') : icon(name); }
@@ -1808,6 +1819,16 @@ function renderAccountTab() {
     </div>
 
     <div class="settings-card">
+      <div class="settings-card-title">${icon('bell')}${t('settings_notify_title')}</div>
+      <div class="security-row">
+        <div><div class="s-name">${t('notify_rhythm_label')}</div><div class="s-sub">${t('notify_hint')}</div></div>
+        ${('PushManager' in window)
+          ? `<button class="btn-small${me.notify_rhythm ? ' secondary' : ''}" onclick="toggleRhythmNotify()">${me.notify_rhythm ? t('btn_disable') : t('btn_enable')}</button>`
+          : `<span class="s-sub" style="text-align:right;max-width:40%;">${t('notify_unsupported')}</span>`}
+      </div>
+    </div>
+
+    <div class="settings-card">
       <div class="settings-card-title">${icon('shield')}${t('settings_totp_title')}</div>
       <div class="security-row">
         <div><div class="s-name">${me.totp_enabled ? t('totp_enabled_sub') : t('totp_disabled_sub')}</div></div>
@@ -1874,6 +1895,54 @@ function renderAccountTab() {
 }
 
 // ── Security: display name, logout, TOTP, passkeys ──
+function urlB64ToU8(b64) {
+  const pad = '='.repeat((4 - (b64.length % 4)) % 4);
+  const raw = atob((b64 + pad).replace(/-/g, '+').replace(/_/g, '/'));
+  return Uint8Array.from([...raw].map(c => c.charCodeAt(0)));
+}
+
+async function toggleRhythmNotify() {
+  const on = !settingsMe.notify_rhythm;
+  try {
+    if (on) {
+      const cfg = await (await fetch('/api/push/config')).json();
+      if (!cfg.enabled) { toast(t('notify_unavailable')); return; }
+      if ((await Notification.requestPermission()) !== 'granted') { toast(t('notify_denied')); return; }
+      const reg = await navigator.serviceWorker.ready;
+      let sub = await reg.pushManager.getSubscription();
+      if (!sub) {
+        sub = await reg.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: urlB64ToU8(cfg.vapid_key),
+        });
+      }
+      const j = sub.toJSON();
+      await fetch('/api/push/subscribe', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ endpoint: j.endpoint, keys: j.keys, lang }),
+      });
+    } else {
+      const reg = await navigator.serviceWorker.ready;
+      const sub = await reg.pushManager.getSubscription();
+      if (sub) {
+        await fetch('/api/push/unsubscribe', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ endpoint: sub.endpoint }),
+        });
+      }
+    }
+    await fetch('/api/auth/notify', {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ notify_rhythm: on }),
+    });
+    settingsMe.notify_rhythm = on;
+    renderAccountTab();
+    toast(t('toast_saved'));
+  } catch (e) {
+    toast(t('toast_error'));
+  }
+}
+
 async function saveDisplayName() {
   const name = document.getElementById('display-name-input').value.trim();
   if (!name) { toast(t('toast_no_name')); return; }

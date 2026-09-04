@@ -98,6 +98,24 @@ Passkeys need a secure context. They work on `localhost`. Over plain HTTP on a L
 
 Sessions use httponly cookies. Each session stays valid for 30 days. The app stores sessions on the server, so you can revoke a session by logging out.
 
+## Rhythm reminders
+
+Settings → Account → Reminders lets each account turn on a Web Push notification shortly before the baby usually wakes, or before the next typical bottle is due. The app learns those times from the log (see the "Typical day" section in Stats) and a background loop checks every few minutes.
+
+It needs a VAPID key pair. Generate one and set it in the environment:
+
+```bash
+uv run python manage.py vapid
+```
+
+```bash
+VAPID_PRIVATE_KEY=...
+VAPID_PUBLIC_KEY=...
+VAPID_CLAIM_EMAIL=mailto:you@example.com
+```
+
+Without these three, the feature stays off and the Reminders card says so. Push also needs a secure context — the same TLS reverse proxy that passkeys need.
+
 You can delete your account from Settings → Account → Danger zone. You must enter your password to confirm. The app refuses the deletion while your account is the sole owner of a baby. Transfer ownership, or delete the baby first. This prevents a journal from disappearing without warning. After deletion, existing entries from your account stay, with no author.
 
 An admin account can disable another account through the API. The app makes the first account created an admin. Disabling an account ends its sessions and API tokens at once. Disabling an account does not touch its journal history.

@@ -134,6 +134,10 @@ class User(Base):
     disabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     is_admin: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     quick_actions: Mapped[list[str] | None] = mapped_column(JSON)
+    # Web-push reminders when a typical wake or bottle time is coming up.
+    notify_rhythm: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False
+    )
     # Who created the invite this account registered through, if any —
     # kept on the account itself so it outlives the Invite row (which can
     # be pruned), not just derivable while that row still exists.
@@ -256,6 +260,26 @@ class Invite(Base):
     used_at: Mapped[str | None] = mapped_column(String(32))
     used_by: Mapped[int | None] = mapped_column(
         ForeignKey("users.id", ondelete="SET NULL")
+    )
+
+
+class PushSubscription(Base):
+    """A browser's Web Push endpoint, for rhythm reminders. One per
+    device; the same account may have several."""
+
+    __tablename__ = "push_subscriptions"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    endpoint: Mapped[str] = mapped_column(Text, unique=True, nullable=False)
+    p256dh: Mapped[str] = mapped_column(String(255), nullable=False)
+    auth: Mapped[str] = mapped_column(String(255), nullable=False)
+    lang: Mapped[str] = mapped_column(String(4), nullable=False, default="en")
+    created_at: Mapped[str | None] = mapped_column(
+        String(32),
+        default=lambda: datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S"),
     )
 
 

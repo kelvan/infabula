@@ -1,4 +1,5 @@
 import asyncio
+import contextlib
 import csv
 import io
 import json
@@ -9,6 +10,7 @@ import re
 import sqlite3
 import statistics
 import time
+from contextlib import asynccontextmanager
 from datetime import date, datetime, timedelta, timezone
 from datetime import time as dtime
 from itertools import groupby
@@ -28,6 +30,7 @@ from fastapi.responses import (
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from PIL import Image, ImageOps
+from pywebpush import WebPushException, webpush
 from sqlalchemy import delete, func, select, update
 from sqlalchemy import false as sa_false
 from sqlalchemy.exc import IntegrityError
@@ -53,6 +56,7 @@ from db import (
     BabyAccess,
     Entry,
     Invite,
+    PushSubscription,
     Session,
     User,
     WebauthnCredential,
@@ -62,6 +66,27 @@ from migrate import run_migrations
 
 logger = logging.getLogger(__name__)
 
+# ── Web Push (rhythm reminders) ──
+VAPID_PRIVATE_KEY = os.getenv("VAPID_PRIVATE_KEY") or ""
+VAPID_PUBLIC_KEY = os.getenv("VAPID_PUBLIC_KEY") or ""
+VAPID_CLAIM_EMAIL = os.getenv("VAPID_CLAIM_EMAIL") or "mailto:admin@localhost"
+PUSH_ENABLED = bool(VAPID_PRIVATE_KEY and VAPID_PUBLIC_KEY)
+NOTIFY_TICK_SECONDS = 180
+
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    task = None
+    if PUSH_ENABLED:
+        task = asyncio.create_task(_notify_loop())
+        logger.info("rhythm-reminder loop started")
+    yield
+    if task is not None:
+        task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await task
+
+
 app = FastAPI(
     title="infabula API",
     description=(
@@ -70,6 +95,7 @@ app = FastAPI(
         "token from Settings → Account → API tokens."
     ),
     version="1.0.0",
+    lifespan=lifespan,
 )
 ASSET_VERSION = str(int(time.time()))
 
@@ -541,6 +567,7 @@ def user_to_dict(user: User) -> dict:
         "created_at": user.created_at,
         "last_login_at": user.last_login_at,
         "quick_actions": user.quick_actions,
+        "notify_rhythm": user.notify_rhythm,
         "has_avatar": os.path.exists(avatar_path(user.id)),
     }
 
@@ -1945,6 +1972,308 @@ async def get_rhythm(
             )
         ).all()
     return compute_rhythm([row_to_dict(r) for r in rows], zone, window_days=days)
+
+
+# ── rhythm reminders ──
+NOTIFY_WAKE_LEAD_MIN = 15  # ping this long before the typical wake time
+NOTIFY_BOTTLE_LEAD_MIN = 20  # ...and before a typical bottle
+NOTIFY_BOTTLE_SUPPRESS_MIN = 90  # a bottle this recent means no "bottle soon"
+NOTIFY_RESEND_COOLDOWN_MIN = 180  # don't repeat the same alert within this
+NOTIFY_MIN_DAYS = 5  # need at least this many tracked days to predict
+
+
+def _hm_to_min(hhmm: str) -> int:
+    h, m = hhmm.split(":")
+    return int(h) * 60 + int(m)
+
+
+def _forward_min(now_min: int, target_min: int) -> int:
+    """Minutes from now until target_min, going forward round the clock."""
+    return (target_min - now_min) % 1440
+
+
+def _in_sleep_window(now_min: int, window: dict) -> bool:
+    a, b = _hm_to_min(window["start"]), _hm_to_min(window["end"])
+    return a <= now_min < b if a < b else now_min >= a or now_min < b
+
+
+def rhythm_alerts(
+    rhythm: dict,
+    now_min: int,
+    open_sleep: bool,
+    last_bottle_min_ago: int | None,
+) -> list[dict]:
+    """Which reminders are due right now, given the learned rhythm and the
+    baby's current state. Pure — the loop handles sending and dedup."""
+    alerts: list[dict] = []
+
+    if open_sleep:
+        for w in rhythm.get("sleep", []):
+            if not _in_sleep_window(now_min, w):
+                continue
+            lead = _forward_min(now_min, _hm_to_min(w["end"]))
+            if 0 < lead <= NOTIFY_WAKE_LEAD_MIN:
+                alerts.append({"kind": "wake", "key": w["end"], "at": w["end"]})
+            break
+
+    for f in rhythm.get("feeds", []):
+        lead = _forward_min(now_min, _hm_to_min(f["time"]))
+        if 0 < lead <= NOTIFY_BOTTLE_LEAD_MIN:
+            recent = (
+                last_bottle_min_ago is not None
+                and last_bottle_min_ago <= NOTIFY_BOTTLE_SUPPRESS_MIN
+            )
+            if not recent:
+                alerts.append(
+                    {"kind": "bottle", "key": f["time"], "at": f["time"], "ml": f["ml"]}
+                )
+            break
+
+    return alerts
+
+
+def _alert_text(alert: dict, baby: str, lang: str) -> tuple[str, str]:
+    de = lang == "de"
+    if alert["kind"] == "wake":
+        return (
+            baby or ("Aufwachen bald" if de else "Waking soon"),
+            (f"Wacht meist gegen {alert['at']} auf" if de
+             else f"Usually wakes around {alert['at']}"),
+        )
+    return (
+        f"Fläschchen gegen {alert['at']}" if de else f"Bottle around {alert['at']}",
+        (f"{baby}: ca. {alert['ml']} ml" if de
+         else f"{baby}: about {alert['ml']} ml").strip(": "),
+    )
+
+
+async def push_send(sub: PushSubscription, payload: dict) -> bool:
+    """Send one push. False means the endpoint is gone — prune it."""
+
+    def _send() -> None:
+        webpush(
+            subscription_info={
+                "endpoint": sub.endpoint,
+                "keys": {"p256dh": sub.p256dh, "auth": sub.auth},
+            },
+            data=json.dumps(payload),
+            vapid_private_key=VAPID_PRIVATE_KEY,
+            vapid_claims={"sub": VAPID_CLAIM_EMAIL},
+            ttl=600,
+        )
+
+    try:
+        await asyncio.to_thread(_send)
+        return True
+    except WebPushException as exc:
+        status = getattr(getattr(exc, "response", None), "status_code", None)
+        if status in (404, 410):
+            return False
+        logger.warning("push send failed (%s): %s", status, exc)
+        return True
+    except Exception:
+        logger.exception("push send crashed")
+        return True
+
+
+_rhythm_cache: dict[int, tuple[float, dict]] = {}
+_alert_sent_at: dict[tuple, float] = {}
+
+
+async def _rhythm_cached(baby_id: int) -> dict:
+    hit = _rhythm_cache.get(baby_id)
+    if hit and time.time() - hit[0] < 2700:  # 45 min
+        return hit[1]
+    cutoff = datetime.now(HOUSEHOLD_TZ).date() - timedelta(days=RHYTHM_WINDOW_DAYS + 1)
+    cutoff_ts = to_entry_ts(datetime.combine(cutoff, dtime.min, tzinfo=HOUSEHOLD_TZ))
+    async with Session() as session:
+        rows = (
+            await session.scalars(
+                entries_of(baby_id)
+                .where(Entry.ts_start >= cutoff_ts)
+                .order_by(Entry.ts_start.asc())
+            )
+        ).all()
+    r = compute_rhythm([row_to_dict(x) for x in rows], HOUSEHOLD_TZ)
+    _rhythm_cache[baby_id] = (time.time(), r)
+    return r
+
+
+async def _notify_tick() -> None:
+    if not PUSH_ENABLED:
+        return
+    now = datetime.now(HOUSEHOLD_TZ)
+    now_min = now.hour * 60 + now.minute
+
+    async with Session() as session:
+        subs = (await session.scalars(select(PushSubscription))).all()
+        if not subs:
+            return
+        opted_in = {
+            u.id
+            for u in (
+                await session.scalars(
+                    select(User).where(
+                        User.id.in_({s.user_id for s in subs}),
+                        User.notify_rhythm.is_(True),
+                        User.disabled.is_(False),
+                    )
+                )
+            ).all()
+        }
+        if not opted_in:
+            return
+        access = (
+            await session.execute(
+                select(BabyAccess.user_id, BabyAccess.baby_id).where(
+                    BabyAccess.user_id.in_(opted_in)
+                )
+            )
+        ).all()
+        baby_ids = {bid for _, bid in access}
+        names = {
+            b.id: b.name
+            for b in (
+                await session.scalars(select(Baby).where(Baby.id.in_(baby_ids)))
+            ).all()
+        }
+
+    subs_by_user: dict[int, list[PushSubscription]] = {}
+    for s in subs:
+        if s.user_id in opted_in:
+            subs_by_user.setdefault(s.user_id, []).append(s)
+    users_for_baby: dict[int, set[int]] = {}
+    for uid, bid in access:
+        users_for_baby.setdefault(bid, set()).add(uid)
+
+    for baby_id in baby_ids:
+        rhythm = await _rhythm_cached(baby_id)
+        if rhythm.get("days_analyzed", 0) < NOTIFY_MIN_DAYS:
+            continue
+        async with Session() as session:
+            open_sleep = await session.scalar(
+                entries_of(baby_id)
+                .where(Entry.type == "sleep", Entry.ts_end.is_(None))
+                .limit(1)
+            )
+            last_bottle = await session.scalar(
+                entries_of(baby_id)
+                .where(Entry.type == "bottle")
+                .order_by(Entry.ts_start.desc())
+                .limit(1)
+            )
+        bottle_ago = None
+        if last_bottle is not None:
+            dt = parse_entry_ts(last_bottle.ts_start)
+            if dt is not None:
+                bottle_ago = round((utc_now() - dt).total_seconds() / 60)
+
+        for alert in rhythm_alerts(
+            rhythm, now_min, open_sleep is not None, bottle_ago
+        ):
+            dedup = (baby_id, alert["kind"], alert["key"])
+            if time.time() - _alert_sent_at.get(dedup, 0) < (
+                NOTIFY_RESEND_COOLDOWN_MIN * 60
+            ):
+                continue
+            _alert_sent_at[dedup] = time.time()
+            recipients = [
+                s
+                for uid in users_for_baby.get(baby_id, ())
+                for s in subs_by_user.get(uid, ())
+            ]
+            dead: list[int] = []
+            for s in recipients:
+                title, body = _alert_text(alert, names.get(baby_id, ""), s.lang)
+                ok = await push_send(
+                    s,
+                    {
+                        "title": title,
+                        "body": body,
+                        "tag": f"rhythm-{alert['kind']}-{baby_id}",
+                        "url": "/#stats",
+                    },
+                )
+                if not ok:
+                    dead.append(s.id)
+            if dead:
+                async with Session.begin() as session:
+                    await session.execute(
+                        delete(PushSubscription).where(PushSubscription.id.in_(dead))
+                    )
+
+
+async def _notify_loop() -> None:
+    while True:
+        try:
+            await _notify_tick()
+        except Exception:
+            logger.exception("rhythm-reminder tick failed")
+        await asyncio.sleep(NOTIFY_TICK_SECONDS)
+
+
+@app.get("/api/push/config", tags=["Push"])
+async def push_config(request: Request):
+    return {"enabled": PUSH_ENABLED, "vapid_key": VAPID_PUBLIC_KEY}
+
+
+@app.post("/api/push/subscribe", tags=["Push"])
+async def push_subscribe(request: Request):
+    if not PUSH_ENABLED:
+        return JSONResponse({"error": "push not configured"}, status_code=503)
+    body = await request.json()
+    endpoint = (body.get("endpoint") or "").strip()
+    keys = body.get("keys") or {}
+    p256dh, auth_k = keys.get("p256dh"), keys.get("auth")
+    if not endpoint or not p256dh or not auth_k:
+        return JSONResponse({"error": "incomplete subscription"}, status_code=400)
+    lang = "de" if (body.get("lang") or "").startswith("de") else "en"
+    async with Session.begin() as session:
+        row = await session.scalar(
+            select(PushSubscription).where(PushSubscription.endpoint == endpoint)
+        )
+        if row is None:
+            session.add(
+                PushSubscription(
+                    user_id=request.state.user.id,
+                    endpoint=endpoint,
+                    p256dh=p256dh,
+                    auth=auth_k,
+                    lang=lang,
+                )
+            )
+        else:
+            row.user_id = request.state.user.id
+            row.p256dh = p256dh
+            row.auth = auth_k
+            row.lang = lang
+    return {"ok": True}
+
+
+@app.post("/api/push/unsubscribe", tags=["Push"])
+async def push_unsubscribe(request: Request):
+    body = await request.json()
+    endpoint = (body.get("endpoint") or "").strip()
+    if endpoint:
+        async with Session.begin() as session:
+            await session.execute(
+                delete(PushSubscription).where(
+                    PushSubscription.endpoint == endpoint,
+                    PushSubscription.user_id == request.state.user.id,
+                )
+            )
+    return {"ok": True}
+
+
+@app.put("/api/auth/notify", tags=["Auth"])
+async def update_notify(request: Request):
+    body = await request.json()
+    on = bool(body.get("notify_rhythm"))
+    async with Session.begin() as session:
+        user = await session.get(User, request.state.user.id)
+        assert user is not None
+        user.notify_rhythm = on
+    return {"ok": True}
 
 
 @app.get("/api/stats", tags=["Stats"])

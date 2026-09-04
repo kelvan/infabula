@@ -183,6 +183,27 @@ async def cmd_delete(args: argparse.Namespace) -> None:
     print(f"Deleted {args.email}")
 
 
+async def cmd_vapid(_args: argparse.Namespace) -> None:
+    import base64
+
+    from cryptography.hazmat.primitives import serialization
+    from cryptography.hazmat.primitives.asymmetric import ec
+
+    key = ec.generate_private_key(ec.SECP256R1())
+    raw = key.private_numbers().private_value.to_bytes(32, "big")
+    priv = base64.urlsafe_b64encode(raw).rstrip(b"=").decode()
+    pub = base64.urlsafe_b64encode(
+        key.public_key().public_bytes(
+            serialization.Encoding.X962,
+            serialization.PublicFormat.UncompressedPoint,
+        )
+    ).rstrip(b"=").decode()
+    print("# rhythm-reminder push keys — set these in the container environment")
+    print(f"VAPID_PRIVATE_KEY={priv}")
+    print(f"VAPID_PUBLIC_KEY={pub}")
+    print("VAPID_CLAIM_EMAIL=mailto:you@example.com")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Manage infabula user accounts")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -227,6 +248,9 @@ def main() -> None:
     p.add_argument("email")
     p.add_argument("--yes", action="store_true", help="Skip the confirmation prompt")
     p.set_defaults(func=cmd_delete)
+
+    p = sub.add_parser("vapid", help="Generate Web Push (rhythm reminder) keys")
+    p.set_defaults(func=cmd_vapid)
 
     args = parser.parse_args()
     asyncio.run(args.func(args))
