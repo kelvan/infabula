@@ -3,9 +3,11 @@ import csv
 import io
 import json
 import logging
+import math
 import os
 import re
 import sqlite3
+import statistics
 import time
 from datetime import date, datetime, timedelta, timezone
 from datetime import time as dtime
@@ -1618,6 +1620,298 @@ async def delete_entry(entry_id: int, request: Request):
         await session.execute(delete(Entry).where(Entry.id == entry_id))
     await broadcast_event("entries_changed")
     return {"ok": True}
+
+
+# ── Typical-day rhythm ──
+# Recurring sleep windows and bottle-feed slots, learned from history.
+RHYTHM_WINDOW_DAYS = 28
+RHYTHM_MIN_ENTRIES_PER_DAY = 3  # fewer and that day wasn't really tracked
+RHYTHM_MIN_DAYS_OBSERVED = 3  # need this many looks at a minute to trust it
+RHYTHM_SLEEP_PROB = 0.45  # asleep on >= this share of observed days
+RHYTHM_SMOOTH_HALF_MIN = 10  # circular moving-average half-window
+RHYTHM_MIN_WINDOW_MIN = 25  # drop typical-sleep runs shorter than this
+RHYTHM_FEED_MERGE_GAP_MIN = 30  # bottles this close chain into one feed
+RHYTHM_FEED_SLOT_SPREAD_MIN = 75  # feeds within this join the running cluster
+RHYTHM_FEED_MIN_DAYS = 3  # a feed slot must recur on >= this many days
+
+
+def _local_dt(ts: str | None, tz: ZoneInfo) -> datetime | None:
+    dt = parse_entry_ts(ts)
+    return dt.astimezone(tz) if dt else None
+
+
+def _hhmm(minute: float) -> str:
+    m = int(round(minute)) % 1440
+    return f"{m // 60:02d}:{m % 60:02d}"
+
+
+def _local_midnight(day: str, tz: ZoneInfo) -> datetime:
+    return datetime.fromisoformat(day).replace(tzinfo=tz)
+
+
+def _days_touched(start: datetime, end: datetime) -> list[str]:
+    days, d = [], start.date()
+    while d <= end.date():
+        days.append(d.isoformat())
+        d += timedelta(days=1)
+    return days
+
+
+def _circular_smooth(vals: list[float | None], half: int) -> list[float | None]:
+    n = len(vals)
+    out: list[float | None] = [None] * n
+    for i in range(n):
+        got: list[float] = []
+        for k in range(-half, half + 1):
+            v = vals[(i + k) % n]
+            if v is not None:
+                got.append(v)
+        if got:
+            out[i] = sum(got) / len(got)
+    return out
+
+
+def _circular_runs(
+    vals: list[float | None], threshold: float, min_len: int
+) -> list[tuple[int, int, float]]:
+    """Maximal circular runs where vals is defined and >= threshold.
+
+    Returns (start_minute, end_minute_exclusive, mean_value); a run that
+    wraps midnight comes back with end > 1440.
+    """
+    n = len(vals)
+    hot = [v is not None and v >= threshold for v in vals]
+    if all(hot):
+        vv = [v for v in vals if v is not None]
+        return [(0, n, sum(vv) / len(vv))]
+    if not any(hot):
+        return []
+    start = next(i for i in range(n) if hot[i] and not hot[(i - 1) % n])
+    runs: list[tuple[int, int, float]] = []
+    i, seen = start, 0
+    while seen < n:
+        if hot[i % n]:
+            j = i
+            acc: list[float] = []
+            while hot[j % n]:
+                v = vals[j % n]
+                assert v is not None
+                acc.append(v)
+                j += 1
+                seen += 1
+            if len(acc) >= min_len:
+                runs.append((i % n, i % n + len(acc), sum(acc) / len(acc)))
+            i = j
+        else:
+            i += 1
+            seen += 1
+    return runs
+
+
+def compute_rhythm(
+    entries: list[dict],
+    tz: ZoneInfo,
+    *,
+    window_days: int = RHYTHM_WINDOW_DAYS,
+    today: date | None = None,
+) -> dict:
+    """Typical sleep windows and bottle-feed slots across a day.
+
+    Only days that look genuinely tracked are counted, and each minute is
+    weighed only over the days that actually observed it — between that
+    day's first and last entry, plus any span a sleep or walk brackets.
+    A day with a couple of stray entries would otherwise read as "awake
+    all afternoon" and drag every average toward nothing.
+    """
+    today = today or datetime.now(tz).date()
+    window_start = today - timedelta(days=window_days - 1)
+
+    by_day: dict[str, list[dict]] = {}
+    for e in entries:
+        start = _local_dt(e.get("ts_start"), tz)
+        if start is None or not (window_start <= start.date() <= today):
+            continue
+        by_day.setdefault(start.date().isoformat(), []).append(e)
+
+    usable = {
+        day
+        for day, items in by_day.items()
+        if len(items) >= RHYTHM_MIN_ENTRIES_PER_DAY
+    }
+    result = {
+        "window_days": window_days,
+        "days_analyzed": len(usable),
+        "days_skipped": len(by_day) - len(usable),
+        "sleep": [],
+        "feeds": [],
+    }
+    if not usable:
+        return result
+
+    observed = {d: [False] * 1440 for d in usable}
+    asleep = {d: [False] * 1440 for d in usable}
+
+    # base tracked window: first entry -> last entry (ts_end counted) each day
+    for day in usable:
+        ds = _local_midnight(day, tz)
+        marks: list[float] = []
+        for e in by_day[day]:
+            s = _local_dt(e["ts_start"], tz)
+            if s:
+                marks.append((s - ds).total_seconds() / 60)
+            en = _local_dt(e.get("ts_end"), tz)
+            if en:
+                marks.append(min((en - ds).total_seconds() / 60, 1440))
+        lo = max(0, int(min(marks)))
+        hi = min(1440, math.ceil(max(marks)))
+        for m in range(lo, hi):
+            observed[day][m] = True
+
+    # a sleep/walk that brackets a stretch means we observed it, even the
+    # small hours before the first "fresh" entry of the day
+    for e in entries:
+        if e.get("type") not in ("sleep", "walk"):
+            continue
+        s = _local_dt(e["ts_start"], tz)
+        en = _local_dt(e.get("ts_end"), tz)
+        if s is None or en is None or en <= s:
+            continue
+        for day in _days_touched(s, en):
+            if day not in usable:
+                continue
+            ds = _local_midnight(day, tz)
+            m0 = max(0, int((s - ds).total_seconds() / 60))
+            m1 = min(1440, math.ceil((en - ds).total_seconds() / 60))
+            for m in range(m0, m1):
+                observed[day][m] = True
+                if e["type"] == "sleep":
+                    asleep[day][m] = True
+
+    obs_total = [0] * 1440
+    asleep_total = [0] * 1440
+    for day in usable:
+        for m in range(1440):
+            if observed[day][m]:
+                obs_total[m] += 1
+                if asleep[day][m]:
+                    asleep_total[m] += 1
+
+    prob: list[float | None] = [
+        asleep_total[m] / obs_total[m]
+        if obs_total[m] >= RHYTHM_MIN_DAYS_OBSERVED
+        else None
+        for m in range(1440)
+    ]
+    prob = _circular_smooth(prob, RHYTHM_SMOOTH_HALF_MIN)
+
+    for lo, hi, avg in _circular_runs(
+        prob, RHYTHM_SLEEP_PROB, RHYTHM_MIN_WINDOW_MIN
+    ):
+        run_min = [m % 1440 for m in range(lo, hi)]
+        seen_on = sum(
+            1 for day in usable if any(asleep[day][m] for m in run_min)
+        )
+        result["sleep"].append(
+            {
+                "start": _hhmm(lo),
+                "end": _hhmm(hi),
+                "prob": round(avg, 2),
+                "days": seen_on,
+            }
+        )
+
+    # ── bottle feeds ──
+    events: list[tuple[float, float, str]] = []  # (minute, ml, day)
+    for day in usable:
+        ds = _local_midnight(day, tz)
+        bottles: list[tuple[datetime, float]] = []
+        for e in by_day[day]:
+            if e.get("type") != "bottle":
+                continue
+            t = _local_dt(e["ts_start"], tz)
+            if t is None:
+                continue
+            bottles.append((t, float((e.get("meta") or {}).get("amount") or 0)))
+        bottles.sort()
+        prev: datetime | None = None
+        merged: list[list[float]] = []
+        for t, ml in bottles:
+            gap = (t - prev).total_seconds() / 60 if prev is not None else None
+            if gap is not None and gap <= RHYTHM_FEED_MERGE_GAP_MIN:
+                merged[-1][1] += ml
+            else:
+                merged.append([(t - ds).total_seconds() / 60, ml])
+            prev = t
+        for minute, ml in merged:
+            events.append((minute, ml, day))
+
+    events.sort()
+    clusters: list[dict] = []
+    for minute, ml, day in events:
+        if clusters and minute - clusters[-1]["last"] <= RHYTHM_FEED_SLOT_SPREAD_MIN:
+            c = clusters[-1]
+            c["minutes"].append(minute)
+            c["mls"].append(ml)
+            c["days"].add(day)
+            c["last"] = minute
+        else:
+            clusters.append(
+                {"minutes": [minute], "mls": [ml], "days": {day}, "last": minute}
+            )
+    if len(clusters) >= 2:
+        first, last = clusters[0], clusters[-1]
+        if (first["minutes"][0] + 1440) - last["last"] <= RHYTHM_FEED_SLOT_SPREAD_MIN:
+            last["minutes"] += [m + 1440 for m in first["minutes"]]
+            last["mls"] += first["mls"]
+            last["days"] |= first["days"]
+            clusters.pop(0)
+
+    feeds = []
+    for c in clusters:
+        if len(c["days"]) < RHYTHM_FEED_MIN_DAYS:
+            continue
+        mid = statistics.median(c["minutes"]) % 1440
+        obs_days = sum(1 for day in usable if observed[day][int(mid) % 1440])
+        feeds.append(
+            {
+                "time": _hhmm(mid),
+                "ml": round(statistics.mean(c["mls"])),
+                "ml_low": round(min(c["mls"])),
+                "ml_high": round(max(c["mls"])),
+                "count": len(c["minutes"]),
+                "days": len(c["days"]),
+                "regularity": round(len(c["days"]) / obs_days, 2) if obs_days else None,
+            }
+        )
+    result["feeds"] = sorted(feeds, key=lambda f: f["time"])
+    return result
+
+
+@app.get("/api/rhythm", tags=["Stats"])
+async def get_rhythm(
+    request: Request,
+    days: int = RHYTHM_WINDOW_DAYS,
+    tz: str | None = None,
+    baby_id: int = DEFAULT_BABY_ID,
+):
+    """Typical sleep windows and bottle-feed times learned from history."""
+    if (denied := await require_access(request, baby_id, ROLE_VIEWER)) is not None:
+        return denied
+    days = max(7, min(days, 90))
+    zone = resolve_tz(tz)
+    # reach a day past the window so a night sleep that started earlier
+    # still contributes its small-hours coverage
+    cutoff = datetime.now(zone).date() - timedelta(days=days + 1)
+    cutoff_ts = to_entry_ts(datetime.combine(cutoff, dtime.min, tzinfo=zone))
+    async with Session() as session:
+        rows = (
+            await session.scalars(
+                entries_of(baby_id)
+                .where(Entry.ts_start >= cutoff_ts)
+                .order_by(Entry.ts_start.asc())
+            )
+        ).all()
+    return compute_rhythm([row_to_dict(r) for r in rows], zone, window_days=days)
 
 
 @app.get("/api/stats", tags=["Stats"])

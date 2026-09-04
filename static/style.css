@@ -491,6 +491,21 @@ header .logo-svg { height: 38px; width: auto; }
 .sleep-dur { font-family: ui-monospace, 'Cascadia Code', 'Source Code Pro', monospace; font-size: 0.7rem; color: var(--ink2); width: 46px; text-align: right; }
 .sleep-time { font-family: ui-monospace, 'Cascadia Code', 'Source Code Pro', monospace; font-size: 0.68rem; color: var(--ink2); width: 88px; }
 
+/* ── typical-day rhythm ── */
+.rh-sub { font-family: ui-monospace, 'Cascadia Code', 'Source Code Pro', monospace; font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.09em; color: var(--ink2); margin-bottom: 8px; }
+.rh-strip { position: relative; padding-top: 14px; }
+.rh-tick { position: absolute; top: 0; transform: translateX(-50%); font-family: ui-monospace, 'Cascadia Code', 'Source Code Pro', monospace; font-size: 0.6rem; color: var(--ink2); }
+.rh-tick:first-child { transform: none; }
+.rh-track { position: relative; height: 22px; background: var(--surface2); border-radius: 6px; overflow: hidden; }
+.rh-sleep { position: absolute; top: 0; height: 100%; background: linear-gradient(180deg, var(--sleep), #4d6f96); }
+.rh-feeds { display: flex; flex-direction: column; gap: 2px; }
+.rh-feed { display: flex; align-items: baseline; gap: 10px; padding: 7px 0; border-bottom: 1px solid var(--border); }
+.rh-feed:last-child { border-bottom: 0; }
+.rh-feed-time { font-family: ui-monospace, 'Cascadia Code', 'Source Code Pro', monospace; font-size: 0.9rem; font-weight: 500; color: var(--ink); width: 52px; }
+.rh-feed-ml { flex: 1; font-size: 0.92rem; color: var(--accent-ink); }
+.rh-feed-range { color: var(--ink2); font-size: 0.82rem; }
+.rh-feed-days { font-family: ui-monospace, 'Cascadia Code', 'Source Code Pro', monospace; font-size: 0.68rem; color: var(--ink2); }
+
 .growth-chart { margin-bottom: 18px; }
 .growth-chart-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 4px; }
 .growth-chart-label { font-family: ui-monospace, 'Cascadia Code', 'Source Code Pro', monospace; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.08em; }

@@ -34,6 +34,11 @@ const I18N = {
     no_baby_yet:'Noch kein Baby — füge eines in den Einstellungen hinzu, oder lass dich von jemandem hinzufügen.',
     section_last:'Letztes Ereignis', section_intervals:'Abstände',
     section_sleep:'Schlafdauer (letzte 10)', section_growth:'Wachstum',
+    section_rhythm:'Typischer Tag', rhythm_days_label:'erfasste Tage',
+    rhythm_hint:'Aus den letzten Wochen; unvollständig erfasste Tage bleiben außen vor',
+    rhythm_not_enough:'Noch zu wenige vollständig erfasste Tage',
+    rhythm_no_sleep:'Keine wiederkehrenden Schlafzeiten erkannt',
+    rhythm_no_feeds:'Keine wiederkehrenden Fläschchenzeiten erkannt',
     stat_avg_sleep:'Ø Nickerchen', stat_avg_awake:'Ø wach dazwischen',
     stat_interval:'Abstand', stat_avg:'Ø diesen Tag',
     stat_awake_since:'Wach seit', stat_back_since:'Zurück seit',
@@ -139,6 +144,11 @@ const I18N = {
     no_baby_yet:'No baby yet — add one in Settings, or get added by someone who has one.',
     section_last:'Last event', section_intervals:'Intervals',
     section_sleep:'Sleep duration (last 10)', section_growth:'Growth',
+    section_rhythm:'Typical day', rhythm_days_label:'tracked days',
+    rhythm_hint:'Learned from the last few weeks; partly untracked days are left out',
+    rhythm_not_enough:'Not enough fully tracked days yet',
+    rhythm_no_sleep:'No recurring sleep times found',
+    rhythm_no_feeds:'No recurring bottle times found',
     stat_avg_sleep:'Avg nap duration', stat_avg_awake:'Avg awake in between',
     stat_interval:'Interval', stat_avg:'avg this day',
     stat_awake_since:'Awake since', stat_back_since:'Back since',
@@ -1365,9 +1375,10 @@ function growthChart(points, label, unit, colorKey) {
 }
 
 // ── Stats ──
-async function loadStats() {
+async function loadStats(fromTimer = false) {
   if (currentBabyId == null) {
     document.getElementById('stats-content').innerHTML = `<div class="empty">${t('no_baby_yet')}</div>`;
+    document.getElementById('rhythm-content').innerHTML = '';
     return;
   }
   const res = await fetch(`/api/stats?date=${currentDate}&baby_id=${currentBabyId}`);
@@ -1472,7 +1483,60 @@ async function loadStats() {
     ${sleepBars}
   `;
 
-  if (document.getElementById('tab-stats').classList.contains('active')) setTimeout(loadStats, 60000);
+  if (!fromTimer) loadRhythm();
+  if (document.getElementById('tab-stats').classList.contains('active')) setTimeout(() => loadStats(true), 60000);
+}
+
+// Typical sleep windows and bottle-feed slots, learned from history.
+// Its own container so the 60s stats re-render doesn't wipe it.
+async function loadRhythm() {
+  const el = document.getElementById('rhythm-content');
+  if (!el || currentBabyId == null) { if (el) el.innerHTML = ''; return; }
+  const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || '';
+  let r;
+  try {
+    const res = await fetch(`/api/rhythm?baby_id=${currentBabyId}&tz=${encodeURIComponent(tz)}`);
+    if (!res.ok) { el.innerHTML = ''; return; }
+    r = await res.json();
+  } catch { el.innerHTML = ''; return; }
+
+  const tracked = `${r.days_analyzed}/${r.days_analyzed + r.days_skipped} ${t('rhythm_days_label')}`;
+  if (r.days_analyzed < 4) {
+    el.innerHTML = `<div class="section-title">${t('section_rhythm')}</div>
+      <div class="empty">${t('rhythm_not_enough')} (${tracked})</div>`;
+    return;
+  }
+
+  const toMin = s => { const [h, m] = s.split(':').map(Number); return h * 60 + m; };
+  const seg = (a, b) => `<div class="rh-sleep" style="left:${a / 1440 * 100}%;width:${(b - a) / 1440 * 100}%"></div>`;
+  let bars = '';
+  r.sleep.forEach(w => {
+    const a = toMin(w.start), b = toMin(w.end);
+    bars += b <= a ? seg(a, 1440) + seg(0, b) : seg(a, b);
+  });
+  const ticks = [0, 6, 12, 18].map(h =>
+    `<span class="rh-tick" style="left:${h / 24 * 100}%">${String(h).padStart(2, '0')}</span>`).join('');
+  const sleepBlock = r.sleep.length
+    ? `<div class="rh-strip">${ticks}<div class="rh-track">${bars}</div></div>`
+    : `<div class="empty">${t('rhythm_no_sleep')}</div>`;
+
+  const feeds = r.feeds.length
+    ? r.feeds.map(f => `
+        <div class="rh-feed">
+          <span class="rh-feed-time">${f.time}</span>
+          <span class="rh-feed-ml">~${f.ml}${f.ml_low !== f.ml_high ? ` <span class="rh-feed-range">(${f.ml_low}–${f.ml_high})</span>` : ''} ml</span>
+          <span class="rh-feed-days">${f.days} ${t('rhythm_days_label')}</span>
+        </div>`).join('')
+    : `<div class="empty">${t('rhythm_no_feeds')}</div>`;
+
+  el.innerHTML = `
+    <div class="section-title">${t('section_rhythm')}</div>
+    <div class="field-hint" style="margin:-4px 0 12px;">${t('rhythm_hint')} · ${tracked}</div>
+    <div class="rh-sub">${t('types').sleep}</div>
+    ${sleepBlock}
+    <div class="rh-sub" style="margin-top:16px;">${t('tile_bottle')}</div>
+    <div class="rh-feeds">${feeds}</div>
+  `;
 }
 
 // ── Settings ──
