@@ -1525,7 +1525,7 @@ async function loadRhythm() {
         <div class="rh-feed">
           <span class="rh-feed-time">${f.time}</span>
           <span class="rh-feed-ml">~${f.ml}${f.ml_low !== f.ml_high ? ` <span class="rh-feed-range">(${f.ml_low}–${f.ml_high})</span>` : ''} ml</span>
-          <span class="rh-feed-days">${f.days} ${t('rhythm_days_label')}</span>
+          <span class="rh-feed-days" title="${t('rhythm_days_label')}">${f.days}×</span>
         </div>`).join('')
     : `<div class="empty">${t('rhythm_no_feeds')}</div>`;
 

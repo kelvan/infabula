@@ -71,9 +71,9 @@ class TestSleepWindows:
         r = run(self._nap_days(12))
         assert len(r["sleep"]) == 1
         w = r["sleep"][0]
-        assert abs(_hm(w["start"]) - _hm("09:30")) <= 20
-        assert abs(_hm(w["end"]) - _hm("11:00")) <= 20
-        assert w["prob"] >= 0.8
+        assert abs(_hm(w["start"]) - _hm("09:30")) <= 45
+        assert abs(_hm(w["end"]) - _hm("11:00")) <= 45
+        assert w["prob"] >= 0.6
         assert w["days"] == 12
 
     def test_night_sleep_wraps_midnight(self):
@@ -169,26 +169,39 @@ class TestFeedSlots:
             entries += [
                 e("bottle", at(d, 7), amount=120),
                 e("diaper", at(d, 12)),
-                e("diaper", at(d, 19)),
+                e("bottle", at(d, 19), amount=120),
             ]
         entries += [e("bottle", at(3, 3, 0), amount=90)]  # once, at 3am
         r = run(entries)
-        assert [f["time"][:2] for f in r["feeds"]] == ["07"]
+        assert sorted(f["time"][:2] for f in r["feeds"]) == ["07", "19"]
+
+    def test_single_bottle_days_are_ignored_for_feeds(self):
+        entries = []
+        for d in range(1, 13):  # one bottle a day, breastfed the rest
+            entries += [
+                e("bottle", at(d, 8), amount=120),
+                e("diaper", at(d, 12)),
+                e("diaper", at(d, 19)),
+            ]
+        r = run(entries)
+        assert r["feeds"] == []
+        assert r["days_analyzed"] == 12  # still counts toward sleep
 
     def test_regularity_reflects_how_often_the_slot_is_used(self):
         entries = []
-        for d in range(1, 15):  # 14 tracked days, all cover 07:00
+        for d in range(1, 15):  # 14 bottle-fed days: 07:00 + 13:00 always
             entries += [
-                e("diaper", at(d, 6)),
-                e("diaper", at(d, 13)),
+                e("bottle", at(d, 7), amount=120),
+                e("bottle", at(d, 13), amount=110),
                 e("diaper", at(d, 20)),
             ]
-            if d <= 10:  # bottle at 07:00 on only 10 of them
-                entries.append(e("bottle", at(d, 7), amount=120))
+            entries.append(e("diaper", at(d, 22)))
+            if d <= 8:  # a third feed at 20:00 on 8 of them
+                entries.append(e("bottle", at(d, 20), amount=90))
         r = run(entries)
-        assert len(r["feeds"]) == 1
-        assert r["feeds"][0]["days"] == 10
-        assert 0.6 <= r["feeds"][0]["regularity"] <= 0.8
+        evening = next(f for f in r["feeds"] if f["time"].startswith("20"))
+        assert evening["days"] == 8
+        assert 0.5 <= evening["regularity"] <= 0.65
 
 
 class TestRhythmEndpoint:

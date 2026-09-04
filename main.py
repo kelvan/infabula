@@ -1627,12 +1627,15 @@ async def delete_entry(entry_id: int, request: Request):
 RHYTHM_WINDOW_DAYS = 28
 RHYTHM_MIN_ENTRIES_PER_DAY = 3  # fewer and that day wasn't really tracked
 RHYTHM_MIN_DAYS_OBSERVED = 3  # need this many looks at a minute to trust it
-RHYTHM_SLEEP_PROB = 0.45  # asleep on >= this share of observed days
-RHYTHM_SMOOTH_HALF_MIN = 10  # circular moving-average half-window
+RHYTHM_SLEEP_PROB = 0.25  # asleep on >= this share of observed days
+RHYTHM_SMOOTH_HALF_MIN = 40  # wide enough that scattered short naps add up
 RHYTHM_MIN_WINDOW_MIN = 25  # drop typical-sleep runs shorter than this
 RHYTHM_FEED_MERGE_GAP_MIN = 30  # bottles this close chain into one feed
-RHYTHM_FEED_SLOT_SPREAD_MIN = 75  # feeds within this join the running cluster
+RHYTHM_FEED_MIN_BOTTLES_PER_DAY = 2  # a 1-bottle day isn't a bottle-fed day
+RHYTHM_FEED_PEAK_HALF_MIN = 45  # feeds within this add to a peak's height
+RHYTHM_FEED_SLOT_HALF_MIN = 80  # min gap between slots; assignment radius
 RHYTHM_FEED_MIN_DAYS = 3  # a feed slot must recur on >= this many days
+RHYTHM_FEED_SLOT_SHARE = 0.5  # ...or this share of bottle-fed days, whichever more
 
 
 def _local_dt(ts: str | None, tz: ZoneInfo) -> datetime | None:
@@ -1655,6 +1658,18 @@ def _days_touched(start: datetime, end: datetime) -> list[str]:
         days.append(d.isoformat())
         d += timedelta(days=1)
     return days
+
+
+def _circ_dist(a: int, b: int, span: int = 1440) -> int:
+    d = abs(a - b) % span
+    return min(d, span - d)
+
+
+def _circular_box_sum(vals: list[float], half: int) -> list[float]:
+    n = len(vals)
+    return [
+        sum(vals[(i + k) % n] for k in range(-half, half + 1)) for i in range(n)
+    ]
 
 
 def _circular_smooth(vals: list[float | None], half: int) -> list[float | None]:
@@ -1763,7 +1778,7 @@ def compute_rhythm(
             if en:
                 marks.append(min((en - ds).total_seconds() / 60, 1440))
         lo = max(0, int(min(marks)))
-        hi = min(1440, math.ceil(max(marks)))
+        hi = min(1440, math.ceil(max(marks)) + 1)  # the last entry's minute counts
         for m in range(lo, hi):
             observed[day][m] = True
 
@@ -1821,8 +1836,16 @@ def compute_rhythm(
         )
 
     # ── bottle feeds ──
-    events: list[tuple[float, float, str]] = []  # (minute, ml, day)
-    for day in usable:
+    # A day only counts here if it has at least a couple of bottles; a
+    # single stray bottle on an otherwise breastfed day isn't a schedule.
+    feed_days = {
+        day
+        for day in usable
+        if sum(1 for e in by_day[day] if e.get("type") == "bottle")
+        >= RHYTHM_FEED_MIN_BOTTLES_PER_DAY
+    }
+    events: list[tuple[int, float, str]] = []  # (minute_of_day, ml, day)
+    for day in feed_days:
         ds = _local_midnight(day, tz)
         bottles: list[tuple[datetime, float]] = []
         for e in by_day[day]:
@@ -1843,44 +1866,54 @@ def compute_rhythm(
                 merged.append([(t - ds).total_seconds() / 60, ml])
             prev = t
         for minute, ml in merged:
-            events.append((minute, ml, day))
+            events.append((int(minute) % 1440, ml, day))
 
-    events.sort()
-    clusters: list[dict] = []
+    # cluster by peaks in the time-of-day histogram, not by chaining
+    # neighbours — with a bottle every couple of hours, single-linkage
+    # would swallow the whole day into one slot.
+    counts = [0.0] * 1440
+    for minute, _, _ in events:
+        counts[minute] += 1.0
+    density = _circular_box_sum(counts, RHYTHM_FEED_PEAK_HALF_MIN)
+    slot_min_days = max(
+        RHYTHM_FEED_MIN_DAYS, math.ceil(RHYTHM_FEED_SLOT_SHARE * len(feed_days))
+    )
+    floor = slot_min_days
+    peaks: list[int] = []
+    for m in sorted(range(1440), key=lambda i: -density[i]):
+        if density[m] < floor:
+            break
+        if all(
+            _circ_dist(m, p) > RHYTHM_FEED_SLOT_HALF_MIN for p in peaks
+        ):
+            peaks.append(m)
+
+    slots: dict[int, dict] = {
+        p: {"minutes": [], "mls": [], "days": set()} for p in peaks
+    }
     for minute, ml, day in events:
-        if clusters and minute - clusters[-1]["last"] <= RHYTHM_FEED_SLOT_SPREAD_MIN:
-            c = clusters[-1]
-            c["minutes"].append(minute)
-            c["mls"].append(ml)
-            c["days"].add(day)
-            c["last"] = minute
-        else:
-            clusters.append(
-                {"minutes": [minute], "mls": [ml], "days": {day}, "last": minute}
-            )
-    if len(clusters) >= 2:
-        first, last = clusters[0], clusters[-1]
-        if (first["minutes"][0] + 1440) - last["last"] <= RHYTHM_FEED_SLOT_SPREAD_MIN:
-            last["minutes"] += [m + 1440 for m in first["minutes"]]
-            last["mls"] += first["mls"]
-            last["days"] |= first["days"]
-            clusters.pop(0)
+        near = min(peaks, key=lambda p: _circ_dist(minute, p), default=None)
+        if near is not None and _circ_dist(minute, near) <= RHYTHM_FEED_SLOT_HALF_MIN:
+            s = slots[near]
+            s["minutes"].append(minute)
+            s["mls"].append(ml)
+            s["days"].add(day)
 
     feeds = []
-    for c in clusters:
-        if len(c["days"]) < RHYTHM_FEED_MIN_DAYS:
+    for p in sorted(peaks):
+        s = slots[p]
+        if len(s["days"]) < slot_min_days:
             continue
-        mid = statistics.median(c["minutes"]) % 1440
-        obs_days = sum(1 for day in usable if observed[day][int(mid) % 1440])
+        obs_days = sum(1 for day in feed_days if observed[day][p])
         feeds.append(
             {
-                "time": _hhmm(mid),
-                "ml": round(statistics.mean(c["mls"])),
-                "ml_low": round(min(c["mls"])),
-                "ml_high": round(max(c["mls"])),
-                "count": len(c["minutes"]),
-                "days": len(c["days"]),
-                "regularity": round(len(c["days"]) / obs_days, 2) if obs_days else None,
+                "time": _hhmm(statistics.median(s["minutes"])),
+                "ml": round(statistics.mean(s["mls"])),
+                "ml_low": round(min(s["mls"])),
+                "ml_high": round(max(s["mls"])),
+                "count": len(s["minutes"]),
+                "days": len(s["days"]),
+                "regularity": round(len(s["days"]) / obs_days, 2) if obs_days else None,
             }
         )
     result["feeds"] = sorted(feeds, key=lambda f: f["time"])
