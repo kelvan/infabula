@@ -2886,6 +2886,24 @@ function downloadCsv() {
   window.location.href = `/api/export.csv?start=${start}&end=${end}&baby_id=${currentBabyId}`;
 }
 
+// ── Resume from background ──
+// A backgrounded PWA tab is usually suspended, not reloaded, so the day
+// picked at script start can be hours stale by the time the household
+// actually looks at the screen again (e.g. a phone woken up the morning
+// after an overnight sleep). Re-check whenever the tab regains focus.
+function checkDayRollover() {
+  const fresh = storedDate();
+  if (fresh === currentDate) return;
+  currentDate = fresh;
+  updateDayNav();
+  loadLog();
+  if (document.getElementById('tab-stats').classList.contains('active')) loadStats();
+}
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden) checkDayRollover();
+});
+window.addEventListener('pageshow', checkDayRollover);
+
 // ── Live sync (SSE) ──
 function initEvents() {
   const es = new EventSource('/api/events');
