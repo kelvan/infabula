@@ -1943,7 +1943,7 @@ def compute_rhythm(
                 "regularity": round(len(s["days"]) / obs_days, 2) if obs_days else None,
             }
         )
-    result["feeds"] = sorted(feeds, key=lambda f: f["time"])
+    result["feeds"] = sorted(feeds, key=lambda f: str(f["time"]))
     return result
 
 
