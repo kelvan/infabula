@@ -863,6 +863,13 @@ function renderQuickActions() {
   }).join('');
 }
 
+/** Follow a just-logged entry to the day it landed on, so logging at
+ *  00:10 (or from a day you were browsing) never files it out of sight. */
+function showDayOf(iso) {
+  const d = localDate(iso);
+  if (d !== currentDate) { currentDate = d; updateDayNav(); }
+}
+
 function quickTap(type) {
   if (type === 'sleep') { openSleepEntry ? wakeUp() : quickStartOpen('sleep'); return; }
   if (type === 'walk') { openWalkEntry ? endWalk() : quickStartOpen('walk'); return; }
@@ -882,6 +889,7 @@ async function quickStartOpen(type) {
     if (type === 'sleep') openSleepEntry = saved;
     if (type === 'walk') openWalkEntry = saved;
     toast(t('toast_saved'));
+    showDayOf(now);
     loadLog();
   } else {
     await toastError(res);
@@ -898,6 +906,7 @@ async function quickSubmit(type, meta = {}, note = '') {
   if (res.ok) {
     toast(t('toast_saved'));
     closeQuickPopup();
+    showDayOf(now);
     loadLog();
   } else {
     await toastError(res);
@@ -2652,8 +2661,7 @@ async function submitEntry() {
     }
     closeModal();
     toast(t('toast_saved'));
-    const entryDate = localDate(toUtc(start));
-    if (entryDate !== currentDate) { currentDate = entryDate; updateDayNav(); }
+    showDayOf(toUtc(start));
     loadLog();
   } else {
     await toastError(res);
@@ -2886,11 +2894,15 @@ function downloadCsv() {
   window.location.href = `/api/export.csv?start=${start}&end=${end}&baby_id=${currentBabyId}`;
 }
 
-// ── Resume from background ──
-// A backgrounded PWA tab is usually suspended, not reloaded, so the day
-// picked at script start can be hours stale by the time the household
-// actually looks at the screen again (e.g. a phone woken up the morning
-// after an overnight sleep). Re-check whenever the tab regains focus.
+// ── Midnight rollover ──
+// The day is picked once at script start, but this app is left open for
+// hours — a phone put down at 23:30 and picked up the next morning is the
+// normal case. Without a re-check the view stays on the day it started on:
+// the label still reads "Today", the entries are yesterday's, and the
+// forward arrow is disabled, so there is no way out but the date picker.
+// Polling rather than only listening, because which lifecycle events a
+// suspended PWA gets on resume is up to the platform.
+const DAY_CHECK_MS = 30000;
 function checkDayRollover() {
   const fresh = storedDate();
   if (fresh === currentDate) return;
@@ -2899,6 +2911,7 @@ function checkDayRollover() {
   loadLog();
   if (document.getElementById('tab-stats').classList.contains('active')) loadStats();
 }
+setInterval(checkDayRollover, DAY_CHECK_MS);
 document.addEventListener('visibilitychange', () => {
   if (!document.hidden) checkDayRollover();
 });
