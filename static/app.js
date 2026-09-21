@@ -121,6 +121,8 @@ const I18N = {
     toast_no_measurement:'Bitte Gewicht oder Größe angeben',
     toast_error:'Fehler beim Speichern', toast_saved:'✓ Gespeichert',
     toast_offline:'Offline – nicht gespeichert', offline_bar:'Offline – gespeicherter Stand',
+    toast_queued:'Offline gespeichert – wird übertragen', pending_tag:'wartet',
+    toast_sync_failed: n=>`${n} Einträge konnten nicht übertragen werden`,
     toast_wakeup: dur=>`Aufgewacht – ${dur} Schlaf`,
     toast_walk_end: dur=>`Zurück – ${dur} Spaziergang`,
     diaper_count: n=>`Windeln: ${n}`,
@@ -237,6 +239,8 @@ const I18N = {
     toast_no_measurement:'Please enter weight or height',
     toast_error:'Error saving', toast_saved:'✓ Saved',
     toast_offline:'Offline — not saved', offline_bar:'Offline — showing saved data',
+    toast_queued:'Saved offline — will sync', pending_tag:'waiting',
+    toast_sync_failed: n=>`${n} entries could not be synced`,
     toast_wakeup: dur=>`Woke up – ${dur} sleep`,
     toast_walk_end: dur=>`Back – ${dur} walk`,
     diaper_count: n=>`Diapers: ${n}`,
@@ -364,6 +368,105 @@ window.fetch = async (...args) => {
     throw err;
   }
 };
+
+// ── Offline queue ──
+// Entries added without a network wait here until one comes back. Only
+// additions queue: an entry carries the time it happened, so sending it
+// late records the same thing as sending it on time, and two phones adding
+// entries never have to agree on anything. Edits and deletes still need
+// the server, since those do depend on what everyone else has done since.
+const PENDING_KEY = 'pendingEntries';
+let myName = '';
+let syncing = false;
+
+function pendingAll() {
+  try { return JSON.parse(localStorage.getItem(PENDING_KEY)) || []; } catch { return []; }
+}
+function pendingSave(list) {
+  localStorage.setItem(PENDING_KEY, JSON.stringify(list));
+}
+function pendingForDay(day, babyId) {
+  return pendingAll()
+    .filter(p => p.baby_id === babyId && localDate(p.body.ts_start) === day)
+    .map(p => ({ ...p.body, localId: p.localId, username: myName, pending: true }));
+}
+/** An unsynced sleep or walk still counts as open, or the quick button
+ *  would offer to start a second one on top of it. */
+function pendingOpen(type) {
+  const open = pendingAll().filter(
+    p => p.baby_id === currentBabyId && p.body.type === type && !p.body.ts_end
+  );
+  const p = open[open.length - 1];
+  return p ? { ...p.body, localId: p.localId, pending: true } : null;
+}
+function dropPending(localId) {
+  pendingSave(pendingAll().filter(p => p.localId !== localId));
+  loadLog();
+}
+/** Finish a sleep or walk that hasn't been sent yet, in the queue rather
+ *  than over the wire — the server has no row to patch yet. */
+function closePending(entry, tsEnd) {
+  if (!entry?.pending) return false;
+  const list = pendingAll();
+  const item = list.find(p => p.localId === entry.localId);
+  if (!item) return false;
+  item.body.ts_end = tsEnd;
+  pendingSave(list);
+  return true;
+}
+
+/** Post an entry, or keep it for later when there is no network. */
+async function createEntry(body) {
+  let res = null;
+  try {
+    res = await fetch('/api/entries?baby_id=' + currentBabyId, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+  } catch { res = null; }
+  if (res && res.ok) return { saved: await res.json() };
+  if (!res || res.headers.get('X-Offline')) {
+    const item = {
+      localId: 'p' + Date.now() + Math.random().toString(36).slice(2, 6),
+      baby_id: currentBabyId,
+      body,
+    };
+    pendingSave(pendingAll().concat([item]));
+    toast(t('toast_queued'));
+    return { queued: item };
+  }
+  return { failed: res };
+}
+
+/** Replay the queue oldest first, stopping at the first sign the network
+ *  is still gone so the order they were logged in survives. */
+async function syncPending() {
+  if (syncing || !pendingAll().length) return;
+  syncing = true;
+  let synced = 0, rejected = 0;
+  try {
+    for (const item of pendingAll()) {
+      let res;
+      try {
+        res = await fetch('/api/entries?baby_id=' + item.baby_id, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(item.body),
+        });
+      } catch { break; }
+      if (!res.ok && res.headers.get('X-Offline')) break;
+      // A refusal — an entry queued past the server's backdating window,
+      // say — would otherwise block everything behind it forever.
+      if (res.ok) synced++; else rejected++;
+      pendingSave(pendingAll().filter(p => p.localId !== item.localId));
+    }
+  } finally {
+    syncing = false;
+  }
+  if (rejected) toast(t('toast_sync_failed', rejected));
+  if (synced || rejected) loadLog();
+}
 
 // ── Date helpers ──
 function todayStr() {
@@ -699,6 +802,7 @@ function renderBirthdayBanner() {
 async function checkOpenSleep() {
   const res = await fetch('/api/sleep/open?baby_id=' + currentBabyId);
   openSleepEntry = res.ok ? await res.json() : null;
+  openSleepEntry = pendingOpen('sleep') || openSleepEntry;
   renderSleepBanner();
 }
 // ── Ambient banner backdrop ──
@@ -761,11 +865,13 @@ function renderSleepBanner() {
 async function wakeUp() {
   if (!openSleepEntry) return;
   const now = nowUtc();
-  await fetch(`/api/entries/${openSleepEntry.id}`, {
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ ts_end: now })
-  });
+  if (!closePending(openSleepEntry, now)) {
+    await fetch(`/api/entries/${openSleepEntry.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ts_end: now })
+    });
+  }
   const dur = Math.round(durMin(openSleepEntry.ts_start, now));
   toast(t('toast_wakeup', fmtDur(dur)));
   openSleepEntry = null;
@@ -777,6 +883,7 @@ async function wakeUp() {
 async function checkOpenWalk() {
   const res = await fetch('/api/walk/open?baby_id=' + currentBabyId);
   openWalkEntry = res.ok ? await res.json() : null;
+  openWalkEntry = pendingOpen('walk') || openWalkEntry;
   renderWalkBanner();
 }
 function renderWalkBanner() {
@@ -819,11 +926,13 @@ function renderWalkBanner() {
 async function endWalk() {
   if (!openWalkEntry) return;
   const now = nowUtc();
-  await fetch(`/api/entries/${openWalkEntry.id}`, {
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ ts_end: now })
-  });
+  if (!closePending(openWalkEntry, now)) {
+    await fetch(`/api/entries/${openWalkEntry.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ts_end: now })
+    });
+  }
   const dur = Math.round(durMin(openWalkEntry.ts_start, now));
   toast(t('toast_walk_end', fmtDur(dur)));
   openWalkEntry = null;
@@ -849,6 +958,7 @@ async function loadQuickActions() {
   try {
     const me = await (await fetch('/api/auth/me')).json();
     quickActionsCache = me.quick_actions;
+    myName = me.name || '';
   } catch {}
 }
 async function setQuickActions(actions) {
@@ -899,38 +1009,25 @@ function quickTap(type) {
 
 async function quickStartOpen(type) {
   const now = nowUtc();
-  const res = await fetch('/api/entries?baby_id=' + currentBabyId, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ type, ts_start: now, ts_end: null, note: '', meta: {} }),
-  });
-  if (res.ok) {
-    const saved = await res.json();
-    if (type === 'sleep') openSleepEntry = saved;
-    if (type === 'walk') openWalkEntry = saved;
-    toast(t('toast_saved'));
-    showDayOf(now);
-    loadLog();
-  } else {
-    await toastError(res);
-  }
+  const body = { type, ts_start: now, ts_end: null, note: '', meta: {} };
+  const r = await createEntry(body);
+  if (r.failed) { await toastError(r.failed); return; }
+  const entry = r.saved || { ...body, localId: r.queued.localId, pending: true };
+  if (type === 'sleep') openSleepEntry = entry;
+  if (type === 'walk') openWalkEntry = entry;
+  if (r.saved) toast(t('toast_saved'));
+  showDayOf(now);
+  loadLog();
 }
 
 async function quickSubmit(type, meta = {}, note = '') {
   const now = nowUtc();
-  const res = await fetch('/api/entries?baby_id=' + currentBabyId, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ type, ts_start: now, ts_end: null, note, meta }),
-  });
-  if (res.ok) {
-    toast(t('toast_saved'));
-    closeQuickPopup();
-    showDayOf(now);
-    loadLog();
-  } else {
-    await toastError(res);
-  }
+  const r = await createEntry({ type, ts_start: now, ts_end: null, note, meta });
+  if (r.failed) { await toastError(r.failed); return; }
+  if (r.saved) toast(t('toast_saved'));
+  closeQuickPopup();
+  showDayOf(now);
+  loadLog();
 }
 
 // <option>s for a bottle's content, with the current baby's default preselected.
@@ -1001,7 +1098,10 @@ async function loadLog() {
   allEntries.forEach(e => getUserColor(displayKey(e.username)));
 
   const res = await fetch(`/api/entries?date=${currentDate}&baby_id=${currentBabyId}`);
-  const entries = await res.json();
+  // Entries still waiting to be sent belong in the day they were logged
+  // into, or tapping a quick action offline would look like it did nothing.
+  const entries = [...pendingForDay(currentDate, currentBabyId), ...(await res.json())]
+    .sort((a, b) => (a.ts_start < b.ts_start ? 1 : -1));
   currentEntries = entries;
 
   const todayKeys = [...new Set(entries.map(e => displayKey(e.username)))];
@@ -1073,17 +1173,22 @@ async function loadLog() {
       ? icon(moodKey in ICONS ? moodKey : 'mood')
       : typeIcon(tp.icon);
 
+    // A queued entry has no server id yet, so it can't be edited — only
+    // dropped again before it is sent.
+    const remove = e.pending
+      ? `dropPending('${e.localId}')`
+      : `deleteEntry(${e.id})`;
     return `
-      <div class="entry-item" onclick="openEditModal(${e.id})">
+      <div class="entry-item${e.pending ? ' pending' : ''}"${e.pending ? '' : ` onclick="openEditModal(${e.id})"`}>
         <div class="entry-icon tint-${typeTint(e.type)}">${iconHtml}</div>
         <div class="entry-body">
-          <div class="entry-type">${tp.label}</div>
+          <div class="entry-type">${tp.label}${e.pending ? ` · ${t('pending_tag')}` : ''}</div>
           <div class="entry-time">${timeStr}</div>
           ${metaStr ? `<div class="entry-meta">${esc(metaStr)}</div>` : ''}
           ${e.note ? `<div class="entry-note">${esc(e.note)}</div>` : ''}
         </div>
         <span class="ip-badge" style="background:${color}" title="${esc(e.username || '')}"></span>
-        <button class="del-btn" onclick="event.stopPropagation(); deleteEntry(${e.id})" title="${t('confirm_delete')}"><svg viewBox="0 0 24 24" class="ic"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+        <button class="del-btn" onclick="event.stopPropagation(); ${remove}" title="${t('confirm_delete')}"><svg viewBox="0 0 24 24" class="ic"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
       </div>
     `;
   }).join('');
@@ -2153,9 +2258,14 @@ async function removeAvatar() {
 }
 
 async function doLogout() {
+  // Send what is still waiting while the session is still valid; whatever
+  // cannot go now is dropped rather than left to sync under whoever logs
+  // in next.
+  await syncPending();
   await fetch('/api/auth/logout', { method: 'POST' });
   // Drop the cached journal with the session — on a shared phone the next
   // person must not be able to read it back offline.
+  localStorage.removeItem(PENDING_KEY);
   navigator.serviceWorker?.controller?.postMessage('clear-cache');
   location.href = '/login';
 }
@@ -2668,27 +2778,16 @@ async function submitEntry() {
     meta,
   };
 
-  const res = await fetch('/api/entries?baby_id=' + currentBabyId, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  });
+  const r = await createEntry(body);
+  if (r.failed) { await toastError(r.failed); return; }
 
-  if (res.ok) {
-    const saved = await res.json();
-    if (apiType === 'sleep' && !saved.ts_end) {
-      openSleepEntry = saved;
-    }
-    if (apiType === 'walk' && !saved.ts_end) {
-      openWalkEntry = saved;
-    }
-    closeModal();
-    toast(t('toast_saved'));
-    showDayOf(toUtc(start));
-    loadLog();
-  } else {
-    await toastError(res);
-  }
+  const saved = r.saved || { ...body, localId: r.queued.localId, pending: true };
+  if (apiType === 'sleep' && !saved.ts_end) openSleepEntry = saved;
+  if (apiType === 'walk' && !saved.ts_end) openWalkEntry = saved;
+  closeModal();
+  if (r.saved) toast(t('toast_saved'));
+  showDayOf(toUtc(start));
+  loadLog();
 }
 
 // ── Edit existing entry ──
@@ -2927,7 +3026,7 @@ function setOffline(off) {
   bar.hidden = !off;
 }
 // Refetch when the link comes back; the response itself settles the state.
-window.addEventListener('online', () => loadLog());
+window.addEventListener('online', () => syncPending().then(loadLog));
 window.addEventListener('offline', () => setOffline(true));
 
 // ── Midnight rollover ──
@@ -2947,7 +3046,7 @@ function checkDayRollover() {
   loadLog();
   if (document.getElementById('tab-stats').classList.contains('active')) loadStats();
 }
-setInterval(checkDayRollover, DAY_CHECK_MS);
+setInterval(() => { checkDayRollover(); syncPending(); }, DAY_CHECK_MS);
 document.addEventListener('visibilitychange', () => {
   if (!document.hidden) checkDayRollover();
 });
@@ -2975,6 +3074,7 @@ document.getElementById('export-end').value = todayStr();
   await loadQuickActions();
   await loadBabies();
   renderBirthdayBanner();
+  await syncPending();
   loadLog();
   const initialTab = TAB_ORDER.includes(location.hash.slice(1)) ? location.hash.slice(1) : 'log';
   if (initialTab !== 'log') switchTab(initialTab);

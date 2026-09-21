@@ -38,7 +38,9 @@ The app blocks a second open sleep or walk entry while one is already open. Tap 
 
 Once you have opened the app with a network, it opens again without one and shows the log as it was at that point. A bar across the top says so, because a saved copy otherwise looks exactly like the current one.
 
-Reading works offline; writing does not. A logged entry needs the server, so the app refuses it with "Offline — not saved" rather than accepting it and losing it. Nothing is queued for later. Logging out clears the saved copy, so the next person to pick up the phone cannot read it back.
+You can keep logging while offline. A new entry is kept on the device, listed as "waiting" in the log, and sent as soon as there is a network again — when the app is reopened, or within half a minute if it is already open. Tap the × on a waiting entry to drop it before it is sent. An entry carries the time it happened, so it lands where it belongs however late it arrives, and two phones logging at once need no reconciliation.
+
+Editing and deleting still need the server, and are refused with "Offline — not saved". An entry the server rejects on sync (one logged more than seven days ago, say) is dropped with a notice rather than blocking the ones behind it. Logging out clears both the saved copy and anything still waiting, so the next person to pick up the phone cannot read it back.
 
 ## Stats
 
