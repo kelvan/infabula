@@ -34,6 +34,12 @@ The suite runs against a throwaway SQLite database with the migrations applied. 
 
 The app blocks a second open sleep or walk entry while one is already open. Tap any entry in the log to edit it. All open devices and tabs stay in sync through server-sent events (SSE), so you do not need to reload the page. You can view the log as a list or as a timeline for one day. The timeline shows sleep and walks as bars, feeding and diaper changes as lines, and mood as emoji. The app remembers your view choice after a reload.
 
+## Offline
+
+Once you have opened the app with a network, it opens again without one and shows the log as it was at that point. A bar across the top says so, because a saved copy otherwise looks exactly like the current one.
+
+Reading works offline; writing does not. A logged entry needs the server, so the app refuses it with "Offline — not saved" rather than accepting it and losing it. Nothing is queued for later. Logging out clears the saved copy, so the next person to pick up the phone cannot read it back.
+
 ## Stats
 
 - Last event of each type, with time since it (for example "2h ago")

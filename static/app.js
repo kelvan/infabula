@@ -120,6 +120,7 @@ const I18N = {
     toast_no_time:'Bitte Zeitpunkt angeben', toast_deleted:'Gelöscht',
     toast_no_measurement:'Bitte Gewicht oder Größe angeben',
     toast_error:'Fehler beim Speichern', toast_saved:'✓ Gespeichert',
+    toast_offline:'Offline – nicht gespeichert', offline_bar:'Offline – gespeicherter Stand',
     toast_wakeup: dur=>`Aufgewacht – ${dur} Schlaf`,
     toast_walk_end: dur=>`Zurück – ${dur} Spaziergang`,
     diaper_count: n=>`Windeln: ${n}`,
@@ -235,6 +236,7 @@ const I18N = {
     toast_no_time:'Please enter a time', toast_deleted:'Deleted',
     toast_no_measurement:'Please enter weight or height',
     toast_error:'Error saving', toast_saved:'✓ Saved',
+    toast_offline:'Offline — not saved', offline_bar:'Offline — showing saved data',
     toast_wakeup: dur=>`Woke up – ${dur} sleep`,
     toast_walk_end: dur=>`Back – ${dur} walk`,
     diaper_count: n=>`Diapers: ${n}`,
@@ -346,6 +348,22 @@ let openWalkEntry = null;
 let selectedType = null;
 let currentEntries = [];
 let editEntryId = null;
+
+// Whether the app is offline is decided by what the network actually did,
+// not by navigator.onLine — that reports a link, not a reachable server,
+// and stays true for a page the service worker served from its cache.
+// Wrapping fetch once keeps the check out of ~30 call sites.
+const rawFetch = window.fetch.bind(window);
+window.fetch = async (...args) => {
+  try {
+    const res = await rawFetch(...args);
+    setOffline(!!res.headers.get('X-Offline'));
+    return res;
+  } catch (err) {
+    setOffline(true);
+    throw err;
+  }
+};
 
 // ── Date helpers ──
 function todayStr() {
@@ -468,6 +486,8 @@ function esc(s) { return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt
 /** Toast the reason the server gave, so a refused save says why instead
  *  of a generic error the user (and the logs) can't act on. */
 async function toastError(res) {
+  // The service worker answers a write attempted with no network this way.
+  if (res.headers.get('X-Offline')) { toast(t('toast_offline')); return; }
   let reason = '';
   try { reason = (await res.json()).error || ''; } catch {}
   toast(reason || t('toast_error'));
@@ -2134,6 +2154,9 @@ async function removeAvatar() {
 
 async function doLogout() {
   await fetch('/api/auth/logout', { method: 'POST' });
+  // Drop the cached journal with the session — on a shared phone the next
+  // person must not be able to read it back offline.
+  navigator.serviceWorker?.controller?.postMessage('clear-cache');
   location.href = '/login';
 }
 
@@ -2894,6 +2917,19 @@ function downloadCsv() {
   window.location.href = `/api/export.csv?start=${start}&end=${end}&baby_id=${currentBabyId}`;
 }
 
+// ── Offline state ──
+// Cached entries look exactly like live ones, so say plainly when what is
+// on screen is a saved copy rather than the household's current log.
+function setOffline(off) {
+  const bar = document.getElementById('offline-bar');
+  if (!bar) return;
+  bar.textContent = t('offline_bar');
+  bar.hidden = !off;
+}
+// Refetch when the link comes back; the response itself settles the state.
+window.addEventListener('online', () => loadLog());
+window.addEventListener('offline', () => setOffline(true));
+
 // ── Midnight rollover ──
 // The day is picked once at script start, but this app is left open for
 // hours — a phone put down at 23:30 and picked up the next morning is the
@@ -2953,7 +2989,8 @@ setInterval(() => {
   if (logView === 'timeline' && document.getElementById('tab-log').classList.contains('active')) renderTimeline();
 }, 60000);
 
-// PWA install eligibility on Android needs an active service worker.
+// PWA install eligibility on Android needs an active service worker; it
+// also serves the app and the last-loaded log back when there is no network.
 if ("serviceWorker" in navigator) {
   navigator.serviceWorker.register("/sw.js");
 }

@@ -185,6 +185,19 @@ header .logo-svg { height: 38px; width: auto; }
 }
 .birthday-banner .bd-headline { font-size: 1.05rem; font-weight: 600; margin-top: 2px; }
 
+/* ── Offline bar ── */
+.offline-bar {
+  background: var(--surface2);
+  color: var(--ink2);
+  border-bottom: 1.5px solid var(--border);
+  padding: 7px 20px;
+  font-family: ui-monospace, 'Cascadia Code', 'Source Code Pro', monospace;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  text-align: center;
+}
+
 /* ── Sleep / walk banner ── */
 .sleep-banner {
   margin: 16px 20px 0;
