@@ -2,6 +2,8 @@
 
 Self-hosted, multi-user baby journal PWA for the household.
 
+Built with [Claude Code](https://claude.com/claude-code) — nearly every line, commit, and word in this README was AI-generated, reviewed and directed by a human in the loop. It has not had an independent security audit. Read the code before you trust it with your household's data or expose it past your LAN.
+
 ## Setup
 
 ```bash
