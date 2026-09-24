@@ -364,14 +364,26 @@ let editEntryId = null;
 // not by navigator.onLine — that reports a link, not a reachable server,
 // and stays true for a page the service worker served from its cache.
 // Wrapping fetch once keeps the check out of ~30 call sites.
+// A single page load fires several fetches at once (checkOpenSleep,
+// checkOpenWalk, two /api/entries calls). Flipping to offline on whichever
+// happens to resolve last means one flaky request among several that
+// succeeded moments earlier can flag the app offline while it's plainly
+// online. A failure only counts once nothing has succeeded recently.
 const rawFetch = window.fetch.bind(window);
+const OFFLINE_GRACE_MS = 3000;
+let lastFetchSuccessAt = 0;
 window.fetch = async (...args) => {
   try {
     const res = await rawFetch(...args);
-    setOffline(!!res.headers.get('X-Offline'));
+    if (res.headers.get('X-Offline')) {
+      if (Date.now() - lastFetchSuccessAt > OFFLINE_GRACE_MS) setOffline(true);
+    } else {
+      lastFetchSuccessAt = Date.now();
+      setOffline(false);
+    }
     return res;
   } catch (err) {
-    setOffline(true);
+    if (Date.now() - lastFetchSuccessAt > OFFLINE_GRACE_MS) setOffline(true);
     throw err;
   }
 };
