@@ -16,6 +16,10 @@
   --feed-soft: #f4e2e7;
   --mood: #7a6a9e;
   --mood-soft: #e9e5f2;
+  --warn-bg: #fff3c4;
+  --warn-surface: #fff8de;
+  --warn-border: #e8b923;
+  --warn-ink: #6b5210;
   --border: #e4dac6;
   --radius: 16px;
   --shadow: 0 4px 16px rgba(51,39,27,0.08);
@@ -187,15 +191,26 @@ header .logo-svg { height: 38px; width: auto; }
 
 /* ── Offline bar ── */
 .offline-bar {
-  background: var(--surface2);
-  color: var(--ink2);
-  border-bottom: 1.5px solid var(--border);
-  padding: 7px 20px;
+  background: var(--warn-bg);
+  color: var(--warn-ink);
+  border-bottom: 1.5px solid var(--warn-border);
+  padding: 9px 20px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
   font-family: ui-monospace, 'Cascadia Code', 'Source Code Pro', monospace;
-  font-size: 0.7rem;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  text-align: center;
+  font-size: 0.74rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+.offline-bar .ic { width: 15px; height: 15px; stroke: var(--warn-ink); fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; flex-shrink: 0; }
+.offline-bar .ob-dot {
+  width: 7px; height: 7px; border-radius: 50%; background: var(--warn-border);
+  margin-left: auto; flex-shrink: 0;
+  animation: pulse 1.6s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .offline-bar .ob-dot { animation: none; opacity: 0.7; }
 }
 
 /* ── Sleep / walk banner ── */
@@ -359,9 +374,25 @@ header .logo-svg { height: 38px; width: auto; }
   cursor: pointer;
 }
 .entry-item:hover { border-color: var(--ink2); }
-/* Not on the server yet — dashed until it is. */
-.entry-item.pending { border-style: dashed; cursor: default; }
-.entry-item.pending .entry-type { color: var(--accent-ink); }
+/* Not on the server yet — kept loud until it is, same warm yellow as the
+   offline bar, so an unsynced entry never blends in with the rest of the log. */
+.entry-item.pending {
+  background: var(--warn-bg);
+  border: 1.5px dashed var(--warn-border);
+  cursor: default;
+}
+.entry-item.pending .entry-icon { background: var(--surface); color: var(--warn-ink); }
+.entry-item.pending .entry-type { color: var(--warn-ink); }
+.pending-chip {
+  background: var(--warn-border);
+  color: #43350a;
+  border-radius: 8px;
+  padding: 1px 7px;
+  font-size: 0.63rem;
+  letter-spacing: 0.03em;
+  text-transform: none;
+  font-weight: 700;
+}
 .entry-icon {
   width: 36px; height: 36px; flex-shrink: 0; border-radius: 11px;
   display: flex; align-items: center; justify-content: center;
@@ -380,6 +411,9 @@ header .logo-svg { height: 38px; width: auto; }
   letter-spacing: 0.09em;
   color: var(--ink2);
   margin-bottom: 1px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 .entry-time { font-size: 0.9rem; color: var(--ink); line-height: 1.3; }
 .entry-meta { font-size: 0.78rem; color: var(--accent2); font-family: ui-monospace, 'Cascadia Code', 'Source Code Pro', monospace; }

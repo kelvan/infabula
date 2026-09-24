@@ -273,6 +273,7 @@ const ICONS = {
   zzz: '<path d="M3 15h6l-6 6h6"/><path d="M10 9h5l-5 5h5"/><path d="M16 4h4l-4 4h4"/>',
   walk: '<ellipse cx="15" cy="16" rx="2.6" ry="3.6" transform="rotate(12 15 16)"/><circle cx="12.6" cy="12.4" r=".9"/><circle cx="14" cy="11.3" r=".95"/><circle cx="15.6" cy="11.1" r=".95"/><circle cx="17" cy="11.8" r=".85"/><ellipse cx="8" cy="7.5" rx="2" ry="2.8" transform="rotate(-12 8 7.5)"/><circle cx="6" cy="4.6" r=".7"/><circle cx="7.3" cy="3.8" r=".75"/><circle cx="8.7" cy="3.9" r=".7"/>',
   weight: '<circle cx="12" cy="12" r="8.2"/><path d="M12 8.6v3.8l2.6 1.6"/>',
+  wifioff: '<path d="M3 3l18 18"/><path d="M8.5 16.5a5 5 0 0 1 7 0"/><path d="M5 12.5a10 10 0 0 1 3.5-2.3"/><path d="M15.5 10.2A10 10 0 0 1 19 12.5"/><circle cx="12" cy="19.5" r="1.1" fill="currentColor" stroke="none"/>',
   note: '<path d="M6 3.5h9L19.5 8v12.5a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4.5a1 1 0 0 1 1-1Z"/><path d="M8.5 12h7M8.5 15.5h7M8.5 8.5h3"/>',
   clothing: '<path d="M8.5 4 5.8 5.7a1.4 1.4 0 0 0-.5 1.8L6.6 10l1.9-.9v9.4a1 1 0 0 0 1 1h5a1 1 0 0 0 1-1V9.1l1.9.9 1.3-2.5a1.4 1.4 0 0 0-.5-1.8L15.5 4a4 4 0 0 1-7 0Z"/>',
   sun: '<circle cx="12" cy="12" r="4.2"/><path d="M12 3v2.2M12 18.8V21M21 12h-2.2M5.2 12H3M18.4 5.6l-1.5 1.5M7.1 16.9l-1.5 1.5M18.4 18.4l-1.5-1.5M7.1 7.1 5.6 5.6"/>',
@@ -1198,7 +1199,7 @@ async function loadLog() {
       <div class="entry-item${e.pending ? ' pending' : ''}"${e.pending ? '' : ` onclick="openEditModal(${e.id})"`}>
         <div class="entry-icon tint-${typeTint(e.type)}">${iconHtml}</div>
         <div class="entry-body">
-          <div class="entry-type">${tp.label}${e.pending ? ` · ${t('pending_tag')}` : ''}</div>
+          <div class="entry-type">${tp.label}${e.pending ? `<span class="pending-chip">${t('pending_tag')}</span>` : ''}</div>
           <div class="entry-time">${timeStr}</div>
           ${metaStr ? `<div class="entry-meta">${esc(metaStr)}</div>` : ''}
           ${e.note ? `<div class="entry-note">${esc(e.note)}</div>` : ''}
@@ -3067,7 +3068,7 @@ function downloadCsv() {
 function setOffline(off) {
   const bar = document.getElementById('offline-bar');
   if (!bar) return;
-  bar.textContent = t('offline_bar');
+  bar.innerHTML = `${icon('wifioff')}<span>${t('offline_bar')}</span><span class="ob-dot"></span>`;
   bar.hidden = !off;
 }
 // Refetch when the link comes back; the response itself settles the state.
