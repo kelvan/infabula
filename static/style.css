@@ -204,6 +204,15 @@ header .logo-svg { height: 38px; width: auto; }
   letter-spacing: 0.04em;
 }
 .offline-bar .ic { width: 15px; height: 15px; stroke: var(--warn-ink); fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; flex-shrink: 0; }
+.offline-bar .ob-count {
+  background: var(--warn-border);
+  color: #43350a;
+  border-radius: 8px;
+  padding: 1px 7px;
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
 .offline-bar .ob-dot {
   width: 7px; height: 7px; border-radius: 50%; background: var(--warn-border);
   margin-left: auto; flex-shrink: 0;

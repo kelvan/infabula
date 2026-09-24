@@ -123,8 +123,9 @@ const I18N = {
     toast_no_measurement:'Bitte Gewicht oder Größe angeben',
     toast_error:'Fehler beim Speichern', toast_saved:'✓ Gespeichert',
     toast_offline:'Offline – nicht gespeichert', offline_bar:'Offline – gespeicherter Stand',
-    toast_queued:'Offline gespeichert – wird übertragen', pending_tag:'nicht gesendet',
+    toast_queued:'Offline gespeichert – wird synchronisiert', pending_tag:'nicht synchronisiert',
     toast_sync_failed: n=>`${n} Einträge konnten nicht übertragen werden`,
+    pending_count: n=>n === 1 ? '1 nicht synchronisiert' : `${n} nicht synchronisiert`,
     toast_wakeup: dur=>`Aufgewacht – ${dur} Schlaf`,
     toast_walk_end: dur=>`Zurück – ${dur} Spaziergang`,
     diaper_count: n=>`Windeln: ${n}`,
@@ -243,8 +244,9 @@ const I18N = {
     toast_no_measurement:'Please enter weight or height',
     toast_error:'Error saving', toast_saved:'✓ Saved',
     toast_offline:'Offline — not saved', offline_bar:'Offline — showing saved data',
-    toast_queued:'Saved offline — will sync', pending_tag:'not sent',
+    toast_queued:'Saved offline — will sync', pending_tag:'not synced',
     toast_sync_failed: n=>`${n} entries could not be synced`,
+    pending_count: n=>n === 1 ? '1 not synced' : `${n} not synced`,
     toast_wakeup: dur=>`Woke up – ${dur} sleep`,
     toast_walk_end: dur=>`Back – ${dur} walk`,
     diaper_count: n=>`Diapers: ${n}`,
@@ -384,12 +386,16 @@ const PENDING_KEY = 'pendingEntries';
 let myName = '';
 let showNoteFields = true;
 let syncing = false;
+let isOffline = false;
 
 function pendingAll() {
   try { return JSON.parse(localStorage.getItem(PENDING_KEY)) || []; } catch { return []; }
 }
 function pendingSave(list) {
   localStorage.setItem(PENDING_KEY, JSON.stringify(list));
+  // The banner's unsynced count follows the queue even while online — an
+  // entry can sit queued for a moment before syncPending clears it.
+  setOffline(isOffline);
 }
 function pendingForDay(day, babyId) {
   return pendingAll()
@@ -3066,9 +3072,14 @@ function downloadCsv() {
 // Cached entries look exactly like live ones, so say plainly when what is
 // on screen is a saved copy rather than the household's current log.
 function setOffline(off) {
+  isOffline = off;
   const bar = document.getElementById('offline-bar');
   if (!bar) return;
-  bar.innerHTML = `${icon('wifioff')}<span>${t('offline_bar')}</span><span class="ob-dot"></span>`;
+  // The dot means "something is waiting to go out", not just "offline" —
+  // reading-only offline (nothing queued) gets the plain bar, no pulse.
+  const n = pendingAll().length;
+  const countHtml = n ? `<span class="ob-count">${t('pending_count', n)}</span>` : '';
+  bar.innerHTML = `${icon('wifioff')}<span>${t('offline_bar')}</span>${countHtml}${n ? '<span class="ob-dot"></span>' : ''}`;
   bar.hidden = !off;
 }
 // Refetch when the link comes back; the response itself settles the state.
@@ -3092,7 +3103,14 @@ function checkDayRollover() {
   loadLog();
   if (document.getElementById('tab-stats').classList.contains('active')) loadStats();
 }
-setInterval(() => { checkDayRollover(); syncPending(); }, DAY_CHECK_MS);
+// A single failed request can flag the app offline long after the network
+// is back — nothing else fetches on its own when the queue is empty and
+// the day hasn't rolled over, so a quiet tab would never notice recovery.
+function probeOnline() {
+  if (!isOffline) return;
+  fetch('/api/auth/me').catch(() => {});
+}
+setInterval(() => { checkDayRollover(); syncPending(); probeOnline(); }, DAY_CHECK_MS);
 document.addEventListener('visibilitychange', () => {
   if (!document.hidden) checkDayRollover();
 });
