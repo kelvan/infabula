@@ -203,6 +203,11 @@ header .logo-svg { height: 38px; width: auto; }
   font-weight: 600;
   letter-spacing: 0.04em;
 }
+/* An author rule's `display` always beats the browser's own [hidden]
+   default, no matter the specificity math — the bold-banner pass added
+   `display: flex` above and silently broke `bar.hidden = true` with it,
+   since nothing here told the flex layout to stand down when hidden. */
+.offline-bar[hidden] { display: none; }
 .offline-bar .ic { width: 15px; height: 15px; stroke: var(--warn-ink); fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; flex-shrink: 0; }
 .offline-bar .ob-count {
   background: var(--warn-border);
