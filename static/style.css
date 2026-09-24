@@ -468,6 +468,25 @@ header .logo-svg { height: 38px; width: auto; }
   flex-shrink: 0;
 }
 .btn-small.secondary { background: var(--surface2); color: var(--ink); border: 1.5px solid var(--border); }
+.sw-pill {
+  --w: 42px; --h: 24px; --gap: 3px;
+  width: var(--w); height: var(--h); border-radius: var(--h);
+  background: var(--border); flex-shrink: 0; position: relative;
+  border: none; cursor: pointer; padding: 0;
+  transition: background 0.18s ease;
+}
+.sw-pill::after {
+  content: ""; position: absolute; top: var(--gap); left: var(--gap);
+  width: calc(var(--h) - var(--gap) * 2); height: calc(var(--h) - var(--gap) * 2);
+  border-radius: 50%; background: var(--surface);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.25);
+  transition: transform 0.18s ease;
+}
+.sw-pill.on { background: var(--accent); }
+.sw-pill.on::after { transform: translateX(calc(var(--w) - var(--h))); }
+@media (prefers-reduced-motion: reduce) {
+  .sw-pill, .sw-pill::after { transition: none; }
+}
 .range-pills { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
 .view-toggle { display: flex; align-items: center; gap: 8px; padding: 14px 20px 0; }
 .tl-legend-slot { display: flex; flex-wrap: wrap; gap: 10px; margin-left: auto; justify-content: flex-end; }

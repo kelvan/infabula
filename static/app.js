@@ -1956,6 +1956,12 @@ function renderQuickLogTab() {
   `;
 }
 
+/** A pill switch for a boolean account setting — state reads from its
+ *  color and thumb position alone, no label swap needed. */
+function switchHtml(on, onclick, label) {
+  return `<button class="sw-pill${on ? ' on' : ''}" onclick="${onclick}" aria-pressed="${on}" aria-label="${esc(label)}"></button>`;
+}
+
 function renderAccountTab() {
   const el = document.getElementById('settings-tab-content');
   const me = settingsMe, passkeys = settingsPasskeys;
@@ -1986,7 +1992,7 @@ function renderAccountTab() {
       <div class="settings-card-title">${icon('note')}${t('settings_logging_title')}</div>
       <div class="security-row">
         <div><div class="s-name">${t('show_notes_label')}</div><div class="s-sub">${t('show_notes_hint')}</div></div>
-        <button class="btn-small${me.show_note_fields ? ' secondary' : ''}" onclick="toggleShowNotes()">${me.show_note_fields ? t('btn_disable') : t('btn_enable')}</button>
+        ${switchHtml(!!me.show_note_fields, 'toggleShowNotes()', t('show_notes_label'))}
       </div>
     </div>
 
@@ -1995,7 +2001,7 @@ function renderAccountTab() {
       <div class="security-row">
         <div><div class="s-name">${t('notify_rhythm_label')}</div><div class="s-sub">${t('notify_hint')}</div></div>
         ${('PushManager' in window)
-          ? `<button class="btn-small${me.notify_rhythm ? ' secondary' : ''}" onclick="toggleRhythmNotify()">${me.notify_rhythm ? t('btn_disable') : t('btn_enable')}</button>`
+          ? switchHtml(!!me.notify_rhythm, 'toggleRhythmNotify()', t('notify_rhythm_label'))
           : `<span class="s-sub" style="text-align:right;max-width:40%;">${t('notify_unsupported')}</span>`}
       </div>
     </div>
