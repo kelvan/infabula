@@ -568,6 +568,7 @@ def user_to_dict(user: User) -> dict:
         "last_login_at": user.last_login_at,
         "quick_actions": user.quick_actions,
         "notify_rhythm": user.notify_rhythm,
+        "show_note_fields": user.show_note_fields,
         "has_avatar": os.path.exists(avatar_path(user.id)),
     }
 
@@ -2273,6 +2274,17 @@ async def update_notify(request: Request):
         user = await session.get(User, request.state.user.id)
         assert user is not None
         user.notify_rhythm = on
+    return {"ok": True}
+
+
+@app.put("/api/auth/show-notes", tags=["Auth"])
+async def update_show_notes(request: Request):
+    body = await request.json()
+    on = bool(body.get("show_note_fields"))
+    async with Session.begin() as session:
+        user = await session.get(User, request.state.user.id)
+        assert user is not None
+        user.show_note_fields = on
     return {"ok": True}
 
 

@@ -74,6 +74,8 @@ const I18N = {
     btn_cancel:'Abbrechen', btn_use_photo:'Foto verwenden',
     settings_security_title:'Sicherheit', btn_logout:'Abmelden', lbl_display_name:'Anzeigename',
     member_since:'Dabei seit', last_login:'Letzte Anmeldung',
+    settings_logging_title:'Erfassung', show_notes_label:'Notizfeld in Dialogen',
+    show_notes_hint:'Zeigt ein Textfeld für eine Notiz beim Anlegen und Bearbeiten von Einträgen.',
     settings_notify_title:'Erinnerungen', notify_rhythm_label:'Aufwach- & Fläschchen-Erinnerung',
     notify_hint:'Push kurz bevor das Baby üblicherweise aufwacht oder das nächste Fläschchen fällig ist.',
     notify_unavailable:'Push ist auf diesem Server nicht eingerichtet.',
@@ -192,6 +194,8 @@ const I18N = {
     btn_cancel:'Cancel', btn_use_photo:'Use photo',
     settings_security_title:'Security', btn_logout:'Log out', lbl_display_name:'Display name',
     member_since:'Member since', last_login:'Last login',
+    settings_logging_title:'Logging', show_notes_label:'Note field in dialogs',
+    show_notes_hint:'Shows a free-text note field when adding or editing an entry.',
     settings_notify_title:'Reminders', notify_rhythm_label:'Wake & bottle reminders',
     notify_hint:'A push shortly before the baby usually wakes or the next bottle is due.',
     notify_unavailable:"Push isn't set up on this server.",
@@ -377,6 +381,7 @@ window.fetch = async (...args) => {
 // the server, since those do depend on what everyone else has done since.
 const PENDING_KEY = 'pendingEntries';
 let myName = '';
+let showNoteFields = true;
 let syncing = false;
 
 function pendingAll() {
@@ -548,6 +553,16 @@ function readDT(idPrefix) {
   const date = document.getElementById(`${idPrefix}-date`)?.value;
   const time = document.getElementById(`${idPrefix}-time`)?.value;
   return joinDT(date, time);
+}
+/** The note textarea added to every non-note dialog — omitted when the
+ *  account has turned it off in Settings, unless the entry already carries
+ *  a note (from before it was turned off, or another device), so editing
+ *  never hides text you'd otherwise have no way to see or clear. The
+ *  standalone Note entry type always has its own field regardless — that
+ *  one field is the whole point of it. */
+function noteFieldHtml(value = '', rows = 2) {
+  if (!showNoteFields && !value) return '';
+  return `<div class="field"><label>${t('lbl_note')}</label><textarea id="f-note" rows="${rows}">${value}</textarea></div>`;
 }
 function fmtDate(s) {
   const [y,m,d] = s.split('-');
@@ -959,6 +974,7 @@ async function loadQuickActions() {
     const me = await (await fetch('/api/auth/me')).json();
     quickActionsCache = me.quick_actions;
     myName = me.name || '';
+    showNoteFields = me.show_note_fields !== false;
   } catch {}
 }
 async function setQuickActions(actions) {
@@ -1960,6 +1976,14 @@ function renderAccountTab() {
     </div>
 
     <div class="settings-card">
+      <div class="settings-card-title">${icon('note')}${t('settings_logging_title')}</div>
+      <div class="security-row">
+        <div><div class="s-name">${t('show_notes_label')}</div><div class="s-sub">${t('show_notes_hint')}</div></div>
+        <button class="btn-small${me.show_note_fields ? ' secondary' : ''}" onclick="toggleShowNotes()">${me.show_note_fields ? t('btn_disable') : t('btn_enable')}</button>
+      </div>
+    </div>
+
+    <div class="settings-card">
       <div class="settings-card-title">${icon('bell')}${t('settings_notify_title')}</div>
       <div class="security-row">
         <div><div class="s-name">${t('notify_rhythm_label')}</div><div class="s-sub">${t('notify_hint')}</div></div>
@@ -2082,6 +2106,18 @@ async function toggleRhythmNotify() {
   } catch (e) {
     toast(t('toast_error'));
   }
+}
+
+async function toggleShowNotes() {
+  const on = !settingsMe.show_note_fields;
+  await fetch('/api/auth/show-notes', {
+    method: 'PUT', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ show_note_fields: on }),
+  });
+  settingsMe.show_note_fields = on;
+  showNoteFields = on;
+  renderAccountTab();
+  toast(t('toast_saved'));
 }
 
 async function saveDisplayName() {
@@ -2658,7 +2694,7 @@ function selectType(type) {
     document.getElementById('modal-title').textContent = t('tile_sleep_start');
     fields.innerHTML = `
       ${dtField('f-start', t('lbl_time'), now)}
-      <div class="field"><label>${t('lbl_note')}</label><textarea id="f-note" rows="2"></textarea></div>
+      ${noteFieldHtml()}
       <button class="btn" onclick="submitEntry()">${t('btn_save_sleep')}</button>
     `;
   } else if (type === 'diaper') {
@@ -2672,7 +2708,7 @@ function selectType(type) {
           <option value="beides">${t('opt_both')}</option>
         </select>
       </div>
-      <div class="field"><label>${t('lbl_note')}</label><textarea id="f-note" rows="2"></textarea></div>
+      ${noteFieldHtml()}
       <button class="btn" onclick="submitEntry()">${t('btn_save')}</button>
     `;
   } else if (type === 'nursing') {
@@ -2688,7 +2724,7 @@ function selectType(type) {
           <option value="beide">${t('opt_both_sides')}</option>
         </select>
       </div>
-      <div class="field"><label>${t('lbl_note')}</label><textarea id="f-note" rows="2"></textarea></div>
+      ${noteFieldHtml()}
       <button class="btn" onclick="submitEntry()">${t('btn_save')}</button>
     `;
   } else if (type === 'bottle') {
@@ -2699,7 +2735,7 @@ function selectType(type) {
       <div class="field"><label>${t('lbl_content')}</label>
         <select id="f-content">${bottleContentOptions()}</select>
       </div>
-      <div class="field"><label>${t('lbl_note')}</label><textarea id="f-note" rows="2"></textarea></div>
+      ${noteFieldHtml()}
       <button class="btn" onclick="submitEntry()">${t('btn_save')}</button>
     `;
   } else if (type === 'weight') {
@@ -2708,21 +2744,21 @@ function selectType(type) {
       ${dtField('f-start', t('lbl_time'), now)}
       <div class="field"><label>${t('lbl_weight_g')}</label><input type="number" id="f-weight" min="0" step="10" placeholder="3450"></div>
       <div class="field"><label>${t('lbl_height_cm')}</label><input type="number" id="f-height" min="0" step="0.5" placeholder="52"></div>
-      <div class="field"><label>${t('lbl_note')}</label><textarea id="f-note" rows="2"></textarea></div>
+      ${noteFieldHtml()}
       <button class="btn" onclick="submitEntry()">${t('btn_save')}</button>
     `;
   } else if (type === 'walk') {
     document.getElementById('modal-title').textContent = t('tile_walk');
     fields.innerHTML = `
       ${dtField('f-start', t('lbl_time'), now)}
-      <div class="field"><label>${t('lbl_note')}</label><textarea id="f-note" rows="2"></textarea></div>
+      ${noteFieldHtml()}
       <button class="btn" onclick="submitEntry()">${t('btn_save')}</button>
     `;
   } else if (type === 'clothing') {
     document.getElementById('modal-title').textContent = t('tile_clothing');
     fields.innerHTML = `
       ${dtField('f-start', t('lbl_time'), now)}
-      <div class="field"><label>${t('lbl_note')}</label><textarea id="f-note" rows="2"></textarea></div>
+      ${noteFieldHtml()}
       <button class="btn" onclick="submitEntry()">${t('btn_save')}</button>
     `;
   } else if (type === 'mood') {
@@ -2737,7 +2773,7 @@ function selectType(type) {
           <option value="crying">${t('opt_mood_crying')}</option>
         </select>
       </div>
-      <div class="field"><label>${t('lbl_note')}</label><textarea id="f-note" rows="2"></textarea></div>
+      ${noteFieldHtml()}
       <button class="btn" onclick="submitEntry()">${t('btn_save')}</button>
     `;
   } else {
@@ -2822,7 +2858,7 @@ function editFieldsHtml(entry) {
           <option value="beides" ${m.diaper_type === 'beides' ? 'selected' : ''}>${t('opt_both')}</option>
         </select>
       </div>
-      <div class="field"><label>${t('lbl_note')}</label><textarea id="f-note" rows="2">${note}</textarea></div>
+      ${noteFieldHtml(note)}
       <button class="btn" onclick="submitEditEntry()">${t('btn_save')}</button>
     `;
   }
@@ -2838,7 +2874,7 @@ function editFieldsHtml(entry) {
           <option value="beide" ${m.side === 'beide' ? 'selected' : ''}>${t('opt_both_sides')}</option>
         </select>
       </div>
-      <div class="field"><label>${t('lbl_note')}</label><textarea id="f-note" rows="2">${note}</textarea></div>
+      ${noteFieldHtml(note)}
       <button class="btn" onclick="submitEditEntry()">${t('btn_save')}</button>
     `;
   }
@@ -2852,7 +2888,7 @@ function editFieldsHtml(entry) {
           <option value="formula" ${m.content === 'formula' ? 'selected' : ''}>${t('opt_formula')}</option>
         </select>
       </div>
-      <div class="field"><label>${t('lbl_note')}</label><textarea id="f-note" rows="2">${note}</textarea></div>
+      ${noteFieldHtml(note)}
       <button class="btn" onclick="submitEditEntry()">${t('btn_save')}</button>
     `;
   }
@@ -2860,7 +2896,7 @@ function editFieldsHtml(entry) {
     return `
       ${dtField('f-start', t('lbl_start'), start)}
       ${dtField('f-end', t('lbl_end'), end)}
-      <div class="field"><label>${t('lbl_note')}</label><textarea id="f-note" rows="2">${note}</textarea></div>
+      ${noteFieldHtml(note)}
       <button class="btn" onclick="submitEditEntry()">${t('btn_save')}</button>
     `;
   }
@@ -2869,7 +2905,7 @@ function editFieldsHtml(entry) {
       ${dtField('f-start', t('lbl_time'), start)}
       <div class="field"><label>${t('lbl_weight_g')}</label><input type="number" id="f-weight" min="0" step="10" value="${esc(String(m.weight ?? ''))}"></div>
       <div class="field"><label>${t('lbl_height_cm')}</label><input type="number" id="f-height" min="0" step="0.5" value="${esc(String(m.height ?? ''))}"></div>
-      <div class="field"><label>${t('lbl_note')}</label><textarea id="f-note" rows="2">${note}</textarea></div>
+      ${noteFieldHtml(note)}
       <button class="btn" onclick="submitEditEntry()">${t('btn_save')}</button>
     `;
   }
@@ -2877,7 +2913,7 @@ function editFieldsHtml(entry) {
     return `
       ${dtField('f-start', t('lbl_start'), start)}
       ${dtField('f-end', t('lbl_end'), end)}
-      <div class="field"><label>${t('lbl_note')}</label><textarea id="f-note" rows="2">${note}</textarea></div>
+      ${noteFieldHtml(note)}
       <button class="btn" onclick="submitEditEntry()">${t('btn_save')}</button>
     `;
   }
@@ -2892,13 +2928,18 @@ function editFieldsHtml(entry) {
           <option value="crying" ${m.mood === 'crying' ? 'selected' : ''}>${t('opt_mood_crying')}</option>
         </select>
       </div>
-      <div class="field"><label>${t('lbl_note')}</label><textarea id="f-note" rows="2">${note}</textarea></div>
+      ${noteFieldHtml(note)}
       <button class="btn" onclick="submitEditEntry()">${t('btn_save')}</button>
     `;
   }
+  // Reached by clothing (toggle applies) and note (the field is the entry,
+  // so it always shows).
+  const notes = entry.type === 'note'
+    ? `<div class="field"><label>${t('lbl_note')}</label><textarea id="f-note" rows="3">${note}</textarea></div>`
+    : noteFieldHtml(note, 3);
   return `
     ${dtField('f-start', t('lbl_time'), start)}
-    <div class="field"><label>${t('lbl_note')}</label><textarea id="f-note" rows="3">${note}</textarea></div>
+    ${notes}
     <button class="btn" onclick="submitEditEntry()">${t('btn_save')}</button>
   `;
 }
@@ -2927,7 +2968,11 @@ async function submitEditEntry() {
   const body = {
     ts_start: toUtc(start),
     ts_end: endLocal ? toUtc(endLocal) : null,
-    note: document.getElementById('f-note')?.value || '',
+    // The toggle can hide the field on an entry that already has a note
+    // (logged before it was turned off, or from another device) — leave
+    // that note as it was rather than wiping it because the field wasn't
+    // on screen to resave it.
+    note: document.getElementById('f-note')?.value ?? entry.note ?? '',
     meta,
   };
 

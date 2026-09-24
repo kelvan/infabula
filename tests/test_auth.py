@@ -464,3 +464,30 @@ class TestApiTokens:
             "/api/babies", headers={"Authorization": f"Bearer {raw}"}
         )
         assert res.status_code == 200
+
+
+class TestShowNoteFields:
+    async def test_on_by_default(self, client, logged_in):
+        await logged_in()
+        me = (await client.get("/api/auth/me")).json()
+        assert me["show_note_fields"] is True
+
+    async def test_can_turn_off_and_on(self, client, logged_in):
+        await logged_in()
+        assert (
+            await client.put("/api/auth/show-notes", json={"show_note_fields": False})
+        ).status_code == 200
+        assert (
+            await client.get("/api/auth/me")
+        ).json()["show_note_fields"] is False
+
+        assert (
+            await client.put("/api/auth/show-notes", json={"show_note_fields": True})
+        ).status_code == 200
+        assert (
+            await client.get("/api/auth/me")
+        ).json()["show_note_fields"] is True
+
+    async def test_needs_a_session(self, client):
+        res = await client.put("/api/auth/show-notes", json={"show_note_fields": False})
+        assert res.status_code == 401

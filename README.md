@@ -60,6 +60,8 @@ Assign a name to each device's IP address in Settings. After you assign a name, 
 
 Set the baby's name and birthday in Settings. After you set the birthday, a banner marks the birthday and the matching day of each month.
 
+Settings → Account → Logging turns the free-text note field on the add/edit dialogs on or off, per account. On by default. An entry that already carries a note keeps showing that field regardless, so turning this off never hides existing text or risks it being cleared on the next edit.
+
 ## Data
 
 Set the database with the `DB_URL` environment variable. The app supports SQLite, PostgreSQL, and MariaDB or MySQL:

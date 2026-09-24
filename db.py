@@ -138,6 +138,11 @@ class User(Base):
     notify_rhythm: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False
     )
+    # Show the free-text note field in the log/edit dialogs. On by default;
+    # some households never use it and would rather not see it every time.
+    show_note_fields: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True
+    )
     # Who created the invite this account registered through, if any —
     # kept on the account itself so it outlives the Invite row (which can
     # be pruned), not just derivable while that row still exists.
