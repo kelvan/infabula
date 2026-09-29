@@ -478,20 +478,45 @@ async function syncPending() {
   syncing = true;
   let synced = 0, rejected = 0;
   try {
-    for (const item of pendingAll()) {
+    // Snapshot only the order/identity of the queue; the body of each item
+    // is re-read fresh right before it's sent, so a wake/walk-end tapped
+    // on a not-yet-synced entry (closePending, mid-loop) is included
+    // rather than a stale copy from before the loop started.
+    const localIds = pendingAll().map(p => p.localId);
+    for (const localId of localIds) {
+      const current = pendingAll().find(p => p.localId === localId);
+      if (!current) continue; // dropped while we were working through the queue
+      const sentBody = current.body;
       let res;
       try {
-        res = await fetch('/api/entries?baby_id=' + item.baby_id, {
+        res = await fetch('/api/entries?baby_id=' + current.baby_id, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(item.body),
+          body: JSON.stringify(sentBody),
         });
       } catch { break; }
       if (!res.ok && res.headers.get('X-Offline')) break;
-      // A refusal — an entry queued past the server's backdating window,
-      // say — would otherwise block everything behind it forever.
-      if (res.ok) synced++; else rejected++;
-      pendingSave(pendingAll().filter(p => p.localId !== item.localId));
+      if (res.ok) {
+        // The entry can still be closed (or dropped) while this POST is
+        // in flight — reconcile against what's queued *now* before
+        // discarding the queue item, or a wake time written mid-sync is
+        // lost even though the POST itself succeeded.
+        const saved = await res.json();
+        const latest = pendingAll().find(p => p.localId === localId);
+        if (latest && latest.body.ts_end && !sentBody.ts_end) {
+          await fetch(`/api/entries/${saved.id}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ts_end: latest.body.ts_end }),
+          }).catch(() => {});
+        }
+        synced++;
+      } else {
+        // A refusal — an entry queued past the server's backdating
+        // window, say — would otherwise block everything behind it.
+        rejected++;
+      }
+      pendingSave(pendingAll().filter(p => p.localId !== localId));
     }
   } finally {
     syncing = false;
