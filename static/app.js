@@ -933,11 +933,12 @@ async function wakeUp() {
   if (!openSleepEntry) return;
   const now = nowUtc();
   if (!closePending(openSleepEntry, now)) {
-    await fetch(`/api/entries/${openSleepEntry.id}`, {
+    const res = await fetch(`/api/entries/${openSleepEntry.id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ ts_end: now })
     });
+    if (!res.ok) { await toastError(res); return; }
   }
   const dur = Math.round(durMin(openSleepEntry.ts_start, now));
   toast(t('toast_wakeup', fmtDur(dur)));
@@ -994,11 +995,12 @@ async function endWalk() {
   if (!openWalkEntry) return;
   const now = nowUtc();
   if (!closePending(openWalkEntry, now)) {
-    await fetch(`/api/entries/${openWalkEntry.id}`, {
+    const res = await fetch(`/api/entries/${openWalkEntry.id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ ts_end: now })
     });
+    if (!res.ok) { await toastError(res); return; }
   }
   const dur = Math.round(durMin(openWalkEntry.ts_start, now));
   toast(t('toast_walk_end', fmtDur(dur)));
@@ -1265,7 +1267,8 @@ async function loadLog() {
 
 async function deleteEntry(id) {
   if (!confirm(t('confirm_delete'))) return;
-  await fetch('/api/entries/'+id, { method: 'DELETE' });
+  const res = await fetch('/api/entries/'+id, { method: 'DELETE' });
+  if (!res.ok) { await toastError(res); return; }
   toast(t('toast_deleted'));
   loadLog();
 }
@@ -2140,24 +2143,27 @@ async function toggleRhythmNotify() {
         });
       }
       const j = sub.toJSON();
-      await fetch('/api/push/subscribe', {
+      const subRes = await fetch('/api/push/subscribe', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ endpoint: j.endpoint, keys: j.keys, lang }),
       });
+      if (!subRes.ok) { await toastError(subRes); return; }
     } else {
       const reg = await navigator.serviceWorker.ready;
       const sub = await reg.pushManager.getSubscription();
       if (sub) {
-        await fetch('/api/push/unsubscribe', {
+        const unsubRes = await fetch('/api/push/unsubscribe', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ endpoint: sub.endpoint }),
         });
+        if (!unsubRes.ok) { await toastError(unsubRes); return; }
       }
     }
-    await fetch('/api/auth/notify', {
+    const notifyRes = await fetch('/api/auth/notify', {
       method: 'PUT', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ notify_rhythm: on }),
     });
+    if (!notifyRes.ok) { await toastError(notifyRes); return; }
     settingsMe.notify_rhythm = on;
     renderAccountTab();
     toast(t('toast_saved'));
@@ -2469,7 +2475,8 @@ async function addPasskey() {
 
 async function deletePasskey(id) {
   if (!confirm(t('confirm_delete'))) return;
-  await fetch(`/api/auth/passkeys/${id}`, { method: 'DELETE' });
+  const res = await fetch(`/api/auth/passkeys/${id}`, { method: 'DELETE' });
+  if (!res.ok) { await toastError(res); return; }
   toast(t('toast_deleted'));
   loadSettings();
 }
@@ -2513,7 +2520,8 @@ async function submitCreateToken() {
 
 async function deleteToken(id) {
   if (!confirm(t('confirm_delete_token'))) return;
-  await fetch(`/api/auth/tokens/${id}`, { method: 'DELETE' });
+  const res = await fetch(`/api/auth/tokens/${id}`, { method: 'DELETE' });
+  if (!res.ok) { await toastError(res); return; }
   toast(t('toast_deleted'));
   loadSettings();
 }
@@ -2578,7 +2586,8 @@ async function saveBabyRow(id) {
 
 async function deleteBabyRow(id) {
   if (!confirm(t('confirm_delete_baby'))) return;
-  await fetch(`/api/babies/${id}`, { method: 'DELETE' });
+  const res = await fetch(`/api/babies/${id}`, { method: 'DELETE' });
+  if (!res.ok) { await toastError(res); return; }
   await loadBabies();
   toast(t('toast_deleted'));
   renderBirthdayBanner();
