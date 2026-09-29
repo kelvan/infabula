@@ -13,8 +13,14 @@ const API_CACHE = "infabula-api-v1";
 const CACHES = [SHELL_CACHE, API_CACHE];
 
 // Streaming, downloads and private media: pass straight through. An SSE
-// stream in particular must never be buffered into a cache.
-const API_BYPASS = ["/api/events", "/api/export", "/api/avatar"];
+// stream in particular must never be buffered into a cache. Avatars are
+// matched by suffix, not prefix — the real route is /api/users/{id}/avatar,
+// so a literal "/api/avatar" prefix here never actually matched it.
+const API_BYPASS_PREFIXES = ["/api/events", "/api/export"];
+function bypassApi(pathname) {
+  return API_BYPASS_PREFIXES.some((p) => pathname.startsWith(p))
+    || pathname.endsWith("/avatar");
+}
 
 function offlineResponse() {
   // Shaped like the app's own error payloads, so every existing caller
@@ -132,7 +138,7 @@ self.addEventListener("fetch", (event) => {
     return;
   }
   if (url.pathname.startsWith("/api/")) {
-    if (API_BYPASS.some((p) => url.pathname.startsWith(p))) return;
+    if (bypassApi(url.pathname)) return;
     event.respondWith(handleApi(request));
   }
 });
