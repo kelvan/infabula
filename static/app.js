@@ -2507,6 +2507,10 @@ async function submitDeleteAccount() {
     body: JSON.stringify({ password }),
   });
   if (!res.ok) { await toastError(res); return; }
+  // Same reason doLogout() clears these: on a shared phone, the next
+  // person must not be able to read this account's journal back offline.
+  localStorage.removeItem(PENDING_KEY);
+  navigator.serviceWorker?.controller?.postMessage('clear-cache');
   location.href = '/login';
 }
 

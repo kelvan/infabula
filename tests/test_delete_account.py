@@ -1,9 +1,12 @@
 """Self-service account deletion: blocked while it solely owns a baby,
 requires the password, and actually clears credentials on success."""
 
+import os
+
 from sqlalchemy import select
 
-from db import BabyAccess, Entry, Session
+import main
+from db import ApiToken, BabyAccess, Entry, Session
 
 
 class TestDeleteAccount:
@@ -90,6 +93,47 @@ class TestDeleteAccount:
             kept = await session.get(Entry, entry_id)
         assert kept is not None
         assert kept.user_id is None
+
+    async def test_removes_the_avatar_file(self, client, logged_in):
+        me = await logged_in()
+        path = main.avatar_path(me)
+        with open(path, "wb") as fh:
+            fh.write(b"not a real webp, just needs to exist")
+        res = await client.request(
+            "DELETE", "/api/auth/me", json={"password": "password123"}
+        )
+        assert res.status_code == 200
+        assert not os.path.exists(path)
+
+    async def test_no_avatar_is_not_an_error(self, client, logged_in):
+        me = await logged_in()
+        assert not os.path.exists(main.avatar_path(me))
+        res = await client.request(
+            "DELETE", "/api/auth/me", json={"password": "password123"}
+        )
+        assert res.status_code == 200
+
+    async def test_removes_api_tokens_in_the_same_deletion(
+        self, client, logged_in
+    ):
+        me = await logged_in()
+        async with Session.begin() as session:
+            session.add(
+                ApiToken(
+                    user_id=me, name="t", token_hash="x", prefix="ib_x"
+                )
+            )
+        res = await client.request(
+            "DELETE", "/api/auth/me", json={"password": "password123"}
+        )
+        assert res.status_code == 200
+        async with Session() as session:
+            rows = (
+                await session.scalars(
+                    select(ApiToken).where(ApiToken.user_id == me)
+                )
+            ).all()
+        assert rows == []
 
     async def test_clears_baby_access_rows(self, client, logged_in, baby_factory):
         me = await logged_in()

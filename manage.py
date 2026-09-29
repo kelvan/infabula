@@ -173,8 +173,8 @@ async def cmd_delete(args: argparse.Namespace) -> None:
             print("Aborted.", file=sys.stderr)
             raise SystemExit(1)
 
-    await auth.delete_auth_records_for_user(user.id)
     async with Session.begin() as session:
+        await auth.delete_auth_records_for_user(session, user.id)
         await session.execute(delete(BabyAccess).where(BabyAccess.user_id == user.id))
         await session.execute(
             update(Entry).where(Entry.user_id == user.id).values(user_id=None)

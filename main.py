@@ -880,8 +880,8 @@ async def delete_me(request: Request, response: Response):
             status_code=400,
         )
 
-    await auth.delete_auth_records_for_user(user.id)
     async with Session.begin() as session:
+        await auth.delete_auth_records_for_user(session, user.id)
         await session.execute(
             delete(BabyAccess).where(BabyAccess.user_id == user.id)
         )
@@ -889,6 +889,10 @@ async def delete_me(request: Request, response: Response):
             update(Entry).where(Entry.user_id == user.id).values(user_id=None)
         )
         await session.execute(delete(User).where(User.id == user.id))
+    try:
+        os.remove(avatar_path(user.id))
+    except FileNotFoundError:
+        pass
     auth.clear_session_cookie(response)
     return {"ok": True}
 

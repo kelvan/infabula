@@ -21,6 +21,7 @@ import qrcode
 import qrcode.image.svg
 from fastapi import Request, Response
 from sqlalchemy import delete, select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from db import (
     ApiToken,
@@ -126,21 +127,24 @@ async def kill_sessions_for_user(user_id: int) -> None:
         await session.execute(delete(ApiToken).where(ApiToken.user_id == user_id))
 
 
-async def delete_auth_records_for_user(user_id: int) -> None:
+async def delete_auth_records_for_user(session: AsyncSession, user_id: int) -> None:
     """Removes everything auth owns for a user ahead of deleting the row.
 
     Baby access, journal entries and the User row itself belong to the
-    app's own models and are the caller's job.
+    app's own models and are the caller's job. Takes the caller's own
+    session rather than opening one, so this can share one transaction
+    with the rest of the account deletion — a crash partway through must
+    not leave a user logged out and stripped of credentials with the
+    account row still standing.
     """
-    async with Session.begin() as session:
-        await session.execute(delete(UserSession).where(UserSession.user_id == user_id))
-        await session.execute(delete(ApiToken).where(ApiToken.user_id == user_id))
-        await session.execute(
-            delete(WebauthnCredential).where(WebauthnCredential.user_id == user_id)
-        )
-        await session.execute(
-            delete(EmailVerification).where(EmailVerification.user_id == user_id)
-        )
+    await session.execute(delete(UserSession).where(UserSession.user_id == user_id))
+    await session.execute(delete(ApiToken).where(ApiToken.user_id == user_id))
+    await session.execute(
+        delete(WebauthnCredential).where(WebauthnCredential.user_id == user_id)
+    )
+    await session.execute(
+        delete(EmailVerification).where(EmailVerification.user_id == user_id)
+    )
 
 
 def set_session_cookie(response: Response, token: str, request: Request) -> None:
