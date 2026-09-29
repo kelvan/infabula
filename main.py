@@ -2365,7 +2365,8 @@ async def get_stats(
     growth = [
         {"time": e["ts_start"], "weight": m.get("weight"), "height": m.get("height")}
         for e in (row_to_dict(r) for r in growth_rows)
-        if (m := e["meta"] or {}) and (m.get("weight") or m.get("height"))
+        if (m := e["meta"] or {})
+        and (m.get("weight") is not None or m.get("height") is not None)
     ]
 
     last = {}
@@ -2494,10 +2495,14 @@ def build_report(entries: list[dict], start: str, end: str) -> dict:
         elif t in ("nursing", "bottle"):
             bucket["feeding"] += 1
             totals["feeding"] += 1
-            if t == "bottle" and m.get("amount"):
-                ml = int(m["amount"])
-                bucket["feeding_ml"] += ml
-                totals["feeding_ml"] += ml
+            if t == "bottle" and m.get("amount") is not None:
+                try:
+                    ml = int(m["amount"])
+                except (TypeError, ValueError):
+                    pass
+                else:
+                    bucket["feeding_ml"] += ml
+                    totals["feeding_ml"] += ml
         elif t == "sleep" and e["ts_end"]:
             e_end = parse_entry_ts(e["ts_end"])
             e_start = parse_entry_ts(e["ts_start"])
@@ -2515,7 +2520,7 @@ def build_report(entries: list[dict], start: str, end: str) -> dict:
             bucket["walk_count"] += 1
             totals["walk_min"] += mins
             totals["walk_count"] += 1
-        elif t == "weight" and m.get("weight"):
+        elif t == "weight" and m.get("weight") is not None:
             try:
                 weight = float(m["weight"])
             except (TypeError, ValueError):

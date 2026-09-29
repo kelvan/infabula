@@ -133,6 +133,27 @@ class TestTotals:
         assert data["totals"] == {"walk": 1}
 
 
+class TestGrowthChart:
+    async def test_a_zero_height_with_no_weight_still_shows_up(
+        self, client, logged_in, baby_factory
+    ):
+        """A truthiness check on weight/height used to drop a 0 value —
+        indistinguishable from the field never having been logged."""
+        baby_id = await baby_factory(await logged_in())
+        await add_entry(baby_id, "weight", "2026-08-20T09:00Z", meta={"height": 0})
+        data = (await client.get(f"/api/stats?baby_id={baby_id}")).json()
+        assert len(data["growth"]) == 1
+        assert data["growth"][0]["height"] == 0
+
+    async def test_no_weight_and_no_height_is_excluded(
+        self, client, logged_in, baby_factory
+    ):
+        baby_id = await baby_factory(await logged_in())
+        await add_entry(baby_id, "weight", "2026-08-20T09:00Z", meta={})
+        data = (await client.get(f"/api/stats?baby_id={baby_id}")).json()
+        assert data["growth"] == []
+
+
 class TestStatsTimezone:
     async def test_tz_param_shifts_the_day_window(
         self, client, logged_in, baby_factory
