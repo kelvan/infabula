@@ -224,6 +224,10 @@ ROLE_RANK = {ROLE_VIEWER: 0, ROLE_EDITOR: 1, ROLE_OWNER: 2}
 QUICK_ACTION_TYPES = frozenset(
     {"diaper", "nursing", "bottle", "sleep", "walk", "clothing", "note", "mood"}
 )
+# Every entry type the app knows how to log and display. Weight isn't a
+# quick action (it's logged from Stats, not the everyday + menu), so it
+# isn't in QUICK_ACTION_TYPES above, but it's still a real entry type.
+ENTRY_TYPES = QUICK_ACTION_TYPES | {"weight"}
 
 # Ceilings that keep a runaway script (or a bug) from filling the database.
 # All are far above what hand-logging a baby's day could ever reach.
@@ -263,6 +267,23 @@ def check_entry_window(ts_start: str, allow_old: bool = False) -> JSONResponse |
         )
     if not allow_old and parsed < now - ENTRY_MAX_PAST:
         return JSONResponse({"error": "ts_start too far in the past"}, status_code=400)
+    return None
+
+
+def check_ts_order(ts_start: str, ts_end: str | None) -> JSONResponse | None:
+    """None if ts_end is absent (an open sleep/walk) or no earlier than
+    ts_start, else a 400 to return. An unchecked ts_end before ts_start
+    would otherwise store a negative duration that flows straight into
+    averaged sleep/nap stats.
+    """
+    if not ts_end:
+        return None
+    parsed_end = parse_entry_ts(ts_end)
+    if parsed_end is None:
+        return JSONResponse({"error": "invalid ts_end"}, status_code=400)
+    parsed_start = parse_entry_ts(ts_start)
+    if parsed_start is not None and parsed_end < parsed_start:
+        return JSONResponse({"error": "ts_end before ts_start"}, status_code=400)
     return None
 
 
@@ -1287,8 +1308,12 @@ async def create_entry(request: Request, baby_id: int = DEFAULT_BABY_ID):
     entry_type = body.get("type") or ""
     if not entry_type:
         return JSONResponse({"error": "type is required"}, status_code=400)
+    if entry_type not in ENTRY_TYPES:
+        return JSONResponse({"error": "unknown entry type"}, status_code=400)
     ts_start = body.get("ts_start") or ""
     if (bad := check_entry_window(ts_start)) is not None:
+        return bad
+    if (bad := check_ts_order(ts_start, body.get("ts_end"))) is not None:
         return bad
     if await day_is_full(baby_id, local_day_of(ts_start)):
         return JSONResponse(
@@ -1325,6 +1350,11 @@ async def patch_entry(entry_id: int, request: Request):
         bad := check_entry_window(body.get("ts_start") or "", allow_old=True)
     ) is not None:
         return bad
+    if "ts_start" in body or "ts_end" in body:
+        effective_start = body["ts_start"] if "ts_start" in body else existing.ts_start
+        effective_end = body["ts_end"] if "ts_end" in body else existing.ts_end
+        if (bad := check_ts_order(effective_start, effective_end)) is not None:
+            return bad
     async with Session.begin() as session:
         entry = await session.get(Entry, entry_id)
         if entry is None:

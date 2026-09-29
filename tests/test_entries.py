@@ -59,6 +59,60 @@ class TestValidation:
         second = await client.post("/api/auth/register", json=body)
         assert second.status_code == 409
 
+    async def test_unknown_entry_type_is_rejected(
+        self, client, logged_in, baby_factory
+    ):
+        baby_id = await baby_factory(await logged_in())
+        res = await post(client, baby_id, type="banana")
+        assert res.status_code == 400
+
+    async def test_every_real_entry_type_is_accepted(
+        self, client, logged_in, baby_factory
+    ):
+        baby_id = await baby_factory(await logged_in())
+        for entry_type in (
+            "diaper", "nursing", "bottle", "sleep", "walk",
+            "clothing", "note", "mood", "weight",
+        ):
+            res = await post(client, baby_id, type=entry_type)
+            assert res.status_code == 200, entry_type
+
+    async def test_ts_end_before_ts_start_is_rejected_on_create(
+        self, client, logged_in, baby_factory
+    ):
+        baby_id = await baby_factory(await logged_in())
+        res = await post(
+            client, baby_id, type="sleep", ts_start=ts(), ts_end=ts(minutes=-5)
+        )
+        assert res.status_code == 400
+
+    async def test_open_sleep_entry_has_no_ts_end_requirement(
+        self, client, logged_in, baby_factory
+    ):
+        baby_id = await baby_factory(await logged_in())
+        res = await post(client, baby_id, type="sleep", ts_end=None)
+        assert res.status_code == 200
+
+    async def test_ts_end_before_ts_start_is_rejected_on_patch(
+        self, client, logged_in, baby_factory
+    ):
+        baby_id = await baby_factory(await logged_in())
+        created = await post(client, baby_id, type="sleep", ts_end=None)
+        entry_id = created.json()["id"]
+        res = await client.patch(
+            f"/api/entries/{entry_id}", json={"ts_end": ts(minutes=-5)}
+        )
+        assert res.status_code == 400
+
+    async def test_patch_can_still_close_an_open_sleep(
+        self, client, logged_in, baby_factory
+    ):
+        baby_id = await baby_factory(await logged_in())
+        created = await post(client, baby_id, type="sleep", ts_end=None)
+        entry_id = created.json()["id"]
+        res = await client.patch(f"/api/entries/{entry_id}", json={"ts_end": ts()})
+        assert res.status_code == 200
+
 
 class TestWriteWindow:
     async def test_accepts_now(self, client, logged_in, baby_factory):
