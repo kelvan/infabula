@@ -372,18 +372,26 @@ let editEntryId = null;
 const rawFetch = window.fetch.bind(window);
 const OFFLINE_GRACE_MS = 3000;
 let lastFetchSuccessAt = 0;
+// Shared by every offline signal (fetch failures below, and the browser's
+// own 'offline' event further down) — that event is known to fire on a
+// WiFi/cellular handoff even when the connection never really dropped, so
+// it needs the same grace period or it can reintroduce the flapping this
+// was written to fix.
+function reportOffline() {
+  if (Date.now() - lastFetchSuccessAt > OFFLINE_GRACE_MS) setOffline(true);
+}
 window.fetch = async (...args) => {
   try {
     const res = await rawFetch(...args);
     if (res.headers.get('X-Offline')) {
-      if (Date.now() - lastFetchSuccessAt > OFFLINE_GRACE_MS) setOffline(true);
+      reportOffline();
     } else {
       lastFetchSuccessAt = Date.now();
       setOffline(false);
     }
     return res;
   } catch (err) {
-    if (Date.now() - lastFetchSuccessAt > OFFLINE_GRACE_MS) setOffline(true);
+    reportOffline();
     throw err;
   }
 };
@@ -3106,7 +3114,7 @@ function setOffline(off) {
 }
 // Refetch when the link comes back; the response itself settles the state.
 window.addEventListener('online', () => syncPending().then(loadLog));
-window.addEventListener('offline', () => setOffline(true));
+window.addEventListener('offline', () => reportOffline());
 
 // ── Midnight rollover ──
 // The day is picked once at script start, but this app is left open for
