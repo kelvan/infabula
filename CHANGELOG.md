@@ -40,8 +40,6 @@ invite flow.
 - Per-baby nap/night-sleep threshold, replacing a fixed global constant.
 - Profile avatar upload with a client-side crop step before saving;
   uploads restricted to a real image-format allowlist.
-- `deploy.sh` — builds and tags images by commit hash as well as
-  `latest`, so a bad deploy can be rolled back without a rebuild.
 - `manage.py` — CLI to create, list, disable/enable, delete accounts,
   and reset passwords.
 

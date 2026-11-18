@@ -3,10 +3,8 @@
 .gitignore
 .dockerignore
 .github
-.gitlab-ci.yml
 .claude
 .playwright-mcp
-deploy.sh
 infabula.container
 
 # Python caches / envs
