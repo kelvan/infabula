@@ -6,15 +6,16 @@ Built with [Claude Code](https://claude.com/claude-code) — nearly every line, 
 
 ## Quick start
 
-Build and start the app in a container, then create the first account. Registration alone never grants admin rights, so the first account comes from the command line:
+Start the published image, then create the first account. Registration alone never grants admin rights, so the first account comes from the command line:
 
 ```bash
-podman build -t infabula .
 podman run -d --name infabula -p 8080:8080 \
   -v infabula-data:/app/data -e DB_PATH=/app/data/infabula.db \
-  -e TZ=Europe/Vienna infabula
+  -e TZ=Europe/Vienna ghcr.io/kelvan/infabula:latest
 podman exec -it infabula uv run --no-sync python manage.py create you@example.com --admin
 ```
+
+The image is `ghcr.io/kelvan/infabula`, built by GitHub Actions on every push to `main`. See [Podman/Docker](#podmandocker-optional) for version tags and for building it yourself.
 
 Open `http://localhost:8080`, log in, and add your baby's name and birthday when the app asks. Then tap the **+** button for a full entry, or the round quick buttons for a diaper, a mood or "fell asleep" in one tap. Set `TZ` to your own timezone: it decides which local day an entry belongs to.
 
@@ -191,6 +192,9 @@ The app shows a raw token once, at creation. You can revoke a token at any time.
 ## Podman/Docker (optional)
 
 ```bash
-podman build -t infabula .
-podman run -p 8080:8080 -v ./data:/app/data -e DB_PATH=/app/data/infabula.db infabula
+podman run -p 8080:8080 -v ./data:/app/data -e DB_PATH=/app/data/infabula.db ghcr.io/kelvan/infabula:latest
 ```
+
+The image is published to the GitHub Container Registry as `ghcr.io/kelvan/infabula`. `latest` follows `main`, and every build also gets a tag with the short commit hash (for example `ghcr.io/kelvan/infabula:7e39df4`), so you can pin a version and roll back. Pin a hash tag if you do not want updates to arrive on their own.
+
+To build it yourself instead, run `podman build -t infabula .` in a checkout and use `infabula` as the image name.
