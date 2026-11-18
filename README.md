@@ -4,6 +4,29 @@ Self-hosted, multi-user baby journal PWA for the household.
 
 Built with [Claude Code](https://claude.com/claude-code) — nearly every line, commit, and word in this README was AI-generated, reviewed and directed by a human in the loop. It has not had an independent security audit. Read the code before you trust it with your household's data or expose it past your LAN.
 
+## Quick start
+
+Build and start the app in a container, then create the first account. Registration alone never grants admin rights, so the first account comes from the command line:
+
+```bash
+podman build -t infabula .
+podman run -d --name infabula -p 8080:8080 \
+  -v infabula-data:/app/data -e DB_PATH=/app/data/infabula.db \
+  -e TZ=Europe/Vienna infabula
+podman exec -it infabula uv run --no-sync python manage.py create you@example.com --admin
+```
+
+Open `http://localhost:8080`, log in, and add your baby's name and birthday when the app asks. Then tap the **+** button for a full entry, or the round quick buttons for a diaper, a mood or "fell asleep" in one tap. Set `TZ` to your own timezone: it decides which local day an entry belongs to.
+
+Everyone else can register themselves, or you can send an invite from Settings → Admin. See [Accounts](#accounts) for email confirmation and two-factor login, and [Setup](#setup) to run without a container.
+
+<p align="center">
+  <img src="docs/screenshots/log.png" width="23%" alt="Log">
+  <img src="docs/screenshots/timeline.png" width="23%" alt="Timeline">
+  <img src="docs/screenshots/stats.png" width="23%" alt="Stats">
+  <img src="docs/screenshots/settings.png" width="23%" alt="Settings">
+</p>
+
 ## Setup
 
 ```bash
